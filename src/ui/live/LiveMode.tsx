@@ -3,17 +3,19 @@
 // effective key bindings) from the last-known state, and a layer-stack view
 // backed by the firmware's complete active-layer snapshot.
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { LightingEffect } from "../../vendor/rynk-wasm/rynk_wasm";
 import type { KeyView } from "../../model/keyboard";
 import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
-import { keyActionGlyph } from "../labels";
 import { useWorkbench } from "../state";
 import { cssEmissiveRgb, hsvToRgb } from "../color";
 import { InspectorShell, Panel, Row, SectionLabel, cx } from "../kit";
 import { KIND_LABEL } from "../TopBar";
 import { compositeScenes, effectiveAction } from "./compositor";
+import { keyActionHoldsShift, liveKeyActionGlyph, pressedMatrixIndices } from "./characters";
+
+const MATRIX_POLL_MS = 100;
 
 function effectColor(effect: LightingEffect): string {
   if ("Solid" in effect) return cssEmissiveRgb(effect.Solid.color);
@@ -146,11 +148,53 @@ function LayerStack() {
 export function LiveMode() {
   const { bundle, state } = useWorkbench();
   const cols = bundle.caps.num_cols;
+  const [pressedIndices, setPressedIndices] = useState<number[]>([]);
+  const matrixPollInFlight = useRef(false);
   const lighting = state.lightingState;
   const outputOn = lighting?.output_enabled ?? false;
   const bg = lighting?.background;
   const bgOn = outputOn && (bg?.enabled ?? false);
   const bgColor = bg && bgOn ? wireHsvCss(bg.hue, bg.saturation, bg.value) : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      if (matrixPollInFlight.current) return;
+      matrixPollInFlight.current = true;
+      try {
+        const matrix = await bundle.session.device.matrixState();
+        if (!cancelled) {
+          setPressedIndices(
+            pressedMatrixIndices(
+              matrix.pressed_bitmap,
+              bundle.caps.num_rows,
+              bundle.caps.num_cols,
+            ),
+          );
+        }
+      } catch {
+        // Legacy/transient read failure: retain the last known modifier state.
+      } finally {
+        matrixPollInFlight.current = false;
+      }
+    };
+    void poll();
+    const timer = setInterval(poll, MATRIX_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [bundle.caps.num_cols, bundle.caps.num_rows, bundle.session]);
+
+  const shiftActive = useMemo(
+    () =>
+      pressedIndices.some((index) =>
+        keyActionHoldsShift(
+          effectiveAction(state.layers, state.activeLayers, state.defaultLayer, index),
+        ),
+      ),
+    [pressedIndices, state.activeLayers, state.defaultLayer, state.layers],
+  );
 
   const lit = useMemo(
     () =>
@@ -181,7 +225,7 @@ export function LiveMode() {
       state.defaultLayer,
       key.row * cols + key.col,
     );
-    const glyph = keyActionGlyph(action);
+    const glyph = liveKeyActionGlyph(action, shiftActive);
     if (!glyph.text && key.label) return { text: key.label, dim: true };
     return glyph.text ? { ...glyph, dim: true } : undefined;
   };
