@@ -30,6 +30,18 @@ function isRynkInterface(device: HIDDevice): boolean {
 
 /** Show the browser device picker and open the Rynk raw-HID interface. */
 export async function openRynkHidDevice(): Promise<HIDDevice> {
+  // Previously-granted devices open without a picker, so reloads reconnect
+  // with one click. A stale grant (unplugged, claimed elsewhere) falls
+  // through to the chooser.
+  try {
+    const granted = (await navigator.hid.getDevices()).find(isRynkInterface);
+    if (granted) {
+      if (!granted.opened) await granted.open();
+      return granted;
+    }
+  } catch {
+    // fall through to the picker
+  }
   const devices = await navigator.hid.requestDevice({
     filters: [{ usagePage: RYNK_USAGE_PAGE, usage: RYNK_USAGE }],
   });
