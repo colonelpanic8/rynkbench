@@ -11,6 +11,7 @@ import type {
   DeviceCapabilities,
   Fork,
   KeyAction,
+  LayerState,
   LightingCapabilities,
   LightingCompiledSceneStatus,
   LightingLayerPolicy,
@@ -33,6 +34,7 @@ import type {
   ForkOps,
   KeymapOps,
   LayerKeymap,
+  LayerSnapshot,
   LightingOps,
   LightingTopology,
   MacroOps,
@@ -77,6 +79,23 @@ function isStateRevisionConflict(error: unknown): boolean {
 interface OverlayReadClient {
   get_lighting_state(): Promise<LightingState>;
   get_lighting_overlay(request: LightingOverlayPageRequest): Promise<LightingOverlayPage>;
+}
+
+/** Decode the protocol's least-significant-bit-first active-layer bitmap. */
+export function decodeLayerState(state: LayerState): LayerSnapshot {
+  const activeLayers: number[] = [];
+  for (let byte = 0; byte < state.active_bitmap.length; byte++) {
+    for (let bit = 0; bit < 8; bit++) {
+      if ((state.active_bitmap[byte] & (1 << bit)) !== 0) {
+        activeLayers.push(byte * 8 + bit);
+      }
+    }
+  }
+  return {
+    defaultLayer: state.default_layer,
+    activeLayers,
+    complete: true,
+  };
 }
 
 /** Read one coherent overlay snapshot, retrying if mutation or TTL expiry
@@ -194,6 +213,7 @@ export class WebHidSession implements RynkSession {
         this.run(() => client.set_encoder(encoderId, layer, action)),
       currentLayer: () => this.run(() => client.get_current_layer()),
       defaultLayer: () => this.run(() => client.get_default_layer()),
+      layerState: () => this.run(() => this.readLayerState()),
       setDefaultLayer: (layer) => this.run(() => client.set_default_layer(layer)),
     };
 
@@ -314,6 +334,21 @@ export class WebHidSession implements RynkSession {
       layers.push({ layer, actions });
     }
     return layers;
+  }
+
+  private async readLayerState(): Promise<LayerSnapshot> {
+    try {
+      return decodeLayerState(await this.client.get_layer_state());
+    } catch {
+      // Older firmware exposes only the highest active layer and the default.
+      const current = await this.client.get_current_layer();
+      const defaultLayer = await this.client.get_default_layer();
+      return {
+        defaultLayer,
+        activeLayers: [...new Set([defaultLayer, current])],
+        complete: false,
+      };
+    }
   }
 
   private async readCombos(): Promise<Combo[]> {

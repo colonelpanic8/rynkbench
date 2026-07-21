@@ -277,6 +277,8 @@ export const glove80Board: BoardSpec = {
   },
   topology: buildTopology(1, zones, simLeds),
   defaultLayers: buildLayers(),
+  initialDefaultLayer: 1,
+  initialActiveLayers: [1, 2, 3],
   defaultEncoders,
   battery: { Available: { charge_state: "Discharging", level: 84 } },
   brightness: 180,

@@ -36,6 +36,9 @@ function BatteryReadout({ battery, split }: { battery: BatteryStatus; split: boo
 export function TopBar() {
   const { bundle, state, io } = useWorkbench();
   const split = bundle.caps.is_split;
+  const activeLabel = [...new Set([state.defaultLayer, ...state.activeLayers])]
+    .sort((a, b) => a - b)
+    .join(" | ");
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-line-soft bg-panel px-4">
@@ -51,13 +54,13 @@ export function TopBar() {
       <div className="flex-1" />
 
       <div
-        key={state.currentLayer}
+        key={activeLabel}
         className="animate-pop"
-        title="Effective layer — the topmost active layer. Other layers can be active beneath it; the firmware reports only the top."
+        title={`Active layers: ${activeLabel}. Default layer: ${state.defaultLayer}.`}
       >
         <Chip tone="accent" className="tnum">
           <span className="size-1.5 rounded-full bg-accent" />
-          Effective: L{state.currentLayer}
+          {activeLabel}
         </Chip>
       </div>
 

@@ -131,13 +131,18 @@ describe("keymap", () => {
   });
 
   it("pushes LayerChange when the default layer changes", async () => {
-    await withSession(glove80Board, async (session) => {
+    await withSession(ortho60Board, async (session) => {
       const events: TopicEvent[] = [];
       session.onTopic((event) => events.push(event));
       expect(await session.keymap.defaultLayer()).toBe(0);
       await session.keymap.setDefaultLayer(1);
       expect(await session.keymap.defaultLayer()).toBe(1);
       expect(await session.keymap.currentLayer()).toBe(1);
+      expect(await session.keymap.layerState()).toEqual({
+        defaultLayer: 1,
+        activeLayers: [1],
+        complete: true,
+      });
       expect(events).toContainEqual({ LayerChange: 1 });
     });
   });

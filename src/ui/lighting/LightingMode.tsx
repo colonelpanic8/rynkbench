@@ -24,7 +24,7 @@ import type { Hsv } from "../color";
 import { cssRgb, hsvToRgb } from "../color";
 import { Button, InspectorShell, SectionLabel, TextInput, cx } from "../kit";
 import { EraserIcon, SpinnerIcon, WarningIcon } from "../icons";
-import { compositeScenes } from "../live/compositor";
+import { compositeScenes, effectiveAction } from "../live/compositor";
 
 type EffectKind = "Solid" | "Blink" | "Breathe";
 
@@ -263,7 +263,7 @@ export function LightingMode() {
       state.compiledScenes,
       state.scenes,
       draftMap,
-      state.currentLayer,
+      state.activeLayers,
       state.defaultLayer,
       state.compiledScenePolicy,
       state.scenePolicy,
@@ -275,7 +275,7 @@ export function LightingMode() {
     isLayerTarget,
     state.compiledScenePolicy,
     state.compiledScenes,
-    state.currentLayer,
+    state.activeLayers,
     state.defaultLayer,
     state.scenePolicy,
     state.scenes,
@@ -334,15 +334,19 @@ export function LightingMode() {
     }
   };
 
-  // Legend fallback mirrors keymap mode (enrichment label, else the live
-  // layer's binding) so unenriched boards don't render blank caps — but
+  // Legend fallback mirrors keymap mode (enrichment label, else the resolved
+  // live binding) so unenriched boards don't render blank caps — but
   // always dimmed here, so the paint color stays the loudest thing.
   const cols = bundle.caps.num_cols;
-  const liveLayer = state.layers[state.currentLayer];
   const legendFor = (key: KeyView): KeyDecor["glyph"] => {
     if (key.label) return { text: key.label, dim: true };
-    const action = liveLayer?.[key.row * cols + key.col];
-    const text = action !== undefined ? keyActionGlyph(action).text : "";
+    const action = effectiveAction(
+      state.layers,
+      state.activeLayers,
+      state.defaultLayer,
+      key.row * cols + key.col,
+    );
+    const text = keyActionGlyph(action).text;
     return text ? { text, dim: true } : undefined;
   };
 

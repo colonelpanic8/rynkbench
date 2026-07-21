@@ -71,6 +71,14 @@ export interface LayerKeymap {
   actions: KeyAction[];
 }
 
+/** Every layer currently participating in key resolution. `complete` is
+ * false only for legacy firmware that lacks GetLayerState. */
+export interface LayerSnapshot {
+  defaultLayer: number;
+  activeLayers: number[];
+  complete: boolean;
+}
+
 export interface KeymapOps {
   /** Read every layer. Row-major within each layer. */
   readAll(): Promise<LayerKeymap[]>;
@@ -79,6 +87,7 @@ export interface KeymapOps {
   setEncoder(encoderId: number, layer: number, action: EncoderAction): Promise<void>;
   currentLayer(): Promise<number>;
   defaultLayer(): Promise<number>;
+  layerState(): Promise<LayerSnapshot>;
   setDefaultLayer(layer: number): Promise<void>;
 }
 

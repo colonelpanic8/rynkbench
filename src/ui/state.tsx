@@ -50,6 +50,8 @@ export interface ConnectedBundle {
   layers: KeyAction[][];
   currentLayer: number;
   defaultLayer: number;
+  activeLayers: number[];
+  layerStateComplete: boolean;
   battery: BatteryStatus;
   connection: ConnectionStatus | null;
   lightingState: LightingState | null;
@@ -94,9 +96,11 @@ export function slotPendingId(kind: SlotKind, index: number): string {
 export interface WorkbenchState {
   mode: Mode;
   uiLayer: number;
-  /** The effective (topmost active) layer — the only layer the wire reports. */
+  /** Highest-precedence active layer, derived from `activeLayers`. */
   currentLayer: number;
   defaultLayer: number;
+  activeLayers: number[];
+  layerStateComplete: boolean;
   layers: KeyAction[][];
   /** `${layer}:${encoderId}` → loaded encoder action. */
   encoders: Record<string, EncoderAction>;
@@ -212,6 +216,8 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     uiLayer: bundle.currentLayer,
     currentLayer: bundle.currentLayer,
     defaultLayer: bundle.defaultLayer,
+    activeLayers: bundle.activeLayers,
+    layerStateComplete: bundle.layerStateComplete,
     layers: bundle.layers,
     encoders: {},
     battery: bundle.battery,
@@ -268,7 +274,12 @@ export type WorkbenchAction =
       message: string;
     }
   | { type: "defaultLayer"; layer: number }
-  | { type: "topicLayer"; layer: number }
+  | {
+      type: "topicLayers";
+      defaultLayer: number;
+      activeLayers: number[];
+      complete: boolean;
+    }
   | { type: "topicBattery"; battery: BatteryStatus }
   | { type: "topicConnection"; connection: ConnectionStatus }
   | {
@@ -392,8 +403,14 @@ export function makeWorkbenchReducer(cols: number) {
       }
       case "defaultLayer":
         return { ...state, defaultLayer: act.layer };
-      case "topicLayer":
-        return { ...state, currentLayer: act.layer };
+      case "topicLayers":
+        return {
+          ...state,
+          defaultLayer: act.defaultLayer,
+          activeLayers: act.activeLayers,
+          layerStateComplete: act.complete,
+          currentLayer: Math.max(act.defaultLayer, ...act.activeLayers),
+        };
       case "topicBattery":
         return { ...state, battery: act.battery };
       case "topicConnection":
@@ -636,6 +653,7 @@ export interface WorkbenchIo {
   loadEncoder(layer: number, id: number): void;
   setEncoder(layer: number, id: number, action: EncoderAction): void;
   setDefaultLayer(layer: number): void;
+  refreshLayerState(): void;
   applyOverlay(cells: LightingOverlayCell[]): void;
   clearOverlay(): void;
   refreshLighting(): void;
@@ -711,6 +729,18 @@ export function makeIo(
       session.keymap.setDefaultLayer(layer).catch(() => {
         dispatch({ type: "defaultLayer", layer: prev });
       });
+    },
+    refreshLayerState() {
+      session.keymap.layerState().then(
+        (snapshot) =>
+          dispatch({
+            type: "topicLayers",
+            defaultLayer: snapshot.defaultLayer,
+            activeLayers: snapshot.activeLayers,
+            complete: snapshot.complete,
+          }),
+        () => {},
+      );
     },
     applyOverlay(cells) {
       dispatch({ type: "lightingBusy", busy: true, error: null });

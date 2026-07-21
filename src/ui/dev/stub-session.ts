@@ -486,6 +486,14 @@ class StubSession implements RynkSession {
       await lag();
       return this.defaultLayerNum;
     },
+    layerState: async () => {
+      await lag();
+      return {
+        defaultLayer: this.defaultLayerNum,
+        activeLayers: [...new Set([this.defaultLayerNum, this.currentLayerNum])],
+        complete: true,
+      };
+    },
     setDefaultLayer: async (layer: number): Promise<void> => {
       await lag();
       this.defaultLayerNum = layer;

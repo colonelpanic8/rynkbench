@@ -5,7 +5,7 @@ import type {
   LightingOverlayPageRequest,
   LightingState,
 } from "../../vendor/rynk-wasm/rynk_wasm";
-import { readLightingOverlay } from "./session";
+import { decodeLayerState, readLightingOverlay } from "./session";
 
 const effect: LightingEffect = { Solid: { color: { r: 1, g: 2, b: 3 } } };
 
@@ -107,3 +107,18 @@ interface ReturnTypeShape {
   total_count: number;
   items: LightingOverlayCell[];
 }
+
+describe("WebHID layer-state readback", () => {
+  it("decodes every active bit across bitmap bytes", () => {
+    expect(
+      decodeLayerState({
+        default_layer: 2,
+        active_bitmap: [0b00010110, 0b00000010],
+      }),
+    ).toEqual({
+      defaultLayer: 2,
+      activeLayers: [1, 2, 4, 9],
+      complete: true,
+    });
+  });
+});

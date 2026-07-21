@@ -32,6 +32,8 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     uiLayer: 0,
     currentLayer: 0,
     defaultLayer: 0,
+    activeLayers: [0],
+    layerStateComplete: true,
     layers: [[], []],
     encoders: {},
     battery: "Unavailable",
@@ -142,5 +144,20 @@ describe("per-target lighting drafts", () => {
     expect(stagedBetween(activeLightingDraft(painted), activeLightingBase(painted))).toEqual(
       new Set([2]),
     );
+  });
+});
+
+describe("layer-state snapshots", () => {
+  it("replaces the active set and derives the highest-precedence layer", () => {
+    const next = reducer(baseState(), {
+      type: "topicLayers",
+      defaultLayer: 1,
+      activeLayers: [1, 2, 4],
+      complete: true,
+    });
+    expect(next.defaultLayer).toBe(1);
+    expect(next.activeLayers).toEqual([1, 2, 4]);
+    expect(next.currentLayer).toBe(4);
+    expect(next.layerStateComplete).toBe(true);
   });
 });

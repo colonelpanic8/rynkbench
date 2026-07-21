@@ -22,23 +22,21 @@ describe("effectiveAction", () => {
 
   it("uses the effective layer's own binding when it is concrete", () => {
     const l = [[tap("A")], [tap("B")]];
-    expect(effectiveAction(l, 1, 0, 0)).toEqual(tap("B"));
+    expect(effectiveAction(l, [0, 1], 0, 0)).toEqual(tap("B"));
   });
 
   it("falls through Transparent downward toward the default floor", () => {
     // Effective L2 transparent → L1 transparent → floor L0 concrete.
-    expect(effectiveAction(layers, 2, 0, 0)).toEqual(tap("A"));
+    expect(effectiveAction(layers, [0, 2], 0, 0)).toEqual(tap("A"));
   });
 
-  it("consults only the known-active layers, never unreported middles", () => {
-    // L1 is concrete but unreported (possibly inactive): fall through to floor.
+  it("consults an active intermediate layer", () => {
     const l: KeyAction[][] = [[tap("A")], [tap("B")], ["Transparent"]];
-    expect(effectiveAction(l, 2, 0, 0)).toEqual(tap("A"));
+    expect(effectiveAction(l, [0, 1, 2], 0, 0)).toEqual(tap("B"));
   });
 
-  it("stops at the default floor and never consults layers below it", () => {
-    // Floor is L1 (Transparent). L0's A must not be reached.
-    expect(effectiveAction(layers, 2, 1, 0)).toEqual("Transparent");
+  it("consults an explicitly active layer below the default", () => {
+    expect(effectiveAction(layers, [0, 1, 2], 1, 0)).toEqual(tap("A"));
   });
 });
 
@@ -50,14 +48,14 @@ describe("compositeScenes", () => {
   ];
 
   it("EffectiveOnly composites only the effective layer (+ overlay)", () => {
-    const out = compositeScenes([], scenes, {}, 2, 0, null, "EffectiveOnly");
+    const out = compositeScenes([], scenes, {}, [0, 2], 0, null, "EffectiveOnly");
     expect(out.get(1)).toEqual({ effect: solid(20), source: "runtime-effective" });
     expect(out.get(3)).toEqual({ effect: solid(30), source: "runtime-effective" });
     expect(out.size).toBe(2);
   });
 
   it("ActiveStack adds the default floor beneath the effective layer", () => {
-    const out = compositeScenes([], scenes, {}, 2, 0, null, "ActiveStack");
+    const out = compositeScenes([], scenes, {}, [0, 2], 0, null, "ActiveStack");
     // led 1 present on both layers → effective wins.
     expect(out.get(1)).toEqual({ effect: solid(20), source: "runtime-effective" });
     expect(out.get(3)).toEqual({ effect: solid(30), source: "runtime-effective" });
@@ -65,7 +63,7 @@ describe("compositeScenes", () => {
 
   it("ActiveStack keeps a floor-only cell when the effective layer lacks it", () => {
     const floorOnly: LightingSceneCell[] = [{ layer: 0, led_id: 9, effect: solid(10) }];
-    const out = compositeScenes([], floorOnly, {}, 2, 0, null, "ActiveStack");
+    const out = compositeScenes([], floorOnly, {}, [0, 2], 0, null, "ActiveStack");
     expect(out.get(9)).toEqual({ effect: solid(10), source: "runtime-default" });
   });
 
@@ -75,7 +73,7 @@ describe("compositeScenes", () => {
       { layer: 2, led_id: 2, effect: solid(6) },
     ];
     const runtime: LightingSceneCell[] = [{ layer: 2, led_id: 1, effect: solid(50) }];
-    const out = compositeScenes(compiled, runtime, {}, 2, 0, "ActiveStack", "EffectiveOnly");
+    const out = compositeScenes(compiled, runtime, {}, [0, 2], 0, "ActiveStack", "EffectiveOnly");
     expect(out.get(1)).toEqual({ effect: solid(50), source: "runtime-effective" });
     expect(out.get(2)).toEqual({ effect: solid(6), source: "compiled-effective" });
   });
@@ -85,11 +83,22 @@ describe("compositeScenes", () => {
       [],
       scenes,
       { 1: { led_id: 1, effect: solid(99), ttl_ms: undefined } },
-      2,
+      [0, 2],
       0,
       null,
       "ActiveStack",
     );
     expect(out.get(1)).toEqual({ effect: solid(99), source: "overlay" });
+  });
+
+  it("ActiveStack composites every active layer in index order", () => {
+    const all: LightingSceneCell[] = [
+      { layer: 0, led_id: 1, effect: solid(10) },
+      { layer: 1, led_id: 1, effect: solid(20) },
+      { layer: 2, led_id: 2, effect: solid(30) },
+    ];
+    const out = compositeScenes([], all, {}, [0, 1, 2], 0, null, "ActiveStack");
+    expect(out.get(1)).toEqual({ effect: solid(20), source: "runtime-active" });
+    expect(out.get(2)).toEqual({ effect: solid(30), source: "runtime-effective" });
   });
 });

@@ -123,12 +123,14 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     return layerKeymaps.find((l) => l.layer === i)?.actions ?? [];
   });
 
-  const [currentLayer, defaultLayer, battery, connection] = await Promise.all([
-    session.keymap.currentLayer(),
-    session.keymap.defaultLayer(),
+  const [layerState, battery, connection] = await Promise.all([
+    session.keymap.layerState(),
     session.device.battery(),
     session.device.connectionStatus().catch(() => null),
   ]);
+  const activeLayers = layerState.activeLayers.filter((layer) => layer < caps.num_layers);
+  const defaultLayer = layerState.defaultLayer;
+  const currentLayer = Math.max(defaultLayer, ...activeLayers);
 
   // Advanced tables — every read is capability-gated and failure-tolerant so
   // sparse firmware degrades to hidden features, never a failed connect.
@@ -154,6 +156,8 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     layers,
     currentLayer,
     defaultLayer,
+    activeLayers,
+    layerStateComplete: layerState.complete,
     battery,
     connection,
     lightingState,

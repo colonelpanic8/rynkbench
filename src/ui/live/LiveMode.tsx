@@ -1,8 +1,7 @@
 // Live mode: a read-only observatory. It never writes to the session — it
 // renders what the device should currently be showing (composited lighting +
 // effective key bindings) from the last-known state, and a layer-stack view
-// that stays honest about what the wire actually reports (only the effective
-// layer).
+// backed by the firmware's complete active-layer snapshot.
 
 import { useMemo } from "react";
 import type { LightingEffect } from "../../vendor/rynk-wasm/rynk_wasm";
@@ -66,12 +65,11 @@ function IndicatorRow() {
   );
 }
 
-/** The active-layer stack, ordered by index (top = highest, floor = default). */
+/** Every layer's authoritative active/default status, ordered by index. */
 function LayerStack() {
   const { bundle, state } = useWorkbench();
   const numLayers = bundle.caps.num_layers;
-  const effective = state.currentLayer;
-  const floor = state.defaultLayer;
+  const activeLayers = new Set(state.activeLayers);
 
   const litLayers = useMemo(() => {
     const set = new Set<number>();
@@ -87,43 +85,31 @@ function LayerStack() {
       <SectionLabel>Layer stack</SectionLabel>
       <div className="mt-2.5 flex flex-col gap-1">
         {rows.map((i) => {
-          const isEffective = i === effective;
-          const isFloor = i === floor;
-          const between = i > floor && i < effective;
-          const below = i < floor;
+          const active = activeLayers.has(i);
+          const isDefault = i === state.defaultLayer;
+          const known = state.layerStateComplete || active || isDefault;
 
           let note: string;
           let title: string | undefined;
-          if (isEffective && isFloor) {
-            note = "effective · default floor";
-            title = "Topmost active layer and the default floor — the whole stack is one layer.";
-          } else if (isEffective) {
-            note = "effective · top of stack";
-            title = "The topmost active layer — the only layer the firmware reports.";
-          } else if (isFloor) {
-            note = "default · floor";
-            title = "The default layer — always active, and the floor key resolution stops at.";
-          } else if (between) {
-            note = "not reported";
-            title =
-              "Between the default and effective layers — the firmware reports only the effective layer, so we can't tell if this one is active.";
-          } else if (below) {
-            note = "inert";
-            title = "Below the default layer — never consulted by key resolution.";
-          } else {
+          if (active && isDefault) {
+            note = "active · default";
+            title = "Active and configured as the default layer.";
+          } else if (active) {
+            note = "active";
+            title = "Active and participating in key and lighting resolution.";
+          } else if (known) {
             note = "inactive";
-            title = "Above the effective layer — not active.";
+            title = "Reported inactive by the firmware.";
+          } else {
+            note = "unknown";
+            title = "Legacy firmware did not report the complete active-layer bitmap.";
           }
 
-          const tone = isEffective
+          const tone = active
             ? "border-accent bg-accent-dim/30 text-accent"
-            : isFloor
-              ? "border-ok/50 bg-well text-mute"
-              : between
-                ? "border-dashed border-line text-faint"
-                : below
-                  ? "border-line bg-transparent text-faint opacity-40"
-                  : "border-line bg-raised text-mute";
+            : known
+              ? "border-line bg-raised text-mute"
+              : "border-dashed border-line text-faint";
 
           return (
             <div
@@ -137,7 +123,7 @@ function LayerStack() {
               <span className="tnum font-mono text-[12px]">L{i}</span>
               {litLayers.has(i) && (
                 <span
-                  title="Has stored scene lighting"
+                  title="Has compiled or stored scene lighting"
                   className="size-1.5 rounded-full bg-accent/70"
                 />
               )}
@@ -149,7 +135,7 @@ function LayerStack() {
       </div>
       <p className="mt-2.5 text-[10.5px] leading-relaxed text-faint">
         Precedence is by layer index — highest active layer wins; activation order never matters.
-        Transparent keys fall through toward the default layer.
+        Transparent keys fall through the remaining active layers.
       </p>
     </Panel>
   );
@@ -158,8 +144,6 @@ function LayerStack() {
 export function LiveMode() {
   const { bundle, state } = useWorkbench();
   const cols = bundle.caps.num_cols;
-  const effective = state.currentLayer;
-  const floor = state.defaultLayer;
   const lighting = state.lightingState;
   const outputOn = lighting?.output_enabled ?? false;
   const bg = lighting?.background;
@@ -172,8 +156,8 @@ export function LiveMode() {
         state.compiledScenes,
         state.scenes,
         state.applied,
-        effective,
-        floor,
+        state.activeLayers,
+        state.defaultLayer,
         state.compiledScenePolicy,
         state.scenePolicy,
       ),
@@ -181,15 +165,20 @@ export function LiveMode() {
       state.compiledScenes,
       state.scenes,
       state.applied,
-      effective,
-      floor,
+      state.activeLayers,
+      state.defaultLayer,
       state.compiledScenePolicy,
       state.scenePolicy,
     ],
   );
 
   const bindingGlyph = (key: KeyView): KeyDecor["glyph"] => {
-    const action = effectiveAction(state.layers, effective, floor, key.row * cols + key.col);
+    const action = effectiveAction(
+      state.layers,
+      state.activeLayers,
+      state.defaultLayer,
+      key.row * cols + key.col,
+    );
     const glyph = keyActionGlyph(action);
     if (!glyph.text && key.label) return { text: key.label, dim: true };
     return glyph.text ? { ...glyph, dim: true } : undefined;
@@ -207,8 +196,9 @@ export function LiveMode() {
     };
   };
 
-  const stackApprox =
-    state.scenePolicy === "ActiveStack" || state.compiledScenePolicy === "ActiveStack";
+  const activeLabel = [...new Set([state.defaultLayer, ...state.activeLayers])]
+    .sort((a, b) => a - b)
+    .join(" | ");
 
   return (
     <>
@@ -217,11 +207,11 @@ export function LiveMode() {
           <SectionLabel>Live view</SectionLabel>
           <span
             className="animate-pop"
-            title="Effective layer — the topmost active layer. Reported by the firmware."
+            title={`Active layers: ${activeLabel}. Default layer: ${state.defaultLayer}.`}
           >
             <span className="inline-flex items-center gap-1.5 rounded-full border border-accent-deep/60 bg-accent-dim/30 px-2 py-0.5 text-[10.5px] font-medium text-accent">
               <span className="size-1.5 rounded-full bg-accent" />
-              Effective: L{effective}
+              {activeLabel}
             </span>
           </span>
           <div className="flex-1" />
@@ -247,8 +237,6 @@ export function LiveMode() {
             <>
               Composited preview: scene lighting and the overlay over each key's effective binding.
               {bgOn && " The firmware background fills keys without a higher-priority source."}
-              {stackApprox &&
-                " Under Stack active layers the keyboard composites the full active-layer stack on-device; this preview shows only the default and effective layers (the firmware reports only the effective one)."}
             </>
           ) : (
             "Lighting output is off — the device is dark. Key labels show each key's effective binding."

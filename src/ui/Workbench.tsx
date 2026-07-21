@@ -96,7 +96,7 @@ export function Workbench({
   useEffect(() => {
     bundle.session.onTopic((event) => {
       if ("LayerChange" in event) {
-        dispatch({ type: "topicLayer", layer: event.LayerChange });
+        io.refreshLayerState();
       } else if ("BatteryStatusChange" in event) {
         dispatch({ type: "topicBattery", battery: event.BatteryStatusChange });
       } else if ("ConnectionChange" in event) {

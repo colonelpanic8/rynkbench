@@ -66,6 +66,10 @@ export interface BoardSpec {
   topology: LightingTopology;
   /** Layer-major, row-major defaults; num_layers × (num_rows × num_cols). */
   defaultLayers: KeyAction[][];
+  /** Initial authoritative layer state. The default layer is always added to
+   * the active set. */
+  initialDefaultLayer?: number;
+  initialActiveLayers?: number[];
   /** Per-layer encoder defaults; [layer][encoderId]. */
   defaultEncoders: EncoderAction[][];
   battery: BatteryStatus;
@@ -281,6 +285,7 @@ class MockSession implements RynkSession {
   private readonly knownLeds: Set<LightingLedId>;
   private base = 0;
   private current = 0;
+  private activeLayers = new Set<number>([0]);
   private battery: BatteryStatus;
   private revision = 1;
   private outputEnabled = true;
@@ -310,6 +315,10 @@ class MockSession implements RynkSession {
     this.spec = spec;
     this.label = spec.info.product_name;
     this.layers = spec.defaultLayers.map((actions) => [...actions]);
+    this.base = this.checkLayer(spec.initialDefaultLayer ?? 0);
+    this.activeLayers = new Set((spec.initialActiveLayers ?? [this.base]).map((layer) => this.checkLayer(layer)));
+    this.activeLayers.add(this.base);
+    this.current = Math.max(...this.activeLayers);
     this.encoders = spec.defaultEncoders.map((perLayer) => perLayer.map((action) => ({ ...action })));
     this.knownLeds = new Set(spec.topology.leds.map((led) => led.id));
     for (const cell of spec.seedScenes ?? []) {
@@ -386,9 +395,16 @@ class MockSession implements RynkSession {
       }),
     currentLayer: () => latency(() => this.current),
     defaultLayer: () => latency(() => this.base),
+    layerState: () =>
+      latency(() => ({
+        defaultLayer: this.base,
+        activeLayers: [...this.activeLayers].sort((a, b) => a - b),
+        complete: true,
+      })),
     setDefaultLayer: (layer) =>
       latency(() => {
         this.base = this.checkLayer(layer);
+        this.activeLayers = new Set([this.base]);
         this.current = layer;
         this.emit({ LayerChange: layer });
       }),
