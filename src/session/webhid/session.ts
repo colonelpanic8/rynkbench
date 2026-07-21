@@ -7,20 +7,30 @@
 // transaction) hold the queue for their whole critical section.
 
 import type {
+  Combo,
+  DeviceCapabilities,
+  Fork,
   KeyAction,
   LightingCapabilities,
+  LightingMutableState,
   LightingOverlayCell,
   LightingPageRequest,
   LightingState,
+  Morse,
   RynkClient,
   TopicEvent,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import type {
+  BehaviorOps,
+  ComboOps,
   DeviceOps,
+  ForkOps,
   KeymapOps,
   LayerKeymap,
   LightingOps,
   LightingTopology,
+  MacroOps,
+  MorseOps,
   RynkSession,
 } from "../types";
 import type { RynkByteLink } from "./link";
@@ -53,6 +63,11 @@ export class WebHidSession implements RynkSession {
   readonly device: DeviceOps;
   readonly keymap: KeymapOps;
   readonly lighting: LightingOps;
+  readonly combos: ComboOps;
+  readonly morse: MorseOps;
+  readonly forks: ForkOps;
+  readonly macros: MacroOps;
+  readonly behavior: BehaviorOps;
 
   private readonly client: RynkClient;
   private readonly link: RynkByteLink;
@@ -87,6 +102,11 @@ export class WebHidSession implements RynkSession {
       battery: () => this.run(() => client.get_battery_status()),
       connectionStatus: () => this.run(() => client.get_connection_status()),
       rebootToBootloader: () => this.run(() => client.bootloader_jump()),
+      bleStatus: () => this.run(() => client.get_ble_status()),
+      clearBleProfile: (slot) => this.run(() => client.clear_ble_profile(slot)),
+      peripheralStatus: (slot) => this.run(() => client.get_peripheral_status(slot)),
+      matrixState: () => this.run(() => client.get_matrix_state()),
+      ledIndicator: () => this.run(() => client.get_led_indicator()),
     };
 
     this.keymap = {
@@ -116,6 +136,32 @@ export class WebHidSession implements RynkSession {
             "the WebHID backend cannot read the overlay back",
         );
       },
+      setState: (state) => this.run(() => this.setLightingState(state)),
+    };
+
+    this.combos = {
+      readAll: () => this.run(() => this.readCombos()),
+      set: (index, combo) => this.run(() => client.set_combo(index, combo)),
+    };
+
+    this.morse = {
+      readAll: () => this.run(() => this.readMorse()),
+      set: (index, morse) => this.run(() => client.set_morse(index, morse)),
+    };
+
+    this.forks = {
+      readAll: () => this.run(() => this.readForks()),
+      set: (index, fork) => this.run(() => client.set_fork(index, fork)),
+    };
+
+    this.macros = {
+      read: () => this.run(() => this.readMacroRegion()),
+      write: (data) => this.run(() => this.writeMacroRegion(data)),
+    };
+
+    this.behavior = {
+      get: () => this.run(() => client.get_behavior()),
+      set: (config) => this.run(() => client.set_behavior(config)),
     };
   }
 
@@ -188,6 +234,112 @@ export class WebHidSession implements RynkSession {
       layers.push({ layer, actions });
     }
     return layers;
+  }
+
+  private async readCombos(): Promise<Combo[]> {
+    const caps = await this.client.get_capabilities();
+    return this.readSlotTable(
+      caps,
+      caps.max_combos,
+      async (start) => (await this.client.get_combo_bulk(start)).configs,
+      (index) => this.client.get_combo(index),
+    );
+  }
+
+  private async readMorse(): Promise<Morse[]> {
+    const caps = await this.client.get_capabilities();
+    return this.readSlotTable(
+      caps,
+      caps.max_morse,
+      async (start) => (await this.client.get_morse_bulk(start)).configs,
+      (index) => this.client.get_morse(index),
+    );
+  }
+
+  private async readForks(): Promise<Fork[]> {
+    // No bulk endpoint for forks; always per-index.
+    const caps = await this.client.get_capabilities();
+    const forks: Fork[] = [];
+    for (let index = 0; index < caps.max_forks; index++) {
+      forks.push(await this.client.get_fork(index));
+    }
+    return forks;
+  }
+
+  private async readSlotTable<T>(
+    caps: DeviceCapabilities,
+    total: number,
+    bulk: (startIndex: number) => Promise<T[]>,
+    single: (index: number) => Promise<T>,
+  ): Promise<T[]> {
+    const items: T[] = [];
+    if (caps.bulk_transfer_supported) {
+      while (items.length < total) {
+        const page = await bulk(items.length);
+        if (page.length === 0) {
+          throw new Error(`bulk slot read stalled at slot ${items.length} of ${total}`);
+        }
+        items.push(...page.slice(0, total - items.length));
+      }
+    } else {
+      for (let index = 0; index < total; index++) {
+        items.push(await single(index));
+      }
+    }
+    return items;
+  }
+
+  private async readMacroRegion(): Promise<Uint8Array> {
+    const caps = await this.client.get_capabilities();
+    if (caps.macro_space_size === 0) return new Uint8Array(0);
+    const region = new Uint8Array(caps.macro_space_size);
+    let offset = 0;
+    while (offset < caps.macro_space_size) {
+      const chunk = await this.client.get_macro(offset);
+      if (chunk.data.length === 0) {
+        throw new Error(`macro read stalled at byte ${offset} of ${caps.macro_space_size}`);
+      }
+      const take = chunk.data.slice(0, caps.macro_space_size - offset);
+      region.set(take, offset);
+      offset += take.length;
+    }
+    return region;
+  }
+
+  private async writeMacroRegion(data: Uint8Array): Promise<void> {
+    const caps = await this.client.get_capabilities();
+    if (caps.macro_space_size === 0) {
+      if (data.length > 0) throw new Error("device has no macro storage");
+      return;
+    }
+    if (data.length > caps.macro_space_size) {
+      throw new Error(
+        `macro data (${data.length} bytes) exceeds device region (${caps.macro_space_size} bytes)`,
+      );
+    }
+    const step = Math.max(1, caps.macro_chunk_size);
+    for (let offset = 0; offset < data.length; offset += step) {
+      await this.client.set_macro(offset, {
+        data: Array.from(data.subarray(offset, offset + step)),
+      });
+    }
+  }
+
+  private async setLightingState(state: LightingMutableState): Promise<LightingState> {
+    // Same revision handshake as clearOverlay, with one retry: if the
+    // revision moved between our read and the write, re-read and try once
+    // more before surfacing the conflict.
+    const current = await this.client.get_lighting_state();
+    try {
+      return await this.client.set_lighting_state({
+        expected_revision: current.revision,
+        state,
+      });
+    } catch (error) {
+      if (!String(error).includes("RevisionConflict")) throw error;
+      const fresh = await this.client.get_lighting_state();
+      return this.client.set_lighting_state({ expected_revision: fresh.revision, state });
+    }
   }
 
   private async readTopology(): Promise<LightingTopology> {

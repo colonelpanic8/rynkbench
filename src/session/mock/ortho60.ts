@@ -80,10 +80,10 @@ const capabilities: DeviceCapabilities = {
   num_encoders: 1,
   max_combos: 4,
   max_combo_keys: 4,
-  macro_space_size: 0,
-  max_morse: 0,
-  max_patterns_per_key: 0,
-  max_forks: 0,
+  macro_space_size: 128,
+  max_morse: 4,
+  max_patterns_per_key: 4,
+  max_forks: 4,
   storage_enabled: true,
   lighting_enabled: true,
   is_split: false,
@@ -93,7 +93,7 @@ const capabilities: DeviceCapabilities = {
   max_payload_size: 256,
   max_bulk_keys: 28,
   max_bulk_configs: 4,
-  macro_chunk_size: 0,
+  macro_chunk_size: 28,
   bulk_transfer_supported: true,
 };
 
@@ -127,4 +127,14 @@ export const ortho60Board: BoardSpec = {
   battery: "Unavailable",
   brightness: 200,
   background: { enabled: true, hue: 28, saturation: 200, value: 150, speed: 60, mode: "Breathe" },
+  behavior: {
+    combo_timeout_ms: 50,
+    oneshot_timeout_ms: 1000,
+    tap_interval_ms: 200,
+    tap_capslock_interval_ms: 350,
+  },
+  // Num lock is on, as a plain desk board would report after boot.
+  ledIndicator: { num_lock: true, caps_lock: false, scroll_lock: false, compose: false, kana: false },
+  // No seeds: every advanced-config table starts empty on this board, so the
+  // UI's empty states get exercised.
 };

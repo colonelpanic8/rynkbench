@@ -5,14 +5,20 @@
 // and topic pushes arrive on timers like a real device's.
 
 import type {
+  Action,
   BatteryStatus,
+  BehaviorConfig,
+  BleStatus,
+  Combo,
   ConnectionStatus,
   DeviceCapabilities,
   DeviceInfo,
   EncoderAction,
+  Fork,
   HidKeyCode,
   KeyAction,
   LayoutInfo,
+  LedIndicator,
   LightingBackgroundState,
   LightingCapabilities,
   LightingLed,
@@ -23,17 +29,26 @@ import type {
   LightingState,
   LightingZone,
   LightingZoneId,
+  ModifierCombination,
+  Morse,
+  MouseButtons,
   ProtocolVersion,
+  StateBits,
   TopicEvent,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import type {
+  BehaviorOps,
+  ComboOps,
   DeviceOps,
+  ForkOps,
   KeymapOps,
   LightingOps,
-  LightingTopology,
+  MacroOps,
+  MorseOps,
   RynkSession,
   SessionKind,
   SessionProvider,
+  LightingTopology,
 } from "../types";
 
 export interface BoardSpec {
@@ -52,6 +67,14 @@ export interface BoardSpec {
   battery: BatteryStatus;
   brightness: number;
   background: LightingBackgroundState;
+  behavior: BehaviorConfig;
+  ledIndicator: LedIndicator;
+  /** Battery each split peripheral reports; wired halves say `"Unavailable"`. */
+  peripheralBattery?: BatteryStatus;
+  /** Pre-programmed slots, filling the table from slot 0. */
+  seedCombos?: Combo[];
+  seedMorse?: Morse[];
+  seedForks?: Fork[];
 }
 
 export function hid(code: HidKeyCode): KeyAction {
@@ -60,6 +83,101 @@ export function hid(code: HidKeyCode): KeyAction {
 
 export function layerOn(layer: number): KeyAction {
   return { Single: { LayerOn: layer } };
+}
+
+export function noModifiers(): ModifierCombination {
+  return {
+    left_ctrl: false,
+    left_shift: false,
+    left_alt: false,
+    left_gui: false,
+    right_ctrl: false,
+    right_shift: false,
+    right_alt: false,
+    right_gui: false,
+  };
+}
+
+export function noLeds(): LedIndicator {
+  return { num_lock: false, caps_lock: false, scroll_lock: false, compose: false, kana: false };
+}
+
+function noMouse(): MouseButtons {
+  return {
+    button1: false,
+    button2: false,
+    button3: false,
+    button4: false,
+    button5: false,
+    button6: false,
+    button7: false,
+    button8: false,
+  };
+}
+
+/** Zero state bits: match nothing (the wire default for fork conditions). */
+export function noStateBits(): StateBits {
+  return { modifiers: noModifiers(), leds: noLeds(), mouse: noMouse() };
+}
+
+// Empty slots mirror what real firmware reports for unprogrammed entries.
+export function emptyCombo(): Combo {
+  return { actions: [], output: "No", layer: undefined };
+}
+
+export function emptyMorse(): Morse {
+  return {
+    profile: {
+      unilateral_tap: undefined,
+      enable_flow_tap: undefined,
+      mode: undefined,
+      hold_timeout_ms: undefined,
+      gap_timeout_ms: undefined,
+    },
+    actions: [],
+  };
+}
+
+export function emptyFork(): Fork {
+  return {
+    trigger: "No",
+    negative_output: "No",
+    positive_output: "No",
+    match_any: noStateBits(),
+    match_none: noStateBits(),
+    kept_modifiers: noModifiers(),
+    bindable: true,
+  };
+}
+
+// Slot values cross the session boundary in both directions, so every read
+// and write clones — callers can never alias the mock's internal state.
+const cloneStateBits = (bits: StateBits): StateBits => ({
+  modifiers: { ...bits.modifiers },
+  leds: { ...bits.leds },
+  mouse: { ...bits.mouse },
+});
+
+const cloneCombo = (combo: Combo): Combo => ({ ...combo, actions: [...combo.actions] });
+
+const cloneMorse = (morse: Morse): Morse => ({
+  profile: { ...morse.profile },
+  actions: morse.actions.map(([pattern, action]): [number, Action] => [pattern, action]),
+});
+
+const cloneFork = (fork: Fork): Fork => ({
+  ...fork,
+  match_any: cloneStateBits(fork.match_any),
+  match_none: cloneStateBits(fork.match_none),
+  kept_modifiers: { ...fork.kept_modifiers },
+});
+
+function buildSlots<T>(count: number, empty: () => T, clone: (value: T) => T, seeds?: T[]): T[] {
+  const slots = Array.from({ length: count }, empty);
+  seeds?.forEach((seed, index) => {
+    if (index < count) slots[index] = clone(seed);
+  });
+  return slots;
 }
 
 /** One simulated light: identity, matrix key, geometry, wiring, zones. */
@@ -106,6 +224,10 @@ export function buildTopology(
 }
 
 const BATTERY_PUSH_MS = 30_000;
+// While the matrix tester polls, a few random keys toggle every couple of
+// seconds; the simulation stops itself once polling goes quiet.
+const MATRIX_SIM_MS = 2_000;
+const MATRIX_IDLE_MS = 5_000;
 
 /** Resolve `work`'s result after 5–15 ms, rejecting if it throws. */
 function latency<T>(work: () => T): Promise<T> {
@@ -138,9 +260,20 @@ class MockSession implements RynkSession {
   private current = 0;
   private battery: BatteryStatus;
   private revision = 1;
+  private outputEnabled = true;
   private brightness: number;
   private background: LightingBackgroundState;
   private overlay = new Map<LightingLedId, OverlayEntry>();
+  private readonly comboTable: Combo[];
+  private readonly morseTable: Morse[];
+  private readonly forkTable: Fork[];
+  private readonly macroBytes: Uint8Array;
+  private behaviorConfig: BehaviorConfig;
+  private readonly indicator: LedIndicator;
+  private readonly ble: BleStatus;
+  private readonly matrixBitmap: Uint8Array;
+  private matrixTimer: ReturnType<typeof setInterval> | null = null;
+  private lastMatrixPoll = 0;
   private topicHandler: ((event: TopicEvent) => void) | null = null;
   private disconnectHandler: (() => void) | null = null;
   private batteryTimer: ReturnType<typeof setInterval>;
@@ -156,6 +289,15 @@ class MockSession implements RynkSession {
     this.battery = spec.battery;
     this.brightness = spec.brightness;
     this.background = { ...spec.background };
+    const caps = spec.capabilities;
+    this.comboTable = buildSlots(caps.max_combos, emptyCombo, cloneCombo, spec.seedCombos);
+    this.morseTable = buildSlots(caps.max_morse, emptyMorse, cloneMorse, spec.seedMorse);
+    this.forkTable = buildSlots(caps.max_forks, emptyFork, cloneFork, spec.seedForks);
+    this.macroBytes = new Uint8Array(caps.macro_space_size);
+    this.behaviorConfig = { ...spec.behavior };
+    this.indicator = { ...spec.ledIndicator };
+    this.ble = { ...spec.connection.ble };
+    this.matrixBitmap = new Uint8Array(caps.num_rows * Math.ceil(caps.num_cols / 8));
     this.batteryTimer = setInterval(() => this.pushBattery(), BATTERY_PUSH_MS);
   }
 
@@ -173,6 +315,29 @@ class MockSession implements RynkSession {
         void this.close();
         handler?.();
       }),
+    bleStatus: () => latency(() => ({ ...this.ble })),
+    clearBleProfile: (slot) =>
+      latency(() => {
+        const { num_ble_profiles } = this.spec.capabilities;
+        if (!Number.isInteger(slot) || slot < 0 || slot >= num_ble_profiles) {
+          throw new Error(`BLE profile ${slot} out of range`);
+        }
+      }),
+    peripheralStatus: (slot) =>
+      latency(() => {
+        const { num_split_peripherals } = this.spec.capabilities;
+        if (!Number.isInteger(slot) || slot < 0 || slot >= num_split_peripherals) {
+          throw new Error(`peripheral ${slot} out of range`);
+        }
+        return { connected: true, battery: this.spec.peripheralBattery ?? "Unavailable" };
+      }),
+    matrixState: () =>
+      latency(() => {
+        this.lastMatrixPoll = Date.now();
+        this.ensureMatrixSim();
+        return { pressed_bitmap: [...this.matrixBitmap] };
+      }),
+    ledIndicator: () => latency(() => ({ ...this.indicator })),
   };
 
   readonly keymap: KeymapOps = {
@@ -231,6 +396,65 @@ class MockSession implements RynkSession {
           ttl_ms: expiresAt === null ? undefined : Math.max(1, expiresAt - now),
         }));
       }),
+    setState: (state) =>
+      latency(() => {
+        this.outputEnabled = state.output_enabled;
+        this.brightness = state.output_brightness;
+        this.background = { ...state.background };
+        return this.touchLighting();
+      }),
+  };
+
+  readonly combos: ComboOps = {
+    readAll: () => latency(() => this.comboTable.map(cloneCombo)),
+    set: (index, combo) =>
+      latency(() => {
+        const slot = this.checkSlot(index, this.comboTable.length, "combo");
+        if (combo.actions.length > this.spec.capabilities.max_combo_keys) {
+          throw new Error(`combo has ${combo.actions.length} keys, max ${this.spec.capabilities.max_combo_keys}`);
+        }
+        this.comboTable[slot] = cloneCombo(combo);
+      }),
+  };
+
+  readonly morse: MorseOps = {
+    readAll: () => latency(() => this.morseTable.map(cloneMorse)),
+    set: (index, morse) =>
+      latency(() => {
+        const slot = this.checkSlot(index, this.morseTable.length, "morse");
+        if (morse.actions.length > this.spec.capabilities.max_patterns_per_key) {
+          throw new Error(`morse has ${morse.actions.length} patterns, max ${this.spec.capabilities.max_patterns_per_key}`);
+        }
+        this.morseTable[slot] = cloneMorse(morse);
+      }),
+  };
+
+  readonly forks: ForkOps = {
+    readAll: () => latency(() => this.forkTable.map(cloneFork)),
+    set: (index, fork) =>
+      latency(() => {
+        this.forkTable[this.checkSlot(index, this.forkTable.length, "fork")] = cloneFork(fork);
+      }),
+  };
+
+  readonly macros: MacroOps = {
+    read: () => latency(() => new Uint8Array(this.macroBytes)),
+    write: (data) =>
+      latency(() => {
+        if (data.length > this.macroBytes.length) {
+          throw new Error(`macro data is ${data.length} bytes, capacity ${this.macroBytes.length}`);
+        }
+        this.macroBytes.fill(0);
+        this.macroBytes.set(data);
+      }),
+  };
+
+  readonly behavior: BehaviorOps = {
+    get: () => latency(() => ({ ...this.behaviorConfig })),
+    set: (config) =>
+      latency(() => {
+        this.behaviorConfig = { ...config };
+      }),
   };
 
   onTopic(handler: (event: TopicEvent) => void): void {
@@ -246,6 +470,8 @@ class MockSession implements RynkSession {
     clearInterval(this.batteryTimer);
     if (this.ttlTimer !== null) clearTimeout(this.ttlTimer);
     this.ttlTimer = null;
+    if (this.matrixTimer !== null) clearInterval(this.matrixTimer);
+    this.matrixTimer = null;
   }
 
   private emit(event: TopicEvent): void {
@@ -266,6 +492,13 @@ class MockSession implements RynkSession {
     return encoderId;
   }
 
+  private checkSlot(index: number, count: number, what: string): number {
+    if (!Number.isInteger(index) || index < 0 || index >= count) {
+      throw new Error(`${what} slot ${index} out of range`);
+    }
+    return index;
+  }
+
   private keyIndex(row: number, col: number): number {
     const { num_rows, num_cols } = this.spec.capabilities;
     if (row < 0 || row >= num_rows || col < 0 || col >= num_cols) {
@@ -277,7 +510,7 @@ class MockSession implements RynkSession {
   private lightingState(): LightingState {
     return {
       revision: this.revision,
-      output_enabled: true,
+      output_enabled: this.outputEnabled,
       output_brightness: this.brightness,
       background: { ...this.background },
       overlay_len: this.overlay.size,
@@ -343,6 +576,28 @@ class MockSession implements RynkSession {
       }
       this.scheduleExpiry();
     }, Math.max(0, next - Date.now()));
+  }
+
+  /** Lazily start the press simulation; it winds down once polling stops. */
+  private ensureMatrixSim(): void {
+    if (this.matrixTimer !== null || this.closed) return;
+    this.matrixTimer = setInterval(() => {
+      if (Date.now() - this.lastMatrixPoll > MATRIX_IDLE_MS) {
+        clearInterval(this.matrixTimer!);
+        this.matrixTimer = null;
+        this.matrixBitmap.fill(0);
+        return;
+      }
+      this.matrixBitmap.fill(0);
+      // Hold down a few real keys (never matrix holes) until the next tick.
+      const keys = this.spec.topology.keys;
+      const bytesPerRow = Math.ceil(this.spec.capabilities.num_cols / 8);
+      const presses = 1 + Math.floor(Math.random() * 3);
+      for (let press = 0; press < presses; press++) {
+        const { row, col } = keys[Math.floor(Math.random() * keys.length)];
+        this.matrixBitmap[row * bytesPerRow + (col >> 3)] |= 1 << (col & 7);
+      }
+    }, MATRIX_SIM_MS);
   }
 
   private pushBattery(): void {

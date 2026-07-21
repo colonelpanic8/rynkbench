@@ -18,21 +18,30 @@
 
 import type {
   BatteryStatus,
+  BehaviorConfig,
+  BleStatus,
+  Combo,
   ConnectionStatus,
   DeviceCapabilities,
   DeviceInfo,
   EncoderAction,
+  Fork,
   KeyAction,
   LayoutInfo,
+  LedIndicator,
   LightingCapabilities,
   LightingLed,
   LightingMatrixPosition,
+  LightingMutableState,
   LightingOverlayCell,
   LightingPhysicalKey,
   LightingRoute,
   LightingState,
   LightingZone,
   LightingZoneId,
+  MatrixState,
+  Morse,
+  PeripheralStatus,
   ProtocolVersion,
   TopicEvent,
 } from "../vendor/rynk-wasm/rynk_wasm";
@@ -77,6 +86,37 @@ export interface LightingOps {
   replaceOverlay(cells: LightingOverlayCell[]): Promise<LightingState>;
   clearOverlay(): Promise<LightingState>;
   readOverlay(): Promise<LightingOverlayCell[]>;
+  /** Mutate background/output state; revision handshake is the backend's job. */
+  setState(state: LightingMutableState): Promise<LightingState>;
+}
+
+/** Slot-table ops (combos, morse, forks) share one shape: the backend reads
+ *  the full table (bulk endpoints where supported) and writes one slot. */
+export interface ComboOps {
+  readAll(): Promise<Combo[]>;
+  set(index: number, combo: Combo): Promise<void>;
+}
+
+export interface MorseOps {
+  readAll(): Promise<Morse[]>;
+  set(index: number, morse: Morse): Promise<void>;
+}
+
+export interface ForkOps {
+  readAll(): Promise<Fork[]>;
+  set(index: number, fork: Fork): Promise<void>;
+}
+
+/** The flat macro byte region (capabilities.macro_space_size bytes; 0 = no
+ *  macro support). Chunked transfer is the backend's job. */
+export interface MacroOps {
+  read(): Promise<Uint8Array>;
+  write(data: Uint8Array): Promise<void>;
+}
+
+export interface BehaviorOps {
+  get(): Promise<BehaviorConfig>;
+  set(config: BehaviorConfig): Promise<void>;
 }
 
 export interface DeviceOps {
@@ -87,6 +127,12 @@ export interface DeviceOps {
   battery(): Promise<BatteryStatus>;
   connectionStatus(): Promise<ConnectionStatus>;
   rebootToBootloader(): Promise<void>;
+  bleStatus(): Promise<BleStatus>;
+  clearBleProfile(slot: number): Promise<void>;
+  peripheralStatus(slot: number): Promise<PeripheralStatus>;
+  /** Live pressed-key bitmap, for the matrix tester. */
+  matrixState(): Promise<MatrixState>;
+  ledIndicator(): Promise<LedIndicator>;
 }
 
 export interface RynkSession {
@@ -96,6 +142,11 @@ export interface RynkSession {
   readonly device: DeviceOps;
   readonly keymap: KeymapOps;
   readonly lighting: LightingOps;
+  readonly combos: ComboOps;
+  readonly morse: MorseOps;
+  readonly forks: ForkOps;
+  readonly macros: MacroOps;
+  readonly behavior: BehaviorOps;
   /** Register the single handler for server-push topic events. */
   onTopic(handler: (event: TopicEvent) => void): void;
   /** Register the single handler called when the link drops unexpectedly. */

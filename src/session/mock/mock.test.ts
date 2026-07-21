@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TopicEvent } from "../../vendor/rynk-wasm/rynk_wasm";
+import type { Combo, Morse, TopicEvent } from "../../vendor/rynk-wasm/rynk_wasm";
 import type { RynkSession } from "../types";
 import { buildKeyboardModel } from "../../model/keyboard";
 import { enrichmentFor } from "../../model/boards";
@@ -198,6 +198,245 @@ describe("lighting overlay", () => {
   });
 });
 
+describe("lighting state", () => {
+  it("applies setState with a revision bump and a LightingChange push", async () => {
+    await withSession(glove80Board, async (session) => {
+      const events: TopicEvent[] = [];
+      session.onTopic((event) => events.push(event));
+      const before = await session.lighting.state();
+      const next = {
+        output_enabled: false,
+        output_brightness: 42,
+        background: { enabled: false, hue: 10, saturation: 20, value: 30, speed: 5, mode: "Breathe" },
+      } as const;
+      const applied = await session.lighting.setState(next);
+      expect(applied.revision).toBeGreaterThan(before.revision);
+      expect(applied.output_enabled).toBe(false);
+      expect(applied.output_brightness).toBe(42);
+      expect(applied.background).toEqual(next.background);
+      expect(await session.lighting.state()).toEqual(applied);
+      expect(events.filter((event) => "LightingChange" in event).length).toBe(1);
+    });
+  });
+});
+
+describe("combo slots", () => {
+  it("sizes the table from capabilities, seeds J+K → Escape, leaves the rest empty", async () => {
+    await withSession(glove80Board, async (session) => {
+      const caps = await session.device.capabilities();
+      const combos = await session.combos.readAll();
+      expect(combos).toHaveLength(caps.max_combos);
+      expect(combos[0]).toEqual({
+        actions: [{ Single: { Key: { Hid: "J" } } }, { Single: { Key: { Hid: "K" } } }],
+        output: { Single: { Key: { Hid: "Escape" } } },
+        layer: undefined,
+      });
+      for (const combo of combos.slice(1)) {
+        expect(combo.output).toBe("No");
+        expect(combo.actions).toEqual([]);
+      }
+    });
+  });
+
+  it("round-trips a slot write and enforces slot/key bounds", async () => {
+    await withSession(ortho60Board, async (session) => {
+      const caps = await session.device.capabilities();
+      expect((await session.combos.readAll()).every((combo) => combo.output === "No")).toBe(true);
+      const combo: Combo = {
+        actions: [{ Single: { Key: { Hid: "D" } } }, { Single: { Key: { Hid: "F" } } }],
+        output: { Single: { Key: { Hid: "Tab" } } },
+        layer: 0,
+      };
+      await session.combos.set(1, combo);
+      expect((await session.combos.readAll())[1]).toEqual(combo);
+      await expect(session.combos.set(caps.max_combos, combo)).rejects.toThrow(/out of range/);
+      await expect(session.combos.set(-1, combo)).rejects.toThrow(/out of range/);
+      const tooWide = {
+        ...combo,
+        actions: Array.from({ length: caps.max_combo_keys + 1 }, () => "No" as const),
+      };
+      await expect(session.combos.set(0, tooWide)).rejects.toThrow(/max/);
+    });
+  });
+});
+
+describe("morse slots", () => {
+  it("seeds one Glove80 slot and reports the rest with empty action lists", async () => {
+    await withSession(glove80Board, async (session) => {
+      const caps = await session.device.capabilities();
+      const morse = await session.morse.readAll();
+      expect(morse).toHaveLength(caps.max_morse);
+      expect(morse[0].actions).toEqual([
+        [0b10, { Key: { Hid: "Escape" } }],
+        [0b11, { LayerOn: 1 }],
+      ]);
+      expect(morse[0].profile.mode).toBe("Normal");
+      for (const slot of morse.slice(1)) expect(slot.actions).toEqual([]);
+    });
+  });
+
+  it("round-trips a slot write and enforces slot/pattern bounds", async () => {
+    await withSession(ortho60Board, async (session) => {
+      const caps = await session.device.capabilities();
+      for (const slot of await session.morse.readAll()) expect(slot.actions).toEqual([]);
+      const morse: Morse = {
+        profile: {
+          unilateral_tap: true,
+          enable_flow_tap: undefined,
+          mode: "PermissiveHold",
+          hold_timeout_ms: 180,
+          gap_timeout_ms: undefined,
+        },
+        actions: [[0b10, { Key: { Hid: "A" } }]],
+      };
+      await session.morse.set(2, morse);
+      expect((await session.morse.readAll())[2]).toEqual(morse);
+      await expect(session.morse.set(caps.max_morse, morse)).rejects.toThrow(/out of range/);
+      const tooMany = {
+        ...morse,
+        actions: Array.from(
+          { length: caps.max_patterns_per_key + 1 },
+          (_, i): [number, "No"] => [0b10 + i, "No"],
+        ),
+      };
+      await expect(session.morse.set(0, tooMany)).rejects.toThrow(/max/);
+    });
+  });
+});
+
+describe("fork slots", () => {
+  it("seeds the shifted-Dot fork on the Glove80, empty triggers elsewhere", async () => {
+    await withSession(glove80Board, async (session) => {
+      const caps = await session.device.capabilities();
+      const forks = await session.forks.readAll();
+      expect(forks).toHaveLength(caps.max_forks);
+      expect(forks[0].trigger).toEqual({ Single: { Key: { Hid: "Dot" } } });
+      expect(forks[0].positive_output).toEqual({ Single: { Key: { Hid: "Semicolon" } } });
+      expect(forks[0].match_any.modifiers.left_shift).toBe(true);
+      for (const fork of forks.slice(1)) expect(fork.trigger).toBe("No");
+    });
+  });
+
+  it("round-trips a slot write and enforces slot bounds", async () => {
+    await withSession(ortho60Board, async (session) => {
+      const caps = await session.device.capabilities();
+      const [empty] = await session.forks.readAll();
+      expect(empty.trigger).toBe("No");
+      const fork = {
+        ...empty,
+        trigger: { Single: { Key: { Hid: "Comma" } } },
+        negative_output: { Single: { Key: { Hid: "Comma" } } },
+        positive_output: { Single: { Key: { Hid: "Grave" } } },
+      } as const;
+      await session.forks.set(3, fork);
+      expect((await session.forks.readAll())[3]).toEqual(fork);
+      await expect(session.forks.set(caps.max_forks, fork)).rejects.toThrow(/out of range/);
+    });
+  });
+});
+
+describe("macros", () => {
+  it("exposes a zeroed region sized by capabilities and round-trips writes", async () => {
+    await withSession(glove80Board, async (session) => {
+      const caps = await session.device.capabilities();
+      const initial = await session.macros.read();
+      expect(initial).toHaveLength(caps.macro_space_size);
+      expect(initial.every((byte) => byte === 0)).toBe(true);
+      const data = Uint8Array.from([1, 2, 3, 250]);
+      await session.macros.write(data);
+      const readBack = await session.macros.read();
+      expect([...readBack.slice(0, 4)]).toEqual([1, 2, 3, 250]);
+      expect(readBack.slice(4).every((byte) => byte === 0)).toBe(true);
+    });
+  });
+
+  it("rejects writes past the macro region", async () => {
+    await withSession(ortho60Board, async (session) => {
+      const caps = await session.device.capabilities();
+      await expect(
+        session.macros.write(new Uint8Array(caps.macro_space_size + 1)),
+      ).rejects.toThrow(/capacity/);
+      // A full-capacity write is fine.
+      await session.macros.write(new Uint8Array(caps.macro_space_size).fill(7));
+      expect((await session.macros.read()).every((byte) => byte === 7)).toBe(true);
+    });
+  });
+});
+
+describe("behavior", () => {
+  it("serves defaults and round-trips a set", async () => {
+    await withSession(glove80Board, async (session) => {
+      expect(await session.behavior.get()).toEqual({
+        combo_timeout_ms: 50,
+        oneshot_timeout_ms: 1000,
+        tap_interval_ms: 200,
+        tap_capslock_interval_ms: 350,
+      });
+      const next = {
+        combo_timeout_ms: 75,
+        oneshot_timeout_ms: 1500,
+        tap_interval_ms: 190,
+        tap_capslock_interval_ms: 400,
+      };
+      await session.behavior.set(next);
+      expect(await session.behavior.get()).toEqual(next);
+    });
+  });
+});
+
+describe.each(boards)("%s device status", (_name, spec) => {
+  it("sizes the matrix bitmap to rows × ceil(cols/8) bytes", async () => {
+    await withSession(spec, async (session) => {
+      const caps = await session.device.capabilities();
+      const state = await session.device.matrixState();
+      expect(state.pressed_bitmap).toHaveLength(caps.num_rows * Math.ceil(caps.num_cols / 8));
+    });
+  });
+
+  it("reports an LED indicator", async () => {
+    await withSession(spec, async (session) => {
+      const indicator = await session.device.ledIndicator();
+      expect(typeof indicator.caps_lock).toBe("boolean");
+      expect(typeof indicator.num_lock).toBe("boolean");
+    });
+  });
+});
+
+describe("BLE and peripherals", () => {
+  it("validates profile slots against num_ble_profiles", async () => {
+    await withSession(glove80Board, async (session) => {
+      const caps = await session.device.capabilities();
+      expect(caps.ble_enabled).toBe(true);
+      expect(await session.device.bleStatus()).toEqual({ profile: 0, state: "Connected" });
+      await session.device.clearBleProfile(caps.num_ble_profiles - 1);
+      await expect(session.device.clearBleProfile(caps.num_ble_profiles)).rejects.toThrow(/out of range/);
+      await expect(session.device.clearBleProfile(-1)).rejects.toThrow(/out of range/);
+    });
+  });
+
+  it("rejects every profile slot on the wired-only Ortho 60", async () => {
+    await withSession(ortho60Board, async (session) => {
+      expect((await session.device.capabilities()).ble_enabled).toBe(false);
+      await expect(session.device.clearBleProfile(0)).rejects.toThrow(/out of range/);
+    });
+  });
+
+  it("reports the Glove80's right half and rejects unknown peripherals", async () => {
+    await withSession(glove80Board, async (session) => {
+      const status = await session.device.peripheralStatus(0);
+      expect(status.connected).toBe(true);
+      expect(status.battery).not.toBe("Unavailable");
+      await expect(session.device.peripheralStatus(1)).rejects.toThrow(/out of range/);
+    });
+  });
+
+  it("has no peripherals on the Ortho 60", async () => {
+    await withSession(ortho60Board, async (session) => {
+      await expect(session.device.peripheralStatus(0)).rejects.toThrow(/out of range/);
+    });
+  });
+});
+
 describe("keyboard model assembly", () => {
   it("builds an enriched Glove80 model", async () => {
     await withSession(glove80Board, async (session) => {
@@ -260,6 +499,11 @@ describe("providers", () => {
       await first.keymap.setKey(0, 0, 0, "No");
       const untouched = await second.keymap.readAll();
       expect(untouched[0].actions[0]).toEqual({ Single: { Key: { Hid: "Grave" } } });
+      // Advanced-config tables are per-connection too.
+      await first.combos.set(0, { actions: [], output: { Single: { Key: { Hid: "A" } } }, layer: undefined });
+      await first.macros.write(Uint8Array.of(9));
+      expect((await second.combos.readAll())[0].output).toBe("No");
+      expect((await second.macros.read())[0]).toBe(0);
     } finally {
       await first.close();
       await second.close();

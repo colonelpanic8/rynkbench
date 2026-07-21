@@ -6,13 +6,16 @@
 // rendered labels agree.
 
 import type {
+  Combo,
   DeviceCapabilities,
   DeviceInfo,
   EncoderAction,
+  Fork,
   HidKeyCode,
   Key,
   KeyAction,
   LightingZone,
+  Morse,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import {
   GLOVE80_COLS,
@@ -20,7 +23,17 @@ import {
   GLOVE80_ROWS,
   glove80Enrichment,
 } from "../../model/boards/glove80";
-import { buildTopology, hid, layerOn, type BoardSpec, type SimLed } from "./board";
+import {
+  buildTopology,
+  emptyFork,
+  emptyMorse,
+  hid,
+  layerOn,
+  noModifiers,
+  noStateBits,
+  type BoardSpec,
+  type SimLed,
+} from "./board";
 
 // LED-chain indices per visual row, left half; the right half mirrors them
 // at +40. Thumb clusters own chain positions 0–5 (left) and 40–45 (right).
@@ -232,12 +245,12 @@ const capabilities: DeviceCapabilities = {
   num_rows: GLOVE80_ROWS,
   num_cols: GLOVE80_COLS,
   num_encoders: 0,
-  max_combos: 8,
+  max_combos: 32,
   max_combo_keys: 4,
-  macro_space_size: 0,
-  max_morse: 0,
-  max_patterns_per_key: 0,
-  max_forks: 0,
+  macro_space_size: 512,
+  max_morse: 16,
+  max_patterns_per_key: 8,
+  max_forks: 16,
   storage_enabled: true,
   lighting_enabled: true,
   is_split: true,
@@ -247,9 +260,42 @@ const capabilities: DeviceCapabilities = {
   max_payload_size: 256,
   max_bulk_keys: 28,
   max_bulk_configs: 4,
-  macro_chunk_size: 0,
+  macro_chunk_size: 28,
   bulk_transfer_supported: true,
 };
+
+// A few pre-programmed advanced slots so the editors open onto real data;
+// the rest of each table reads back as empty, like fresh firmware.
+
+// J+K chorded together produce Escape (the classic vim combo).
+const seedCombos: Combo[] = [{ actions: [hid("J"), hid("K")], output: hid("Escape"), layer: undefined }];
+
+// Morse slot 0: tap (pattern 0b1·0) types Escape, hold (0b1·1) enables layer 1.
+const seedMorse: Morse[] = [
+  {
+    ...emptyMorse(),
+    profile: { ...emptyMorse().profile, mode: "Normal", hold_timeout_ms: 200 },
+    actions: [
+      [0b10, { Key: { Hid: "Escape" } }],
+      [0b11, { LayerOn: 1 }],
+    ],
+  },
+];
+
+// Fork slot 0: Dot becomes Semicolon while either Shift is held.
+const shiftBits = {
+  ...noStateBits(),
+  modifiers: { ...noModifiers(), left_shift: true, right_shift: true },
+};
+const seedForks: Fork[] = [
+  {
+    ...emptyFork(),
+    trigger: hid("Dot"),
+    negative_output: hid("Dot"),
+    positive_output: hid("Semicolon"),
+    match_any: shiftBits,
+  },
+];
 
 const info: DeviceInfo = {
   rmk_version: { major: 0, minor: 7, patch: 0 },
@@ -283,4 +329,15 @@ export const glove80Board: BoardSpec = {
   battery: { Available: { charge_state: "Discharging", level: 84 } },
   brightness: 180,
   background: { enabled: true, hue: 152, saturation: 180, value: 140, speed: 40, mode: "Solid" },
+  behavior: {
+    combo_timeout_ms: 50,
+    oneshot_timeout_ms: 1000,
+    tap_interval_ms: 200,
+    tap_capslock_interval_ms: 350,
+  },
+  ledIndicator: { num_lock: false, caps_lock: false, scroll_lock: false, compose: false, kana: false },
+  peripheralBattery: { Available: { charge_state: "Discharging", level: 79 } },
+  seedCombos,
+  seedMorse,
+  seedForks,
 };
