@@ -75,9 +75,10 @@ function LayerStack() {
 
   const litLayers = useMemo(() => {
     const set = new Set<number>();
+    for (const cell of state.compiledScenes) set.add(cell.layer);
     for (const cell of state.scenes) set.add(cell.layer);
     return set;
-  }, [state.scenes]);
+  }, [state.compiledScenes, state.scenes]);
 
   const rows = Array.from({ length: numLayers }, (_, i) => numLayers - 1 - i);
 
@@ -166,8 +167,25 @@ export function LiveMode() {
   const bgColor = bg && bgOn ? wireHsvCss(bg.hue, bg.saturation, bg.value) : null;
 
   const lit = useMemo(
-    () => compositeScenes(state.scenes, state.applied, effective, floor, state.scenePolicy),
-    [state.scenes, state.applied, effective, floor, state.scenePolicy],
+    () =>
+      compositeScenes(
+        state.compiledScenes,
+        state.scenes,
+        state.applied,
+        effective,
+        floor,
+        state.compiledScenePolicy,
+        state.scenePolicy,
+      ),
+    [
+      state.compiledScenes,
+      state.scenes,
+      state.applied,
+      effective,
+      floor,
+      state.compiledScenePolicy,
+      state.scenePolicy,
+    ],
   );
 
   const bindingGlyph = (key: KeyView): KeyDecor["glyph"] => {
@@ -183,13 +201,14 @@ export function LiveMode() {
     }
     const cell = outputOn ? lit.get(key.ledId) : undefined;
     return {
-      fill: cell ? effectColor(cell.effect) : undefined,
+      fill: cell ? effectColor(cell.effect) : (bgColor ?? undefined),
       fillAnim: cell ? effectAnim(cell.effect) : undefined,
       glyph: cell ? undefined : bindingGlyph(key),
     };
   };
 
-  const stackApprox = state.scenePolicy === "ActiveStack";
+  const stackApprox =
+    state.scenePolicy === "ActiveStack" || state.compiledScenePolicy === "ActiveStack";
 
   return (
     <>
@@ -227,7 +246,7 @@ export function LiveMode() {
           {outputOn ? (
             <>
               Composited preview: scene lighting and the overlay over each key's effective binding.
-              {bgOn && " A background glow underlies the whole board."}
+              {bgOn && " The firmware background fills keys without a higher-priority source."}
               {stackApprox &&
                 " Under Stack active layers the keyboard composites the full active-layer stack on-device; this preview shows only the default and effective layers (the firmware reports only the effective one)."}
             </>
@@ -271,11 +290,19 @@ export function LiveMode() {
                   )}
                 </Row>
                 <Row label="Compositing">
-                  {state.scenePolicy === "ActiveStack"
-                    ? "Stack active layers"
-                    : state.scenePolicy === "EffectiveOnly"
-                      ? "Effective only"
-                      : "—"}
+                  <span className="text-right">
+                    {state.compiledScenePolicy && (
+                      <span className="block">
+                        Firmware: {state.compiledScenePolicy === "ActiveStack" ? "stack" : "effective"}
+                      </span>
+                    )}
+                    {state.scenePolicy && (
+                      <span className="block">
+                        Overrides: {state.scenePolicy === "ActiveStack" ? "stack" : "effective"}
+                      </span>
+                    )}
+                    {!state.compiledScenePolicy && !state.scenePolicy && "—"}
+                  </span>
                 </Row>
               </div>
             ) : (

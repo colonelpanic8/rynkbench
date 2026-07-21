@@ -564,6 +564,12 @@ class StubSession implements RynkSession {
       setLayerPolicy: async (): Promise<never> => {
         throw new Error("this firmware does not support on-device layer scenes");
       },
+      compiledStatus: async (): Promise<never> => {
+        throw new Error("this firmware does not support compiled layer-scene readback");
+      },
+      readCompiledScenes: async (): Promise<never> => {
+        throw new Error("this firmware does not support compiled layer-scene readback");
+      },
     },
   };
 

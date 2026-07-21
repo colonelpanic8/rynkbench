@@ -12,6 +12,7 @@ import type {
   Fork,
   KeyAction,
   LightingCapabilities,
+  LightingCompiledSceneStatus,
   LightingLayerPolicy,
   LightingMutableState,
   LightingOverlayCell,
@@ -53,6 +54,7 @@ const SCENE_READ_ATTEMPTS = 3;
 // LightingFeatureFlags::LAYER_SCENES (rmk-types); the generated .d.ts erases
 // the bitflag constants to a plain number, so the value is mirrored here.
 const LAYER_SCENES = 1 << 6;
+const COMPILED_LAYER_SCENES = 1 << 8;
 
 /** The topology changed under a paged read; the whole read restarts. */
 class TopologyDrift extends Error {
@@ -212,6 +214,8 @@ export class WebHidSession implements RynkSession {
         readScenes: () => this.run(() => this.readAllScenes()),
         replaceScenes: (cells) => this.run(() => this.replaceSceneCells(cells)),
         setLayerPolicy: (policy) => this.run(() => this.setSceneLayerPolicy(policy)),
+        compiledStatus: () => this.run(() => this.readCompiledSceneStatus()),
+        readCompiledScenes: () => this.run(() => this.readAllCompiledScenes()),
       },
     };
 
@@ -563,6 +567,37 @@ export class WebHidSession implements RynkSession {
     throw new Error(`scene table kept changing across ${SCENE_READ_ATTEMPTS} read attempts`, {
       cause: lastConflict,
     });
+  }
+
+  private async readCompiledSceneStatus(): Promise<LightingCompiledSceneStatus> {
+    const caps = await this.client.get_lighting_capabilities();
+    if ((caps.features & COMPILED_LAYER_SCENES) === 0) {
+      throw new Error("this firmware does not support compiled layer-scene readback");
+    }
+    return this.client.get_lighting_compiled_scene_status();
+  }
+
+  private async readAllCompiledScenes(): Promise<LightingSceneCell[]> {
+    // The immutable table is topology-pinned. A firmware/topology change in
+    // the middle of paging restarts from a fresh status snapshot.
+    let lastConflict: unknown;
+    for (let attempt = 0; attempt < TOPOLOGY_READ_ATTEMPTS; attempt++) {
+      const status = await this.readCompiledSceneStatus();
+      try {
+        return await this.readPages(
+          (request) => this.client.get_lighting_compiled_scenes(request),
+          status.topology_revision,
+          status.scene_len,
+        );
+      } catch (error) {
+        if (!isRevisionConflict(error)) throw error;
+        lastConflict = error;
+      }
+    }
+    throw new Error(
+      `compiled scene topology kept changing across ${TOPOLOGY_READ_ATTEMPTS} read attempts`,
+      { cause: lastConflict },
+    );
   }
 
   private async replaceSceneCells(cells: LightingSceneCell[]): Promise<LightingState> {

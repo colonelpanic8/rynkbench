@@ -24,6 +24,7 @@ import type { Hsv } from "../color";
 import { cssRgb, hsvToRgb } from "../color";
 import { Button, InspectorShell, SectionLabel, TextInput, cx } from "../kit";
 import { EraserIcon, SpinnerIcon, WarningIcon } from "../icons";
+import { compositeScenes } from "../live/compositor";
 
 type EffectKind = "Solid" | "Blink" | "Breathe";
 
@@ -50,6 +51,20 @@ const DEFAULT_BRUSH: Brush = {
   ttlOn: false,
   ttlMs: 5000,
 };
+
+const BLACK_EFFECT: LightingEffect = { Solid: { color: { r: 0, g: 0, b: 0 } } };
+
+function sceneLayerMap(
+  scenes: LightingSceneCell[],
+  layer: number,
+): Record<number, LightingOverlayCell> {
+  const cells: Record<number, LightingOverlayCell> = {};
+  for (const cell of scenes) {
+    if (cell.layer === layer)
+      cells[cell.led_id] = { led_id: cell.led_id, effect: cell.effect, ttl_ms: undefined };
+  }
+  return cells;
+}
 
 function brushEffect(brush: Brush): LightingEffect {
   const color = hsvToRgb(brush.hsv);
@@ -149,9 +164,10 @@ function LightingTargets() {
 
   const layersWithCells = useMemo(() => {
     const set = new Set<number>();
+    for (const cell of state.compiledScenes) set.add(cell.layer);
     for (const cell of state.scenes) set.add(cell.layer);
     return set;
-  }, [state.scenes]);
+  }, [state.compiledScenes, state.scenes]);
 
   const key = (t: LightingTarget) => (t === "overlay" ? "overlay" : `L${t}`);
 
@@ -231,6 +247,51 @@ export function LightingMode() {
     () => stagedBetween(draftMap, baseMap),
     [draftMap, baseMap],
   );
+  const compiledLayerMap = useMemo(
+    () => (isLayerTarget ? sceneLayerMap(state.compiledScenes, target) : {}),
+    [isLayerTarget, state.compiledScenes, target],
+  );
+
+  const visibleEffects = useMemo(() => {
+    if (isLayerTarget) {
+      const visible = new Map<number, LightingEffect>();
+      for (const cell of Object.values(compiledLayerMap)) visible.set(cell.led_id, cell.effect);
+      for (const cell of Object.values(draftMap)) visible.set(cell.led_id, cell.effect);
+      return visible;
+    }
+    const composed = compositeScenes(
+      state.compiledScenes,
+      state.scenes,
+      draftMap,
+      state.currentLayer,
+      state.defaultLayer,
+      state.compiledScenePolicy,
+      state.scenePolicy,
+    );
+    return new Map([...composed].map(([ledId, cell]) => [ledId, cell.effect]));
+  }, [
+    compiledLayerMap,
+    draftMap,
+    isLayerTarget,
+    state.compiledScenePolicy,
+    state.compiledScenes,
+    state.currentLayer,
+    state.defaultLayer,
+    state.scenePolicy,
+    state.scenes,
+  ]);
+
+  const lighting = state.lightingState;
+  const backgroundColor =
+    lighting?.output_enabled && lighting.background.enabled
+      ? cssRgb(
+          hsvToRgb({
+            h: (lighting.background.hue / 255) * 360,
+            s: lighting.background.saturation / 255,
+            v: lighting.background.value / 255,
+          }),
+        )
+      : undefined;
 
   const zoneMembers = useMemo(() => {
     const map = new Map<number, number[]>();
@@ -251,10 +312,23 @@ export function LightingMode() {
     [state.hoverLeds],
   );
 
+  const eraseLeds = (ledIds: number[]) => {
+    if (!isLayerTarget) {
+      dispatch({ type: "erase", ledIds });
+      return;
+    }
+    const masks = ledIds
+      .filter((id) => compiledLayerMap[id] !== undefined)
+      .map((led_id): LightingOverlayCell => ({ led_id, effect: BLACK_EFFECT, ttl_ms: undefined }));
+    const removable = ledIds.filter((id) => compiledLayerMap[id] === undefined);
+    if (removable.length > 0) dispatch({ type: "erase", ledIds: removable });
+    if (masks.length > 0) dispatch({ type: "paint", cells: masks });
+  };
+
   const stampKey = (key: KeyView) => {
     if (key.ledId === undefined) return;
     if (brush.mode === "erase") {
-      dispatch({ type: "erase", ledIds: [key.ledId] });
+      eraseLeds([key.ledId]);
     } else {
       dispatch({ type: "paint", cells: [brushCell(brush, key.ledId, !isLayerTarget)] });
     }
@@ -276,11 +350,11 @@ export function LightingMode() {
     if (key.ledId === undefined) {
       return { glyph: legendFor(key), disabled: true };
     }
-    const cell = draftMap[key.ledId];
+    const effect = visibleEffects.get(key.ledId);
     return {
-      fill: cell ? effectColor(cell.effect) : undefined,
-      fillAnim: cell ? effectAnim(cell.effect) : undefined,
-      glyph: !cell ? legendFor(key) : undefined,
+      fill: effect ? effectColor(effect) : backgroundColor,
+      fillAnim: effect ? effectAnim(effect) : undefined,
+      glyph: !effect ? legendFor(key) : undefined,
       staged: staged.has(key.ledId),
       highlight: hoverSet?.has(key.ledId) ?? false,
       inSelection: selectionSet.has(key.ledId),
@@ -291,7 +365,7 @@ export function LightingMode() {
   const paintSelection = () => {
     if (state.lightingSelection.length === 0) return;
     if (brush.mode === "erase") {
-      dispatch({ type: "erase", ledIds: state.lightingSelection });
+      eraseLeds(state.lightingSelection);
     } else {
       dispatch({
         type: "paint",
@@ -301,7 +375,8 @@ export function LightingMode() {
   };
 
   const stagedCount = staged.size;
-  const drawnCount = Object.keys(draftMap).length;
+  const visibleCount = visibleEffects.size;
+  const compiledCount = Object.keys(compiledLayerMap).length;
   const sceneStatus = bundle.sceneStatus;
 
   const applyLayerDraft = () => {
@@ -329,7 +404,9 @@ export function LightingMode() {
         <div className="flex items-center gap-3 px-1">
           <SectionLabel>{isLayerTarget ? `Layer ${target} scene` : "Overlay"}</SectionLabel>
           <span className="tnum text-[12px] text-faint">
-            {drawnCount} lit · {stagedCount} staged
+            {visibleCount} lit
+            {isLayerTarget && compiledCount > 0 ? ` · ${compiledCount} firmware defaults` : ""}
+            {` · ${stagedCount} staged`}
           </span>
           {isLayerTarget && sceneStatus && (
             <span className="tnum text-[11.5px] text-faint">
@@ -509,7 +586,7 @@ export function LightingMode() {
                       onClick={() => {
                         if (members.length === 0) return;
                         if (brush.mode === "erase") {
-                          dispatch({ type: "erase", ledIds: members });
+                          eraseLeds(members);
                         } else {
                           dispatch({
                             type: "paint",
@@ -601,13 +678,13 @@ export function LightingMode() {
                 className="flex-1 whitespace-nowrap"
                 title={
                   isLayerTarget
-                    ? `Remove Layer ${target}'s stored scene from the keyboard`
+                    ? `Remove Layer ${target}'s runtime overrides and reveal its compiled firmware defaults`
                     : "Remove the overlay that is currently applied on the device"
                 }
                 disabled={state.lightingBusy || appliedCount === 0}
                 onClick={() => (isLayerTarget ? clearLayer() : io.clearOverlay())}
               >
-                Clear {isLayerTarget ? "layer" : "applied"}
+                Clear {isLayerTarget ? "overrides" : "applied"}
               </Button>
             </div>
           </div>

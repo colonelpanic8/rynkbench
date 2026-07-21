@@ -15,6 +15,7 @@ import type {
   KeyAction,
   LedIndicator,
   LightingCapabilities,
+  LightingCompiledSceneStatus,
   LightingLayerPolicy,
   LightingMutableState,
   LightingOverlayCell,
@@ -57,6 +58,9 @@ export interface ConnectedBundle {
   sceneStatus: LightingSceneStatus | null;
   /** On-device scene table; always empty when sceneStatus is null. */
   scenes: LightingSceneCell[];
+  /** Immutable layer scenes compiled into this firmware build. */
+  compiledSceneStatus: LightingCompiledSceneStatus | null;
+  compiledScenes: LightingSceneCell[];
   /** Advanced tables; empty arrays when the device reports zero capacity. */
   combos: Combo[];
   morse: Morse[];
@@ -110,8 +114,11 @@ export interface WorkbenchState {
   layerDrafts: Record<number, Record<number, LightingOverlayCell>>;
   /** On-device scene table as last known (empty without firmware support). */
   scenes: LightingSceneCell[];
+  /** Immutable firmware defaults, kept separate from editable runtime cells. */
+  compiledScenes: LightingSceneCell[];
   /** Layer-composition policy; null when scenes are unsupported. */
   scenePolicy: LightingLayerPolicy | null;
+  compiledScenePolicy: LightingLayerPolicy | null;
   selection: Selection | null;
   /** `${layer}:${row}:${col}` or `e:${layer}:${id}` → write status. */
   pending: Record<string, PendingInfo>;
@@ -215,7 +222,9 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     lightingTarget: "overlay",
     layerDrafts: {},
     scenes: bundle.scenes,
+    compiledScenes: bundle.compiledScenes,
     scenePolicy: bundle.sceneStatus?.policy ?? null,
+    compiledScenePolicy: bundle.compiledSceneStatus?.policy ?? null,
     selection: null,
     pending: {},
     lightingBusy: false,

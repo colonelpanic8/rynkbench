@@ -50,31 +50,44 @@ describe("compositeScenes", () => {
   ];
 
   it("EffectiveOnly composites only the effective layer (+ overlay)", () => {
-    const out = compositeScenes(scenes, {}, 2, 0, "EffectiveOnly");
-    expect(out.get(1)).toEqual({ effect: solid(20), source: "effective" });
-    expect(out.get(3)).toEqual({ effect: solid(30), source: "effective" });
+    const out = compositeScenes([], scenes, {}, 2, 0, null, "EffectiveOnly");
+    expect(out.get(1)).toEqual({ effect: solid(20), source: "runtime-effective" });
+    expect(out.get(3)).toEqual({ effect: solid(30), source: "runtime-effective" });
     expect(out.size).toBe(2);
   });
 
   it("ActiveStack adds the default floor beneath the effective layer", () => {
-    const out = compositeScenes(scenes, {}, 2, 0, "ActiveStack");
+    const out = compositeScenes([], scenes, {}, 2, 0, null, "ActiveStack");
     // led 1 present on both layers → effective wins.
-    expect(out.get(1)).toEqual({ effect: solid(20), source: "effective" });
-    expect(out.get(3)).toEqual({ effect: solid(30), source: "effective" });
+    expect(out.get(1)).toEqual({ effect: solid(20), source: "runtime-effective" });
+    expect(out.get(3)).toEqual({ effect: solid(30), source: "runtime-effective" });
   });
 
   it("ActiveStack keeps a floor-only cell when the effective layer lacks it", () => {
     const floorOnly: LightingSceneCell[] = [{ layer: 0, led_id: 9, effect: solid(10) }];
-    const out = compositeScenes(floorOnly, {}, 2, 0, "ActiveStack");
-    expect(out.get(9)).toEqual({ effect: solid(10), source: "default" });
+    const out = compositeScenes([], floorOnly, {}, 2, 0, null, "ActiveStack");
+    expect(out.get(9)).toEqual({ effect: solid(10), source: "runtime-default" });
+  });
+
+  it("runtime cells override compiled defaults while policies stay independent", () => {
+    const compiled: LightingSceneCell[] = [
+      { layer: 0, led_id: 1, effect: solid(5) },
+      { layer: 2, led_id: 2, effect: solid(6) },
+    ];
+    const runtime: LightingSceneCell[] = [{ layer: 2, led_id: 1, effect: solid(50) }];
+    const out = compositeScenes(compiled, runtime, {}, 2, 0, "ActiveStack", "EffectiveOnly");
+    expect(out.get(1)).toEqual({ effect: solid(50), source: "runtime-effective" });
+    expect(out.get(2)).toEqual({ effect: solid(6), source: "compiled-effective" });
   });
 
   it("overlay sits on top of everything", () => {
     const out = compositeScenes(
+      [],
       scenes,
       { 1: { led_id: 1, effect: solid(99), ttl_ms: undefined } },
       2,
       0,
+      null,
       "ActiveStack",
     );
     expect(out.get(1)).toEqual({ effect: solid(99), source: "overlay" });

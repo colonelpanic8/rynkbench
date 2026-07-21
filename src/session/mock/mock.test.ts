@@ -220,6 +220,25 @@ describe("lighting scenes", () => {
     });
   });
 
+  it("reports immutable compiled defaults separately from runtime scenes", async () => {
+    await withSession(glove80Board, async (session) => {
+      const status = await session.lighting.scenes.compiledStatus();
+      const cells = await session.lighting.scenes.readCompiledScenes();
+      expect(status.topology_revision).toBe(glove80Board.topology.revision);
+      expect(status.scene_len).toBe(cells.length);
+      expect(status.policy).toBe("EffectiveOnly");
+      expect(cells).toContainEqual({
+        layer: 0,
+        led_id: 0,
+        effect: { Solid: { color: { r: 0, g: 0, b: 255 } } },
+      });
+      expect((await session.lighting.capabilities()).features & (1 << 8)).not.toBe(0);
+      expect((await session.lighting.scenes.readScenes()).some((cell) => cell.led_id === 0)).toBe(
+        false,
+      );
+    });
+  });
+
   it("round-trips replaceScenes with a revision bump and a LightingChange push", async () => {
     await withSession(glove80Board, async (session) => {
       const events: TopicEvent[] = [];
@@ -272,6 +291,8 @@ describe("lighting scenes", () => {
       await expect(session.lighting.scenes.setLayerPolicy("ActiveStack")).rejects.toThrow(
         /does not support/,
       );
+      await expect(session.lighting.scenes.compiledStatus()).rejects.toThrow(/does not support/);
+      await expect(session.lighting.scenes.readCompiledScenes()).rejects.toThrow(/does not support/);
     });
   });
 });

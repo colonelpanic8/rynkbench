@@ -21,6 +21,7 @@ import type {
   LedIndicator,
   LightingBackgroundState,
   LightingCapabilities,
+  LightingCompiledSceneStatus,
   LightingLayerPolicy,
   LightingLed,
   LightingLedId,
@@ -82,6 +83,10 @@ export interface BoardSpec {
   sceneCapacity?: number;
   /** Scene cells stored "in flash" when the session opens. */
   seedScenes?: LightingSceneCell[];
+  /** Immutable board defaults compiled into the simulated firmware. Omit to
+   *  simulate firmware predating compiled-scene readback; [] is supported. */
+  compiledScenes?: LightingSceneCell[];
+  compiledScenePolicy?: LightingLayerPolicy;
 }
 
 export function hid(code: HidKeyCode): KeyAction {
@@ -233,6 +238,7 @@ export function buildTopology(
 // LightingFeatureFlags::LAYER_SCENES (rmk-types); the generated .d.ts erases
 // the bitflag constants to a plain number, so the value is mirrored here.
 export const LAYER_SCENES = 1 << 6;
+export const COMPILED_LAYER_SCENES = 1 << 8;
 const SCENE_CHUNK_CAPACITY = 16;
 
 const sceneKey = (cell: { layer: number; led_id: LightingLedId }): string =>
@@ -310,6 +316,7 @@ class MockSession implements RynkSession {
       this.checkSceneCell(cell);
       this.sceneTable.set(sceneKey(cell), cloneScene(cell));
     }
+    for (const cell of spec.compiledScenes ?? []) this.checkSceneCell(cell);
     this.battery = spec.battery;
     this.brightness = spec.brightness;
     this.background = { ...spec.background };
@@ -458,6 +465,12 @@ class MockSession implements RynkSession {
           this.layerPolicy = policy;
           return this.touchLighting();
         }),
+      compiledStatus: () => latency(() => this.compiledSceneStatus()),
+      readCompiledScenes: () =>
+        latency(() => {
+          this.requireCompiledScenes();
+          return this.spec.compiledScenes!.map(cloneScene);
+        }),
     },
   };
 
@@ -588,7 +601,9 @@ class MockSession implements RynkSession {
       overlay_capacity: topology.leds.length,
       page_capacity: 32,
       overlay_chunk_capacity: 16,
-      features: (this.spec.sceneCapacity ?? 0) > 0 ? LAYER_SCENES : 0,
+      features:
+        ((this.spec.sceneCapacity ?? 0) > 0 ? LAYER_SCENES : 0) |
+        (this.spec.compiledScenes !== undefined ? COMPILED_LAYER_SCENES : 0),
       effects: 0b111, // solid | blink | breathe
     };
   }
@@ -606,6 +621,22 @@ class MockSession implements RynkSession {
       capacity: this.spec.sceneCapacity!,
       scene_len: this.sceneTable.size,
       policy: this.layerPolicy,
+      chunk_capacity: SCENE_CHUNK_CAPACITY,
+    };
+  }
+
+  private requireCompiledScenes(): void {
+    if (this.spec.compiledScenes === undefined) {
+      throw new Error("this firmware does not support compiled layer-scene readback");
+    }
+  }
+
+  private compiledSceneStatus(): LightingCompiledSceneStatus {
+    this.requireCompiledScenes();
+    return {
+      topology_revision: this.spec.topology.revision,
+      scene_len: this.spec.compiledScenes!.length,
+      policy: this.spec.compiledScenePolicy ?? "EffectiveOnly",
       chunk_capacity: SCENE_CHUNK_CAPACITY,
     };
   }

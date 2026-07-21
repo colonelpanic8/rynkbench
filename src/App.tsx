@@ -8,6 +8,7 @@ import type {
   DeviceInfo,
   KeyAction,
   LightingCapabilities,
+  LightingCompiledSceneStatus,
   LightingOverlayCell,
   LightingSceneCell,
   LightingSceneStatus,
@@ -73,6 +74,8 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
   let overlayReadSupported = true;
   let sceneStatus: LightingSceneStatus | null = null;
   let scenes: LightingSceneCell[] = [];
+  let compiledSceneStatus: LightingCompiledSceneStatus | null = null;
+  let compiledScenes: LightingSceneCell[] = [];
   if (caps.lighting_enabled) {
     try {
       [topology, lightingCaps, lightingState] = await Promise.all([
@@ -98,6 +101,14 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
       }
     } catch {
       sceneStatus = null;
+    }
+    // Compiled scenes are an immutable, independently composited source. Old
+    // firmware simply rejects discovery and continues with an empty source.
+    try {
+      compiledSceneStatus = await session.lighting.scenes.compiledStatus();
+      compiledScenes = await session.lighting.scenes.readCompiledScenes();
+    } catch {
+      compiledSceneStatus = null;
     }
   }
 
@@ -149,6 +160,8 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     overlay,
     sceneStatus,
     scenes,
+    compiledSceneStatus,
+    compiledScenes,
     combos,
     morse,
     forks,

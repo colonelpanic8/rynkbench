@@ -19,7 +19,13 @@ import type {
   LightingSceneCell,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 
-export type LitSource = "overlay" | "effective" | "default" | "background";
+export type LitSource =
+  | "overlay"
+  | "runtime-effective"
+  | "runtime-default"
+  | "compiled-effective"
+  | "compiled-default"
+  | "background";
 
 export interface LitCell {
   effect: LightingEffect;
@@ -28,23 +34,37 @@ export interface LitCell {
 
 /**
  * Per-LED composite of the addressable (non-background) lighting the device
- * should show: default-layer scene (ActiveStack only) < effective-layer scene
- * < applied overlay, top wins.
+ * should show: compiled scenes < runtime scene overrides < applied overlay.
+ * Each scene source independently chooses EffectiveOnly or ActiveStack.
  */
 export function compositeScenes(
+  compiledScenes: LightingSceneCell[],
   scenes: LightingSceneCell[],
   overlay: Record<number, LightingOverlayCell>,
   effectiveLayer: number,
   defaultLayer: number,
-  policy: LightingLayerPolicy | null,
+  compiledPolicy: LightingLayerPolicy | null,
+  runtimePolicy: LightingLayerPolicy | null,
 ): Map<number, LitCell> {
   const out = new Map<number, LitCell>();
-  if (policy === "ActiveStack") {
-    for (const cell of scenes)
-      if (cell.layer === defaultLayer) out.set(cell.led_id, { effect: cell.effect, source: "default" });
-  }
-  for (const cell of scenes)
-    if (cell.layer === effectiveLayer) out.set(cell.led_id, { effect: cell.effect, source: "effective" });
+
+  const applySource = (
+    cells: LightingSceneCell[],
+    policy: LightingLayerPolicy | null,
+    source: "compiled" | "runtime",
+  ) => {
+    if (policy === "ActiveStack") {
+      for (const cell of cells)
+        if (cell.layer === defaultLayer)
+          out.set(cell.led_id, { effect: cell.effect, source: `${source}-default` });
+    }
+    for (const cell of cells)
+      if (cell.layer === effectiveLayer)
+        out.set(cell.led_id, { effect: cell.effect, source: `${source}-effective` });
+  };
+
+  applySource(compiledScenes, compiledPolicy, "compiled");
+  applySource(scenes, runtimePolicy, "runtime");
   for (const cell of Object.values(overlay))
     out.set(cell.led_id, { effect: cell.effect, source: "overlay" });
   return out;

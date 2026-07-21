@@ -227,6 +227,28 @@ const seedScenes: LightingSceneCell[] = gridEntries
     effect: { Solid: { color: { r: 255, g: 170, b: 30 } } },
   }));
 
+// Immutable defaults reported by the mock firmware through the same protocol
+// source as hardware. These mirror this mock board build; the UI never infers
+// them from the Glove80 model.
+const compiledScenes: LightingSceneCell[] = [
+  ...[3, 43, 4, 44, 5, 45].map(
+    (led_id): LightingSceneCell => ({
+      layer: 0,
+      led_id,
+      effect: { Solid: { color: { r: 24, g: 24, b: 24 } } },
+    }),
+  ),
+  ...([0, 40, 1, 41, 2, 42, 6, 46, 7, 47, 8, 48, 9, 49] as const).flatMap(
+    (led_id): LightingSceneCell[] =>
+      [
+        { layer: 0, color: { r: 0, g: 0, b: 255 } },
+        { layer: 1, color: { r: 0, g: 255, b: 0 } },
+        { layer: 2, color: { r: 255, g: 0, b: 255 } },
+        { layer: 3, color: { r: 255, g: 0, b: 0 } },
+      ].map(({ layer, color }) => ({ layer, led_id, effect: { Solid: { color } } })),
+  ),
+];
+
 const info: DeviceInfo = {
   rmk_version: { major: 0, minor: 7, patch: 0 },
   vendor_id: 0x16c0,
@@ -258,7 +280,7 @@ export const glove80Board: BoardSpec = {
   defaultEncoders,
   battery: { Available: { charge_state: "Discharging", level: 84 } },
   brightness: 180,
-  background: { enabled: true, hue: 152, saturation: 180, value: 140, speed: 40, mode: "Solid" },
+  background: { enabled: true, hue: 0, saturation: 0, value: 32, speed: 128, mode: "Solid" },
   behavior: {
     combo_timeout_ms: 50,
     oneshot_timeout_ms: 1000,
@@ -272,4 +294,6 @@ export const glove80Board: BoardSpec = {
   seedForks,
   sceneCapacity: 256,
   seedScenes,
+  compiledScenes,
+  compiledScenePolicy: "EffectiveOnly",
 };

@@ -30,6 +30,7 @@ import type {
   LayoutInfo,
   LedIndicator,
   LightingCapabilities,
+  LightingCompiledSceneStatus,
   LightingLed,
   LightingMatrixPosition,
   LightingMutableState,
@@ -106,6 +107,10 @@ export interface LightingSceneOps {
   replaceScenes(cells: LightingSceneCell[]): Promise<LightingState>;
   /** Set the layer-composition policy; revision handshake is the backend's job. */
   setLayerPolicy(policy: LightingLayerPolicy): Promise<LightingState>;
+  /** Discover the immutable layer scenes compiled into this firmware build. */
+  compiledStatus(): Promise<LightingCompiledSceneStatus>;
+  /** Read the whole immutable compiled scene source (paging is the backend's job). */
+  readCompiledScenes(): Promise<LightingSceneCell[]>;
 }
 
 /** Slot-table ops (combos, morse, forks) share one shape: the backend reads
