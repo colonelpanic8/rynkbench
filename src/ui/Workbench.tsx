@@ -11,14 +11,16 @@ import {
 import { TopBar } from "./TopBar";
 import { KeymapCenter, KeymapInspector } from "./keymap/KeymapMode";
 import { LightingMode } from "./lighting/LightingMode";
+import { LiveMode } from "./live/LiveMode";
 import { AdvancedMode } from "./advanced/AdvancedMode";
 import { DeviceMode } from "./device/DeviceMode";
 import { InspectorShell, cx } from "./kit";
-import { CombinatorIcon, DeviceIcon, KeymapIcon, LightingIcon } from "./icons";
+import { CombinatorIcon, DeviceIcon, EyeIcon, KeymapIcon, LightingIcon } from "./icons";
 
 const MODES: Array<{ id: Mode; label: string; icon: typeof KeymapIcon }> = [
   { id: "keymap", label: "Keymap", icon: KeymapIcon },
   { id: "lighting", label: "Lighting", icon: LightingIcon },
+  { id: "live", label: "Live", icon: EyeIcon },
   { id: "advanced", label: "Advanced", icon: CombinatorIcon },
   { id: "device", label: "Device", icon: DeviceIcon },
 ];
@@ -129,6 +131,7 @@ export function Workbench({
               </>
             )}
             {state.mode === "lighting" && <LightingMode />}
+            {state.mode === "live" && <LiveMode />}
             {state.mode === "advanced" && <AdvancedMode />}
             {state.mode === "device" && <DeviceMode />}
           </main>

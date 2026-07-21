@@ -163,6 +163,16 @@ export function CloseIcon(props: IconProps) {
   );
 }
 
+/** Live mode: an eye — this mode observes rather than edits. */
+export function EyeIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M1.5 8s2.4-4.4 6.5-4.4S14.5 8 14.5 8s-2.4 4.4-6.5 4.4S1.5 8 1.5 8z" />
+      <circle cx="8" cy="8" r="1.9" />
+    </svg>
+  );
+}
+
 export function EraserIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
