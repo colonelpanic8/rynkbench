@@ -195,7 +195,7 @@ export function LiveMode() {
       fill: cell ? effectColor(cell.effect) : undefined,
       backgroundFill: bgColor ?? undefined,
       fillAnim: cell ? effectAnim(cell.effect) : undefined,
-      glyph: cell ? undefined : bindingGlyph(key),
+      glyph: bindingGlyph(key),
     };
   };
 

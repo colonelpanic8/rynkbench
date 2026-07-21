@@ -9,7 +9,7 @@
 // overlap slightly (Glove80 thumb clusters), so labels must never be painted
 // over by a neighbouring cap drawn later.
 
-import { useId, useMemo } from "react";
+import { useMemo } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode, SVGProps } from "react";
 import type { Encoder, Key, Rect } from "../vendor/rynk-wasm/rynk_wasm";
 import type { KeyboardModel, KeyView } from "../model/keyboard";
@@ -18,7 +18,7 @@ import { cx } from "./kit";
 
 export interface KeyDecor {
   glyph?: KeyGlyph;
-  /** LED color (CSS) — renders the lit window + dot. */
+  /** Per-key lighting color (CSS), rendered as a flat cap fill. */
   fill?: string;
   /** Device-wide base lighting, rendered across the full cap below labels. */
   backgroundFill?: string;
@@ -317,14 +317,12 @@ function KeyShape({
   view,
   decor,
   interactive,
-  breatheBadgeId,
   onPointerDown,
   onPointerEnter,
 }: {
   view: KeyView;
   decor: KeyDecor;
   interactive: boolean;
-  breatheBadgeId: string;
   onPointerDown?: (key: KeyView, ev: ReactPointerEvent) => void;
   onPointerEnter?: (key: KeyView, ev: ReactPointerEvent) => void;
 }) {
@@ -332,14 +330,10 @@ function KeyShape({
   const deg = shape.r;
   const clickable = interactive && !decor.disabled;
 
-  const capFill = decor.fill
-    ? "color-mix(in oklab, var(--color-cap) 88%, black)"
-    : decor.backgroundFill
-      ? `color-mix(in oklab, var(--color-cap) 34%, ${decor.backgroundFill})`
-      : "var(--color-cap)";
+  const capFill = decor.fill ?? decor.backgroundFill ?? "var(--color-cap)";
 
   const anim = decor.fillAnim;
-  const windowStyle = anim
+  const fillStyle = anim
     ? {
         animationName: anim.name,
         animationDuration: `${Math.max(200, anim.periodMs)}ms`,
@@ -351,8 +345,6 @@ function KeyShape({
 
   const cx0 = shape.rect.x;
   const cy0 = shape.rect.y;
-  const badgeX = shape.rect.x + shape.rect.w / 2 - 0.16;
-  const badgeY = shape.rect.y - shape.rect.h / 2 + 0.16;
 
   return (
     <g
@@ -383,44 +375,15 @@ function KeyShape({
           strokeWidth={decor.staged || decor.error ? 0.05 : 0.028}
           strokeDasharray={decor.staged && !decor.error ? "0.1 0.07" : undefined}
         />
-        {/* cap fill */}
-        <KeyRects shape={shape} inset={CAP_INSET} className="key-cap" fill={capFill} />
-
-        {/* LED window */}
-        {decor.fill && (
-          <g key={decor.popNonce} className="key-paint-pop">
-            <g style={windowStyle}>
-              <KeyRects shape={shape} inset={0.1} rx={0.07} fill={decor.fill} opacity={0.28} />
-              <circle cx={cx0} cy={cy0} r={0.2} fill={decor.fill} opacity={0.35} />
-              <circle cx={cx0} cy={cy0} r={0.1} fill={decor.fill} />
-            </g>
-          </g>
-        )}
-
-        {/* static effect badge — the animation may be at its "off" phase, so
-            non-solid effects also get a persistent corner cue */}
-        {decor.fill && anim && (
-          <g style={{ pointerEvents: "none" }}>
-            {anim.name === "led-blink" ? (
-              <circle
-                cx={badgeX}
-                cy={badgeY}
-                r={0.07}
-                fill={decor.fill}
-                stroke="rgb(0 0 0 / 0.55)"
-                strokeWidth={0.022}
-              />
-            ) : (
-              <circle
-                cx={badgeX}
-                cy={badgeY}
-                r={0.12}
-                fill={`url(#${breatheBadgeId})`}
-                style={{ color: decor.fill }}
-              />
-            )}
-          </g>
-        )}
+        {/* Lighting is deliberately a flat color swatch. Effect timing, when
+            present, animates the whole swatch rather than simulating a diode. */}
+        <g
+          key={decor.popNonce}
+          className={decor.fill ? "key-paint-pop" : undefined}
+          style={fillStyle}
+        >
+          <KeyRects shape={shape} inset={CAP_INSET} className="key-cap" fill={capFill} />
+        </g>
 
         {/* pending / error status dot */}
         {(decor.pending || decor.error) && (
@@ -503,7 +466,7 @@ function KeyRing({ view, decor }: { view: KeyView; decor: KeyDecor }) {
 function KeyLabel({ view, decor }: { view: KeyView; decor: KeyDecor }) {
   const { shape } = view;
   const glyph = decor.glyph;
-  if (!glyph?.text || decor.fill) return null;
+  if (!glyph?.text) return null;
 
   const deg = shape.r;
   const primarySize = fitText(glyph.text, shape.rect.w, glyph.sub ? 0.26 : 0.3);
@@ -528,6 +491,10 @@ function KeyLabel({ view, decor }: { view: KeyView; decor: KeyDecor }) {
           textAnchor="middle"
           dominantBaseline="central"
           fill={glyph.dim ? "var(--color-cap-ink-dim)" : "var(--color-cap-ink)"}
+          stroke={decor.fill ? "rgb(0 0 0 / 0.72)" : undefined}
+          strokeWidth={decor.fill ? 0.045 : undefined}
+          paintOrder={decor.fill ? "stroke fill" : undefined}
+          strokeLinejoin="round"
           fontFamily="var(--font-sans)"
           fontWeight={500}
         >
@@ -541,6 +508,10 @@ function KeyLabel({ view, decor }: { view: KeyView; decor: KeyDecor }) {
             textAnchor="middle"
             dominantBaseline="central"
             fill="var(--color-mute)"
+            stroke={decor.fill ? "rgb(0 0 0 / 0.72)" : undefined}
+            strokeWidth={decor.fill ? 0.035 : undefined}
+            paintOrder={decor.fill ? "stroke fill" : undefined}
+            strokeLinejoin="round"
             fontFamily="var(--font-sans)"
           >
             {glyph.sub}
@@ -648,8 +619,6 @@ export function KeyboardCanvas({
   const vb = boardViewBox(model);
   const viewBox = `${vb.x} ${vb.y} ${vb.w} ${vb.h}`;
   const plates = useMemo(() => computePlates(model), [model]);
-  const badgeId = useId();
-  const breatheBadgeId = `breathe-badge-${badgeId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   const decorated = model.keys.map((key) => ({ key, decor: decorFor(key) }));
 
@@ -663,14 +632,6 @@ export function KeyboardCanvas({
         if (ev.target === ev.currentTarget) onBackgroundPointerDown?.();
       }}
     >
-      <defs>
-        <radialGradient id={breatheBadgeId}>
-          <stop offset="0%" stopColor="currentColor" stopOpacity={0.95} />
-          <stop offset="55%" stopColor="currentColor" stopOpacity={0.55} />
-          <stop offset="100%" stopColor="currentColor" stopOpacity={0} />
-        </radialGradient>
-      </defs>
-
       {/* faint backplates: each physically connected cluster (a split half
           together with its thumbs) reads as one piece, statically */}
       <g aria-hidden style={{ pointerEvents: "none" }}>
@@ -692,7 +653,6 @@ export function KeyboardCanvas({
           view={key}
           decor={decor}
           interactive={interactive}
-          breatheBadgeId={breatheBadgeId}
           onPointerDown={onKeyPointerDown}
           onPointerEnter={onKeyPointerEnter}
         />

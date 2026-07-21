@@ -312,8 +312,8 @@ export function LightingMode() {
   };
 
   // Legend fallback mirrors keymap mode (enrichment label, else the resolved
-  // live binding) so unenriched boards don't render blank caps — but
-  // always dimmed here, so the paint color stays the loudest thing.
+  // live binding) so every cap remains identifiable while lighting is previewed.
+  // It stays dimmed so the paint color remains the loudest thing.
   const cols = bundle.caps.num_cols;
   const legendFor = (key: KeyView): KeyDecor["glyph"] => {
     if (key.label) return { text: key.label, dim: true };
@@ -336,7 +336,7 @@ export function LightingMode() {
       fill: effect ? effectColor(effect) : undefined,
       backgroundFill: isLayerTarget ? backgroundColor : undefined,
       fillAnim: effect ? effectAnim(effect) : undefined,
-      glyph: !effect ? legendFor(key) : undefined,
+      glyph: legendFor(key),
       staged: staged.has(key.ledId),
       highlight: hoverSet?.has(key.ledId) ?? false,
       inSelection: selectionSet.has(key.ledId),
