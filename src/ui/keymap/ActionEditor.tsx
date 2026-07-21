@@ -7,15 +7,29 @@ import type {
   Action,
   HidKeyCode,
   KeyAction,
+  KeyboardAction,
+  LightAction,
   ModifierCombination,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import { searchKeycodes } from "../hid";
 import { EMPTY_MODS, actionLabel, anyModifier, hidName, modifierSymbols } from "../labels";
+import { decodeMacros, macroPreview } from "../macros";
+import { morsePatternGlyph } from "../morse";
+import { useWorkbench } from "../state";
 import { Button, SectionLabel, TextInput, cx } from "../kit";
 
-type Tab = "keys" | "mods" | "layers" | "behavior" | "advanced";
+type Tab =
+  | "keys"
+  | "mods"
+  | "layers"
+  | "behavior"
+  | "advanced"
+  | "macros"
+  | "morse"
+  | "system"
+  | "lighting";
 
-const TABS: Array<{ id: Tab; label: string }> = [
+const BASE_TABS: Array<{ id: Tab; label: string }> = [
   { id: "keys", label: "Keys" },
   { id: "mods", label: "Mods" },
   { id: "layers", label: "Layers" },
@@ -66,7 +80,7 @@ const MOD_FIELDS: Array<{ key: keyof ModifierCombination; label: string; sym: st
   { key: "right_gui", label: "R Gui", sym: "⌘" },
 ];
 
-function ModGrid({
+export function ModGrid({
   mods,
   onChange,
 }: {
@@ -95,7 +109,7 @@ function ModGrid({
   );
 }
 
-function KeycodeBrowser({
+export function KeycodeBrowser({
   query,
   onQuery,
   onPick,
@@ -192,8 +206,9 @@ function LayerPicker({
   );
 }
 
-/** Mini action picker for tap-hold slots. */
-function SlotPicker({
+/** Mini action picker for tap-hold slots — also reused by the advanced
+ *  editors (morse pattern actions) that commit a bare `Action`. */
+export function SlotPicker({
   numLayers,
   onPick,
 }: {
@@ -319,6 +334,155 @@ function TapHoldEditor({
   );
 }
 
+/** System control actions, curated with plain-language hints. */
+const SYSTEM_ACTIONS: Array<{
+  id: KeyboardAction;
+  label: string;
+  hint: string;
+  danger?: boolean;
+}> = [
+  { id: "OutputAuto", label: "Output · Auto", hint: "Route typing over USB when present, else BLE" },
+  { id: "OutputUsb", label: "Output · USB", hint: "Force typing over USB" },
+  { id: "OutputBluetooth", label: "Output · Bluetooth", hint: "Force typing over BLE" },
+  { id: "ComboToggle", label: "Combos · toggle", hint: "Enable/disable combo processing" },
+  { id: "ComboOn", label: "Combos · on", hint: "Enable combo processing" },
+  { id: "ComboOff", label: "Combos · off", hint: "Disable combo processing" },
+  { id: "CapsWordToggle", label: "Caps Word", hint: "Capitalize until the next word break" },
+  { id: "DebugToggle", label: "Debug toggle", hint: "Toggle firmware debug output" },
+  { id: "Bootloader", label: "Bootloader", hint: "Reboot into flashing mode", danger: true },
+  { id: "Reboot", label: "Reboot", hint: "Restart the keyboard", danger: true },
+  {
+    id: "ClearEeprom",
+    label: "Clear EEPROM",
+    hint: "Wipe stored settings back to firmware defaults",
+    danger: true,
+  },
+];
+
+/** The useful lighting actions, curated — full RGB-mode zoo omitted. */
+const LIGHT_ACTIONS: Array<{ id: LightAction; label: string; hint: string }> = [
+  { id: "RgbTog", label: "RGB toggle", hint: "Lighting on/off" },
+  { id: "RgbModeForward", label: "Mode →", hint: "Next lighting mode" },
+  { id: "RgbModeReverse", label: "Mode ←", hint: "Previous lighting mode" },
+  { id: "RgbHui", label: "Hue +", hint: "Shift hue forward" },
+  { id: "RgbHud", label: "Hue −", hint: "Shift hue back" },
+  { id: "RgbSai", label: "Sat +", hint: "More saturated" },
+  { id: "RgbSad", label: "Sat −", hint: "Less saturated" },
+  { id: "RgbVai", label: "Bright +", hint: "Raise brightness" },
+  { id: "RgbVad", label: "Bright −", hint: "Lower brightness" },
+  { id: "RgbSpi", label: "Speed +", hint: "Faster animation" },
+  { id: "RgbSpd", label: "Speed −", hint: "Slower animation" },
+];
+
+function PickList<T extends string>({
+  items,
+  onPick,
+}: {
+  items: Array<{ id: T; label: string; hint: string; danger?: boolean }>;
+  onPick: (id: T) => void;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
+      {items.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          onClick={() => onPick(item.id)}
+          className={cx(
+            "cursor-pointer rounded-lg border px-3 py-2 text-left transition-colors duration-120",
+            item.danger
+              ? "border-danger/35 bg-danger-dim/15 hover:border-danger/60"
+              : "border-line bg-raised hover:border-line-strong",
+          )}
+        >
+          <div
+            className={cx("text-[13px] font-medium", item.danger ? "text-danger" : "text-ink")}
+          >
+            {item.label}
+          </div>
+          <div className="text-[11.5px] text-faint">{item.hint}</div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MacroPickerTab({ onCommit }: { onCommit: (action: KeyAction) => void }) {
+  const { state } = useWorkbench();
+  const macros = useMemo(() => decodeMacros(state.macroBytes), [state.macroBytes]);
+  if (macros.length === 0) {
+    return (
+      <div className="py-6 text-center text-[12.5px] leading-relaxed text-faint">
+        No macros defined yet.
+        <br />
+        Create them in Advanced → Macros.
+      </div>
+    );
+  }
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
+      {macros.map((macro, n) => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => onCommit({ Single: { TriggerMacro: n } })}
+          className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-line bg-raised px-3 py-2 text-left transition-colors duration-120 hover:border-line-strong"
+        >
+          <span className="rounded-md border border-cap-edge bg-cap px-1.5 py-0.5 font-mono text-[11.5px] text-cap-ink">
+            M{n}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[12.5px] text-mute">
+            {macroPreview(macro)}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MorsePickerTab({ onCommit }: { onCommit: (action: KeyAction) => void }) {
+  const { state } = useWorkbench();
+  const configured = state.morse
+    .map((m, n) => ({ morse: m, n }))
+    .filter(({ morse }) => morse.actions.length > 0);
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="text-[11.5px] leading-relaxed text-faint">
+        Bind a morse (tap-dance) slot to this key. Edit patterns in Advanced → Morse.
+      </div>
+      {configured.length === 0 ? (
+        <div className="py-4 text-center text-[12.5px] text-faint">
+          No morse slots configured yet.
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-col gap-1.5 overflow-y-auto pr-1">
+          {configured.map(({ morse, n }) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => onCommit({ Morse: n })}
+              className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-line bg-raised px-3 py-2 text-left transition-colors duration-120 hover:border-line-strong"
+            >
+              <span className="rounded-md border border-cap-edge bg-cap px-1.5 py-0.5 font-mono text-[11.5px] text-cap-ink">
+                Mo{n}
+              </span>
+              <span className="tnum text-[12.5px] text-mute">
+                {morse.actions.length} pattern{morse.actions.length === 1 ? "" : "s"}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-right font-mono text-[11px] text-faint">
+                {morse.actions
+                  .slice(0, 3)
+                  .map(([p]) => morsePatternGlyph(p))
+                  .join("  ")}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ActionEditor({
   current,
   numLayers,
@@ -328,21 +492,30 @@ export function ActionEditor({
   numLayers: number;
   onCommit: (action: KeyAction) => void;
 }) {
+  const { bundle } = useWorkbench();
   const [tab, setTab] = useState<Tab>("keys");
   const [query, setQuery] = useState("");
   const [keyMods, setKeyMods] = useState<ModifierCombination>(EMPTY_MODS);
   const [oneShot, setOneShot] = useState(false);
 
+  const tabs = useMemo(() => {
+    const out = [...BASE_TABS];
+    if (bundle.caps.macro_space_size > 0) out.push({ id: "macros", label: "Macros" });
+    if (bundle.caps.max_morse > 0) out.push({ id: "morse", label: "Morse" });
+    out.push({ id: "system", label: "System" }, { id: "lighting", label: "Lighting" });
+    return out;
+  }, [bundle.caps.macro_space_size, bundle.caps.max_morse]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex gap-0.5 rounded-lg border border-line-soft bg-well p-0.5">
-        {TABS.map((t) => (
+      <div className="flex flex-wrap gap-0.5 rounded-lg border border-line-soft bg-well p-0.5">
+        {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
             className={cx(
-              "flex-1 cursor-pointer rounded-md px-1 py-1.5 text-[11.5px] font-medium transition-colors duration-120",
+              "flex-1 cursor-pointer whitespace-nowrap rounded-md px-1.5 py-1.5 text-[11.5px] font-medium transition-colors duration-120",
               tab === t.id ? "bg-raised text-ink shadow-sm" : "text-faint hover:text-mute",
             )}
           >
@@ -434,6 +607,21 @@ export function ActionEditor({
 
       {tab === "advanced" && (
         <TapHoldEditor current={current} numLayers={numLayers} onCommit={onCommit} />
+      )}
+
+      {tab === "macros" && <MacroPickerTab onCommit={onCommit} />}
+
+      {tab === "morse" && <MorsePickerTab onCommit={onCommit} />}
+
+      {tab === "system" && (
+        <PickList
+          items={SYSTEM_ACTIONS}
+          onPick={(id) => onCommit({ Single: { KeyboardControl: id } })}
+        />
+      )}
+
+      {tab === "lighting" && (
+        <PickList items={LIGHT_ACTIONS} onPick={(id) => onCommit({ Single: { Light: id } })} />
       )}
     </div>
   );

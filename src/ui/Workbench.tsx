@@ -11,13 +11,15 @@ import {
 import { TopBar } from "./TopBar";
 import { KeymapCenter, KeymapInspector } from "./keymap/KeymapMode";
 import { LightingMode } from "./lighting/LightingMode";
+import { AdvancedMode } from "./advanced/AdvancedMode";
 import { DeviceMode } from "./device/DeviceMode";
 import { InspectorShell, cx } from "./kit";
-import { DeviceIcon, KeymapIcon, LightingIcon } from "./icons";
+import { CombinatorIcon, DeviceIcon, KeymapIcon, LightingIcon } from "./icons";
 
 const MODES: Array<{ id: Mode; label: string; icon: typeof KeymapIcon }> = [
   { id: "keymap", label: "Keymap", icon: KeymapIcon },
   { id: "lighting", label: "Lighting", icon: LightingIcon },
+  { id: "advanced", label: "Advanced", icon: CombinatorIcon },
   { id: "device", label: "Device", icon: DeviceIcon },
 ];
 
@@ -91,6 +93,8 @@ export function Workbench({
         dispatch({ type: "topicConnection", connection: event.ConnectionChange });
       } else if ("LightingChange" in event) {
         io.refreshLighting();
+      } else if ("LedIndicatorChange" in event) {
+        dispatch({ type: "topicLedIndicator", indicator: event.LedIndicatorChange });
       }
     });
     bundle.session.onDisconnect(onUnexpectedDisconnect);
@@ -117,6 +121,7 @@ export function Workbench({
               </>
             )}
             {state.mode === "lighting" && <LightingMode />}
+            {state.mode === "advanced" && <AdvancedMode />}
             {state.mode === "device" && <DeviceMode />}
           </main>
         </div>

@@ -5,19 +5,29 @@
 
 import type {
   BatteryStatus,
+  BehaviorConfig,
+  BleStatus,
+  Combo,
   ConnectionStatus,
   DeviceCapabilities,
   DeviceInfo,
   EncoderAction,
+  Fork,
   Key,
   KeyAction,
   LayoutInfo,
+  LedIndicator,
+  LightingBackgroundState,
   LightingCapabilities,
   LightingLed,
+  LightingMutableState,
   LightingOverlayCell,
   LightingState,
   LightingZone,
   LightingZoneId,
+  MatrixState,
+  Morse,
+  PeripheralStatus,
   ProtocolVersion,
   TopicEvent,
 } from "../../vendor/rynk-wasm/rynk_wasm";
@@ -226,6 +236,32 @@ const INFO: DeviceInfo = {
 
 const PROTOCOL: ProtocolVersion = { major: 1, minor: 0 };
 
+function emptyBits() {
+  return {
+    modifiers: {
+      left_ctrl: false,
+      left_shift: false,
+      left_alt: false,
+      left_gui: false,
+      right_ctrl: false,
+      right_shift: false,
+      right_alt: false,
+      right_gui: false,
+    },
+    leds: { num_lock: false, caps_lock: false, scroll_lock: false, compose: false, kana: false },
+    mouse: {
+      button1: false,
+      button2: false,
+      button3: false,
+      button4: false,
+      button5: false,
+      button6: false,
+      button7: false,
+      button8: false,
+    },
+  };
+}
+
 class StubSession implements RynkSession {
   readonly kind = "mock" as const;
   readonly label = "Dev stub · Stub Ortho 48";
@@ -237,6 +273,47 @@ class StubSession implements RynkSession {
   private currentLayerNum = 0;
   private defaultLayerNum = 0;
   private batteryLevel = 87;
+  private outputEnabled = true;
+  private brightness = 200;
+  private background: LightingBackgroundState = {
+    enabled: false,
+    hue: 0,
+    saturation: 0,
+    value: 0,
+    speed: 0,
+    mode: "Solid",
+  };
+  private comboTable: Combo[] = Array.from({ length: CAPS.max_combos }, () => ({
+    actions: [],
+    output: "No" as const,
+    layer: undefined,
+  }));
+  private morseTable: Morse[] = Array.from({ length: CAPS.max_morse }, () => ({
+    profile: {
+      unilateral_tap: undefined,
+      enable_flow_tap: undefined,
+      mode: undefined,
+      hold_timeout_ms: undefined,
+      gap_timeout_ms: undefined,
+    },
+    actions: [],
+  }));
+  private forkTable: Fork[] = Array.from({ length: CAPS.max_forks }, () => ({
+    trigger: "No" as const,
+    negative_output: "No" as const,
+    positive_output: "No" as const,
+    match_any: emptyBits(),
+    match_none: emptyBits(),
+    kept_modifiers: emptyBits().modifiers,
+    bindable: true,
+  }));
+  private macroRegion = new Uint8Array(CAPS.macro_space_size);
+  private behaviorConfig: BehaviorConfig = {
+    combo_timeout_ms: 50,
+    oneshot_timeout_ms: 1000,
+    tap_interval_ms: 200,
+    tap_capslock_interval_ms: 350,
+  };
   private topicHandler: ((event: TopicEvent) => void) | null = null;
   private disconnectHandler: (() => void) | null = null;
   private batteryTimer: ReturnType<typeof setInterval>;
@@ -297,6 +374,82 @@ class StubSession implements RynkSession {
     },
     rebootToBootloader: async (): Promise<void> => {
       await sleep(400);
+    },
+    bleStatus: async (): Promise<BleStatus> => {
+      await lag();
+      return { profile: 0, state: "Inactive" };
+    },
+    clearBleProfile: async (): Promise<void> => {
+      await lag();
+    },
+    peripheralStatus: async (): Promise<PeripheralStatus> => {
+      await lag();
+      return { connected: true, battery: "Unavailable" };
+    },
+    matrixState: async (): Promise<MatrixState> => {
+      await lag();
+      const bitmap = new Array(ROWS * Math.ceil(COLS / 8)).fill(0);
+      return { pressed_bitmap: bitmap };
+    },
+    ledIndicator: async (): Promise<LedIndicator> => {
+      await lag();
+      return { num_lock: false, caps_lock: false, scroll_lock: false, compose: false, kana: false };
+    },
+  };
+
+  combos = {
+    readAll: async (): Promise<Combo[]> => {
+      await lag();
+      return structuredClone(this.comboTable);
+    },
+    set: async (index: number, combo: Combo): Promise<void> => {
+      await lag();
+      this.comboTable[index] = structuredClone(combo);
+    },
+  };
+
+  morse = {
+    readAll: async (): Promise<Morse[]> => {
+      await lag();
+      return structuredClone(this.morseTable);
+    },
+    set: async (index: number, morse: Morse): Promise<void> => {
+      await lag();
+      this.morseTable[index] = structuredClone(morse);
+    },
+  };
+
+  forks = {
+    readAll: async (): Promise<Fork[]> => {
+      await lag();
+      return structuredClone(this.forkTable);
+    },
+    set: async (index: number, fork: Fork): Promise<void> => {
+      await lag();
+      this.forkTable[index] = structuredClone(fork);
+    },
+  };
+
+  macros = {
+    read: async (): Promise<Uint8Array> => {
+      await lag();
+      return new Uint8Array(this.macroRegion);
+    },
+    write: async (data: Uint8Array): Promise<void> => {
+      await lag();
+      this.macroRegion.fill(0);
+      this.macroRegion.set(data.slice(0, this.macroRegion.length));
+    },
+  };
+
+  behavior = {
+    get: async (): Promise<BehaviorConfig> => {
+      await lag();
+      return { ...this.behaviorConfig };
+    },
+    set: async (config: BehaviorConfig): Promise<void> => {
+      await lag();
+      this.behaviorConfig = { ...config };
     },
   };
 
@@ -387,21 +540,22 @@ class StubSession implements RynkSession {
       await lag();
       return [...this.overlay.values()].map((c) => structuredClone(c));
     },
+    setState: async (state: LightingMutableState): Promise<LightingState> => {
+      await lag();
+      this.outputEnabled = state.output_enabled;
+      this.brightness = state.output_brightness;
+      this.background = { ...state.background };
+      this.lightingRevision += 1;
+      return this.lightingStateNow();
+    },
   };
 
   private lightingStateNow(): LightingState {
     return {
       revision: this.lightingRevision,
-      output_enabled: true,
-      output_brightness: 200,
-      background: {
-        enabled: false,
-        hue: 0,
-        saturation: 0,
-        value: 0,
-        speed: 0,
-        mode: "Solid",
-      },
+      output_enabled: this.outputEnabled,
+      output_brightness: this.brightness,
+      background: { ...this.background },
       overlay_len: this.overlay.size,
     };
   }

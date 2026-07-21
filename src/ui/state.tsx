@@ -5,20 +5,26 @@ import { createContext, useContext } from "react";
 import type { Dispatch } from "react";
 import type {
   BatteryStatus,
+  BehaviorConfig,
+  Combo,
   ConnectionStatus,
   DeviceCapabilities,
   DeviceInfo,
   EncoderAction,
+  Fork,
   KeyAction,
+  LedIndicator,
   LightingCapabilities,
+  LightingMutableState,
   LightingOverlayCell,
   LightingState,
+  Morse,
   ProtocolVersion,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import type { RynkSession } from "../session/types";
 import type { KeyboardModel } from "../model/keyboard";
 
-export type Mode = "keymap" | "lighting" | "device";
+export type Mode = "keymap" | "lighting" | "advanced" | "device";
 
 export type Selection =
   | { type: "key"; row: number; col: number }
@@ -40,6 +46,14 @@ export interface ConnectedBundle {
   connection: ConnectionStatus | null;
   lightingState: LightingState | null;
   overlay: LightingOverlayCell[];
+  /** Advanced tables; empty arrays when the device reports zero capacity. */
+  combos: Combo[];
+  morse: Morse[];
+  forks: Fork[];
+  macroBytes: Uint8Array;
+  /** null when the device rejected the read (feature-gated out). */
+  behavior: BehaviorConfig | null;
+  ledIndicator: LedIndicator | null;
 }
 
 export interface PendingInfo {
@@ -47,6 +61,19 @@ export interface PendingInfo {
   message?: string;
   /** The action we tried to write — kept for retry. */
   attempted?: KeyAction;
+}
+
+/** Slot-table kinds sharing the optimistic-write plumbing. */
+export type SlotKind = "combos" | "morse" | "forks";
+
+export type SlotValueOf<K extends SlotKind> = K extends "combos"
+  ? Combo
+  : K extends "morse"
+    ? Morse
+    : Fork;
+
+export function slotPendingId(kind: SlotKind, index: number): string {
+  return `${kind}:${index}`;
 }
 
 export interface WorkbenchState {
@@ -75,6 +102,13 @@ export interface WorkbenchState {
   lightingSelection: number[];
   /** ledId → nonce, bumped on paint for the pop animation. */
   paintTick: Record<number, number>;
+  /** Advanced tables, kept full-length (empty slots included). */
+  combos: Combo[];
+  morse: Morse[];
+  forks: Fork[];
+  macroBytes: Uint8Array;
+  behavior: BehaviorConfig | null;
+  ledIndicator: LedIndicator | null;
 }
 
 export function keyPendingId(layer: number, row: number, col: number): string {
@@ -112,6 +146,12 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     hoverLeds: null,
     lightingSelection: [],
     paintTick: {},
+    combos: bundle.combos,
+    morse: bundle.morse,
+    forks: bundle.forks,
+    macroBytes: bundle.macroBytes,
+    behavior: bundle.behavior,
+    ledIndicator: bundle.ledIndicator,
   };
 }
 
@@ -152,7 +192,27 @@ export type WorkbenchAction =
   | { type: "lightingBusy"; busy: boolean; error?: string | null }
   | { type: "overlayApplied"; state: LightingState; cells: LightingOverlayCell[] }
   | { type: "hoverLeds"; leds: number[] | null }
-  | { type: "lightingSelect"; leds: number[] };
+  | { type: "lightingSelect"; leds: number[] }
+  | { type: "lightingStateSet"; state: LightingState }
+  | { type: "slotWriteStart"; kind: SlotKind; index: number; value: Combo | Morse | Fork }
+  | { type: "slotWriteOk"; kind: SlotKind; index: number }
+  | {
+      type: "slotWriteErr";
+      kind: SlotKind;
+      index: number;
+      prev: Combo | Morse | Fork;
+      message: string;
+    }
+  | { type: "slotErrDismiss"; kind: SlotKind; index: number }
+  | { type: "macrosWriteStart"; bytes: Uint8Array }
+  | { type: "macrosWriteOk" }
+  | { type: "macrosWriteErr"; prev: Uint8Array; message: string }
+  | { type: "macrosErrDismiss" }
+  | { type: "behaviorWriteStart"; config: BehaviorConfig }
+  | { type: "behaviorWriteOk" }
+  | { type: "behaviorWriteErr"; prev: BehaviorConfig | null; message: string }
+  | { type: "behaviorErrDismiss" }
+  | { type: "topicLedIndicator"; indicator: LedIndicator };
 
 function setLayerKey(
   layers: KeyAction[][],
@@ -297,6 +357,80 @@ export function makeWorkbenchReducer(cols: number) {
         return { ...state, hoverLeds: act.leds };
       case "lightingSelect":
         return { ...state, lightingSelection: act.leds };
+      case "lightingStateSet":
+        return { ...state, lightingState: act.state, lightingBusy: false, lightingError: null };
+      case "slotWriteStart": {
+        const id = slotPendingId(act.kind, act.index);
+        const table = state[act.kind].slice() as Array<Combo | Morse | Fork>;
+        table[act.index] = act.value;
+        return {
+          ...state,
+          [act.kind]: table,
+          pending: { ...state.pending, [id]: { status: "pending" } },
+        };
+      }
+      case "slotWriteOk": {
+        const id = slotPendingId(act.kind, act.index);
+        const { [id]: _done, ...pending } = state.pending;
+        return { ...state, pending };
+      }
+      case "slotWriteErr": {
+        const id = slotPendingId(act.kind, act.index);
+        const table = state[act.kind].slice() as Array<Combo | Morse | Fork>;
+        table[act.index] = act.prev;
+        return {
+          ...state,
+          [act.kind]: table,
+          pending: { ...state.pending, [id]: { status: "error", message: act.message } },
+        };
+      }
+      case "slotErrDismiss": {
+        const id = slotPendingId(act.kind, act.index);
+        const { [id]: _gone, ...pending } = state.pending;
+        return { ...state, pending };
+      }
+      case "macrosWriteStart":
+        return {
+          ...state,
+          macroBytes: act.bytes,
+          pending: { ...state.pending, macros: { status: "pending" } },
+        };
+      case "macrosWriteOk": {
+        const { macros: _done, ...pending } = state.pending;
+        return { ...state, pending };
+      }
+      case "macrosWriteErr":
+        return {
+          ...state,
+          macroBytes: act.prev,
+          pending: { ...state.pending, macros: { status: "error", message: act.message } },
+        };
+      case "macrosErrDismiss": {
+        const { macros: _gone, ...pending } = state.pending;
+        return { ...state, pending };
+      }
+      case "behaviorWriteStart":
+        return {
+          ...state,
+          behavior: act.config,
+          pending: { ...state.pending, behavior: { status: "pending" } },
+        };
+      case "behaviorWriteOk": {
+        const { behavior: _done, ...pending } = state.pending;
+        return { ...state, pending };
+      }
+      case "behaviorWriteErr":
+        return {
+          ...state,
+          behavior: act.prev,
+          pending: { ...state.pending, behavior: { status: "error", message: act.message } },
+        };
+      case "behaviorErrDismiss": {
+        const { behavior: _gone, ...pending } = state.pending;
+        return { ...state, pending };
+      }
+      case "topicLedIndicator":
+        return { ...state, ledIndicator: act.indicator };
     }
   };
 }
@@ -346,6 +480,10 @@ export interface WorkbenchIo {
   applyOverlay(cells: LightingOverlayCell[]): void;
   clearOverlay(): void;
   refreshLighting(): void;
+  setLightingState(state: LightingMutableState): void;
+  setSlot<K extends SlotKind>(kind: K, index: number, value: SlotValueOf<K>): void;
+  writeMacros(bytes: Uint8Array): void;
+  setBehavior(config: BehaviorConfig): void;
   disconnect(): void;
   rebootToBootloader(): Promise<void>;
 }
@@ -434,6 +572,44 @@ export function makeIo(
         ([lightingState, overlay]) =>
           dispatch({ type: "lightingRefresh", state: lightingState, overlay }),
         () => {},
+      );
+    },
+    setLightingState(mutable) {
+      dispatch({ type: "lightingBusy", busy: true, error: null });
+      session.lighting.setState(mutable).then(
+        (lightingState) => dispatch({ type: "lightingStateSet", state: lightingState }),
+        (err) => dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
+      );
+    },
+    setSlot(kind, index, value) {
+      const prev = getState()[kind][index];
+      dispatch({ type: "slotWriteStart", kind, index, value });
+      const write =
+        kind === "combos"
+          ? session.combos.set(index, value as Combo)
+          : kind === "morse"
+            ? session.morse.set(index, value as Morse)
+            : session.forks.set(index, value as Fork);
+      write.then(
+        () => dispatch({ type: "slotWriteOk", kind, index }),
+        (err) =>
+          dispatch({ type: "slotWriteErr", kind, index, prev, message: errorMessage(err) }),
+      );
+    },
+    writeMacros(bytes) {
+      const prev = getState().macroBytes;
+      dispatch({ type: "macrosWriteStart", bytes });
+      session.macros.write(bytes).then(
+        () => dispatch({ type: "macrosWriteOk" }),
+        (err) => dispatch({ type: "macrosWriteErr", prev, message: errorMessage(err) }),
+      );
+    },
+    setBehavior(config) {
+      const prev = getState().behavior;
+      dispatch({ type: "behaviorWriteStart", config });
+      session.behavior.set(config).then(
+        () => dispatch({ type: "behaviorWriteOk" }),
+        (err) => dispatch({ type: "behaviorWriteErr", prev, message: errorMessage(err) }),
       );
     },
     disconnect() {

@@ -46,6 +46,43 @@ export function DeviceIcon(props: IconProps) {
   );
 }
 
+/** Advanced mode: two keys chorded into one output — a combinator. */
+export function CombinatorIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="1.6" y="2" width="5" height="4.4" rx="1.1" />
+      <rect x="9.4" y="2" width="5" height="4.4" rx="1.1" />
+      <path d="M4.1 6.4v1.4a2.6 2.6 0 0 0 2.6 2.6H8M11.9 6.4v1.4a2.6 2.6 0 0 1-2.6 2.6H8M8 10.4v3.8" />
+      <path d="M6.3 12.5L8 14.2l1.7-1.7" />
+    </svg>
+  );
+}
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8 3.2v9.6M3.2 8h9.6" />
+    </svg>
+  );
+}
+
+export function TrashIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M2.5 4.3h11M6.3 2.2h3.4M4 4.3l.7 9a1.3 1.3 0 0 0 1.3 1.2h4a1.3 1.3 0 0 0 1.3-1.2l.7-9" />
+      <path d="M6.5 7v4.4M9.5 7v4.4" />
+    </svg>
+  );
+}
+
+export function BleIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4.6 4.9l6.8 6.2L8 14.3V1.7l3.4 3.2-6.8 6.2" />
+    </svg>
+  );
+}
+
 export function UsbIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

@@ -280,6 +280,7 @@ export function actionDescription(action: Action): string {
   if ("OneShotLayer" in action) return `One-shot layer ${action.OneShotLayer}`;
   if ("OneShotModifier" in action)
     return `One-shot ${modifierSymbols(action.OneShotModifier)}`;
+  if ("TriggerMacro" in action) return `Trigger macro ${action.TriggerMacro}`;
   if ("Light" in action) return `Lighting · ${action.Light}`;
   if ("KeyboardControl" in action) return `Control · ${action.KeyboardControl}`;
   return actionLabel(action);

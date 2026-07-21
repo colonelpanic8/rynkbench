@@ -11,6 +11,8 @@ import type { KeyDecor } from "../KeyboardCanvas";
 import { keyActionGlyph } from "../labels";
 import { stagedLedIds, useWorkbench } from "../state";
 import { ColorPicker } from "./ColorPicker";
+import { BackgroundPanel } from "./BackgroundPanel";
+import { LayerPresets } from "./LayerPresets";
 import type { Hsv } from "../color";
 import { cssRgb, hsvToRgb } from "../color";
 import { Button, InspectorShell, SectionLabel, TextInput, cx } from "../kit";
@@ -435,6 +437,14 @@ export function LightingMode() {
               )}
             </div>
           )}
+
+          <div className="border-t border-line-soft pt-4">
+            <BackgroundPanel />
+          </div>
+
+          <div className="border-t border-line-soft pt-4">
+            <LayerPresets />
+          </div>
         </div>
 
         {/* Apply bar */}

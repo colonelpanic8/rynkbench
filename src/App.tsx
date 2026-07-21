@@ -104,6 +104,19 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     session.device.connectionStatus().catch(() => null),
   ]);
 
+  // Advanced tables — every read is capability-gated and failure-tolerant so
+  // sparse firmware degrades to hidden features, never a failed connect.
+  const [combos, morse, forks, macroBytes, behavior, ledIndicator] = await Promise.all([
+    caps.max_combos > 0 ? session.combos.readAll().catch(() => []) : [],
+    caps.max_morse > 0 ? session.morse.readAll().catch(() => []) : [],
+    caps.max_forks > 0 ? session.forks.readAll().catch(() => []) : [],
+    caps.macro_space_size > 0
+      ? session.macros.read().catch(() => new Uint8Array(0))
+      : new Uint8Array(0),
+    session.behavior.get().catch(() => null),
+    session.device.ledIndicator().catch(() => null),
+  ]);
+
   return {
     session,
     model,
@@ -119,6 +132,12 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     connection,
     lightingState,
     overlay,
+    combos,
+    morse,
+    forks,
+    macroBytes,
+    behavior,
+    ledIndicator,
   };
 }
 
