@@ -10,15 +10,15 @@ import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
 import { keyActionGlyph } from "../labels";
 import { useWorkbench } from "../state";
-import { cssRgb, hsvToRgb } from "../color";
+import { cssEmissiveRgb, hsvToRgb } from "../color";
 import { InspectorShell, Panel, Row, SectionLabel, cx } from "../kit";
 import { KIND_LABEL } from "../TopBar";
 import { compositeScenes, effectiveAction } from "./compositor";
 
 function effectColor(effect: LightingEffect): string {
-  if ("Solid" in effect) return cssRgb(effect.Solid.color);
-  if ("Blink" in effect) return cssRgb(effect.Blink.color);
-  return cssRgb(effect.Breathe.color);
+  if ("Solid" in effect) return cssEmissiveRgb(effect.Solid.color);
+  if ("Blink" in effect) return cssEmissiveRgb(effect.Blink.color);
+  return cssEmissiveRgb(effect.Breathe.color);
 }
 
 function effectAnim(effect: LightingEffect): KeyDecor["fillAnim"] {
@@ -35,7 +35,9 @@ function effectAnim(effect: LightingEffect): KeyDecor["fillAnim"] {
 
 /** Wire HSV (0–255 each) → CSS color. */
 function wireHsvCss(hue: number, saturation: number, value: number): string {
-  return cssRgb(hsvToRgb({ h: (hue / 255) * 360, s: saturation / 255, v: value / 255 }));
+  return cssEmissiveRgb(
+    hsvToRgb({ h: (hue / 255) * 360, s: saturation / 255, v: value / 255 }),
+  );
 }
 
 function IndicatorRow() {
@@ -190,7 +192,8 @@ export function LiveMode() {
     }
     const cell = outputOn ? lit.get(key.ledId) : undefined;
     return {
-      fill: cell ? effectColor(cell.effect) : (bgColor ?? undefined),
+      fill: cell ? effectColor(cell.effect) : undefined,
+      backgroundFill: bgColor ?? undefined,
       fillAnim: cell ? effectAnim(cell.effect) : undefined,
       glyph: cell ? undefined : bindingGlyph(key),
     };

@@ -20,6 +20,8 @@ export interface KeyDecor {
   glyph?: KeyGlyph;
   /** LED color (CSS) — renders the lit window + dot. */
   fill?: string;
+  /** Device-wide base lighting, rendered across the full cap below labels. */
+  backgroundFill?: string;
   fillAnim?: { name: "led-blink" | "led-breathe"; periodMs: number; delayMs?: number };
   staged?: boolean;
   selected?: boolean;
@@ -332,7 +334,9 @@ function KeyShape({
 
   const capFill = decor.fill
     ? "color-mix(in oklab, var(--color-cap) 88%, black)"
-    : "var(--color-cap)";
+    : decor.backgroundFill
+      ? `color-mix(in oklab, var(--color-cap) 34%, ${decor.backgroundFill})`
+      : "var(--color-cap)";
 
   const anim = decor.fillAnim;
   const windowStyle = anim

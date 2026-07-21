@@ -64,3 +64,23 @@ export function hexToRgb(hex: string): LightingRgb8 | null {
 export function cssRgb(c: LightingRgb8): string {
   return `rgb(${c.r} ${c.g} ${c.b})`;
 }
+
+/**
+ * Lift dim LED values into a visible screen representation while preserving
+ * hue. Real LEDs emit light; a literal low RGB fill on a dark display looks
+ * unlit, so previews need a small perceptual floor. Black remains off.
+ */
+export function emissiveRgb(c: LightingRgb8, minimumPeak = 96): LightingRgb8 {
+  const peak = Math.max(c.r, c.g, c.b);
+  if (peak === 0 || peak >= minimumPeak) return c;
+  const scale = minimumPeak / peak;
+  return {
+    r: Math.min(255, Math.round(c.r * scale)),
+    g: Math.min(255, Math.round(c.g * scale)),
+    b: Math.min(255, Math.round(c.b * scale)),
+  };
+}
+
+export function cssEmissiveRgb(c: LightingRgb8): string {
+  return cssRgb(emissiveRgb(c));
+}

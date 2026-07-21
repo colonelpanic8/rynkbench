@@ -101,4 +101,30 @@ describe("compositeScenes", () => {
     expect(out.get(1)).toEqual({ effect: solid(20), source: "runtime-active" });
     expect(out.get(2)).toEqual({ effect: solid(30), source: "runtime-effective" });
   });
+
+  it("mirrors the reported blue -> red -> cyan active stack", () => {
+    const blue: LightingEffect = { Solid: { color: { r: 0, g: 0, b: 255 } } };
+    const red: LightingEffect = { Solid: { color: { r: 255, g: 0, b: 0 } } };
+    const cyan: LightingEffect = { Solid: { color: { r: 0, g: 255, b: 255 } } };
+    const compiled: LightingSceneCell[] = [
+      { layer: 0, led_id: 1, effect: blue },
+      { layer: 3, led_id: 1, effect: red },
+      { layer: 4, led_id: 1, effect: cyan },
+    ];
+
+    const layer4 = compositeScenes(compiled, [], {}, [0, 3, 4], 0, "ActiveStack", null);
+    expect(layer4.get(1)).toEqual({ effect: cyan, source: "compiled-effective" });
+
+    const layer3 = compositeScenes(compiled, [], {}, [0, 3], 0, "ActiveStack", null);
+    expect(layer3.get(1)).toEqual({ effect: red, source: "compiled-effective" });
+  });
+
+  it("applies a non-zero default before lower active lighting layers", () => {
+    const all: LightingSceneCell[] = [
+      { layer: 0, led_id: 1, effect: solid(10) },
+      { layer: 1, led_id: 1, effect: solid(20) },
+    ];
+    const out = compositeScenes([], all, {}, [0, 1], 1, null, "ActiveStack");
+    expect(out.get(1)).toEqual({ effect: solid(10), source: "runtime-active" });
+  });
 });

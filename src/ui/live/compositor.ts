@@ -32,8 +32,17 @@ function contributingLayers(
   policy: LightingLayerPolicy | null,
 ): number[] {
   const active = [...new Set([defaultLayer, ...activeLayers])].sort((a, b) => a - b);
-  if (policy !== "ActiveStack") return [active.at(-1) ?? defaultLayer];
-  return active;
+  const effective = active.at(-1) ?? defaultLayer;
+  if (policy !== "ActiveStack") return [effective];
+
+  // This deliberately mirrors RMK's LayerScenes iterator: default first,
+  // every other active layer in ascending precedence, effective last. A
+  // non-zero default therefore must not be sorted among the active layers.
+  return [
+    defaultLayer,
+    ...active.filter((layer) => layer !== defaultLayer && layer !== effective),
+    ...(effective === defaultLayer ? [] : [effective]),
+  ];
 }
 
 /**
@@ -58,7 +67,7 @@ export function compositeScenes(
     source: "compiled" | "runtime",
   ) => {
     const layers = contributingLayers(activeLayers, defaultLayer, policy);
-    const effectiveLayer = layers.at(-1) ?? defaultLayer;
+    const effectiveLayer = Math.max(defaultLayer, ...activeLayers);
     for (const layer of layers) {
       const suffix =
         layer === effectiveLayer ? "effective" : layer === defaultLayer ? "default" : "active";

@@ -21,7 +21,7 @@ import { ColorPicker } from "./ColorPicker";
 import { BackgroundPanel } from "./BackgroundPanel";
 import { LayerPresets } from "./LayerPresets";
 import type { Hsv } from "../color";
-import { cssRgb, hsvToRgb } from "../color";
+import { cssEmissiveRgb, cssRgb, hsvToRgb } from "../color";
 import { Button, InspectorShell, SectionLabel, TextInput, cx } from "../kit";
 import { EraserIcon, SpinnerIcon, WarningIcon } from "../icons";
 import { compositeScenes, effectiveAction } from "../live/compositor";
@@ -101,9 +101,9 @@ function brushCell(brush: Brush, ledId: number, allowTtl: boolean): LightingOver
 }
 
 function effectColor(effect: LightingEffect): string {
-  if ("Solid" in effect) return cssRgb(effect.Solid.color);
-  if ("Blink" in effect) return cssRgb(effect.Blink.color);
-  return cssRgb(effect.Breathe.color);
+  if ("Solid" in effect) return cssEmissiveRgb(effect.Solid.color);
+  if ("Blink" in effect) return cssEmissiveRgb(effect.Blink.color);
+  return cssEmissiveRgb(effect.Breathe.color);
 }
 
 function effectAnim(effect: LightingEffect): KeyDecor["fillAnim"] {
@@ -284,7 +284,7 @@ export function LightingMode() {
   const lighting = state.lightingState;
   const backgroundColor =
     lighting?.output_enabled && lighting.background.enabled
-      ? cssRgb(
+      ? cssEmissiveRgb(
           hsvToRgb({
             h: (lighting.background.hue / 255) * 360,
             s: lighting.background.saturation / 255,
@@ -356,7 +356,8 @@ export function LightingMode() {
     }
     const effect = visibleEffects.get(key.ledId);
     return {
-      fill: effect ? effectColor(effect) : backgroundColor,
+      fill: effect ? effectColor(effect) : undefined,
+      backgroundFill: backgroundColor,
       fillAnim: effect ? effectAnim(effect) : undefined,
       glyph: !effect ? legendFor(key) : undefined,
       staged: staged.has(key.ledId),
