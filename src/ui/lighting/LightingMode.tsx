@@ -24,7 +24,8 @@ import type { Hsv } from "../color";
 import { cssEmissiveRgb, cssRgb, hsvToRgb } from "../color";
 import { Button, InspectorShell, SectionLabel, TextInput, cx } from "../kit";
 import { EraserIcon, SpinnerIcon, WarningIcon } from "../icons";
-import { compositeScenes, effectiveAction } from "../live/compositor";
+import { effectiveAction } from "../live/compositor";
+import { targetPreviewEffects } from "./preview";
 
 type EffectKind = "Solid" | "Blink" | "Breathe";
 
@@ -252,34 +253,10 @@ export function LightingMode() {
     [isLayerTarget, state.compiledScenes, target],
   );
 
-  const visibleEffects = useMemo(() => {
-    if (isLayerTarget) {
-      const visible = new Map<number, LightingEffect>();
-      for (const cell of Object.values(compiledLayerMap)) visible.set(cell.led_id, cell.effect);
-      for (const cell of Object.values(draftMap)) visible.set(cell.led_id, cell.effect);
-      return visible;
-    }
-    const composed = compositeScenes(
-      state.compiledScenes,
-      state.scenes,
-      draftMap,
-      state.activeLayers,
-      state.defaultLayer,
-      state.compiledScenePolicy,
-      state.scenePolicy,
-    );
-    return new Map([...composed].map(([ledId, cell]) => [ledId, cell.effect]));
-  }, [
-    compiledLayerMap,
-    draftMap,
-    isLayerTarget,
-    state.compiledScenePolicy,
-    state.compiledScenes,
-    state.activeLayers,
-    state.defaultLayer,
-    state.scenePolicy,
-    state.scenes,
-  ]);
+  const visibleEffects = useMemo(
+    () => targetPreviewEffects(target, draftMap, state.compiledScenes),
+    [draftMap, state.compiledScenes, target],
+  );
 
   const lighting = state.lightingState;
   const backgroundColor =
@@ -357,7 +334,7 @@ export function LightingMode() {
     const effect = visibleEffects.get(key.ledId);
     return {
       fill: effect ? effectColor(effect) : undefined,
-      backgroundFill: backgroundColor,
+      backgroundFill: isLayerTarget ? backgroundColor : undefined,
       fillAnim: effect ? effectAnim(effect) : undefined,
       glyph: !effect ? legendFor(key) : undefined,
       staged: staged.has(key.ledId),
