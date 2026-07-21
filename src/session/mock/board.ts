@@ -21,11 +21,14 @@ import type {
   LedIndicator,
   LightingBackgroundState,
   LightingCapabilities,
+  LightingLayerPolicy,
   LightingLed,
   LightingLedId,
   LightingOverlayCell,
   LightingPhysicalKey,
   LightingRoute,
+  LightingSceneCell,
+  LightingSceneStatus,
   LightingState,
   LightingZone,
   LightingZoneId,
@@ -75,6 +78,10 @@ export interface BoardSpec {
   seedCombos?: Combo[];
   seedMorse?: Morse[];
   seedForks?: Fork[];
+  /** Max stored layer-scene cells; 0/absent simulates pre-scene firmware. */
+  sceneCapacity?: number;
+  /** Scene cells stored "in flash" when the session opens. */
+  seedScenes?: LightingSceneCell[];
 }
 
 export function hid(code: HidKeyCode): KeyAction {
@@ -223,6 +230,16 @@ export function buildTopology(
   return { revision, keys, physicalKeys, leds, routes, zones, zoneMemberships };
 }
 
+// LightingFeatureFlags::LAYER_SCENES (rmk-types); the generated .d.ts erases
+// the bitflag constants to a plain number, so the value is mirrored here.
+export const LAYER_SCENES = 1 << 6;
+const SCENE_CHUNK_CAPACITY = 16;
+
+const sceneKey = (cell: { layer: number; led_id: LightingLedId }): string =>
+  `${cell.layer}:${cell.led_id}`;
+
+const cloneScene = (cell: LightingSceneCell): LightingSceneCell => structuredClone(cell);
+
 const BATTERY_PUSH_MS = 30_000;
 // While the matrix tester polls, a few random keys toggle every couple of
 // seconds; the simulation stops itself once polling goes quiet.
@@ -264,6 +281,9 @@ class MockSession implements RynkSession {
   private brightness: number;
   private background: LightingBackgroundState;
   private overlay = new Map<LightingLedId, OverlayEntry>();
+  /** Durable scene table keyed `${layer}:${led_id}`, insertion-ordered. */
+  private readonly sceneTable = new Map<string, LightingSceneCell>();
+  private layerPolicy: LightingLayerPolicy = "EffectiveOnly";
   private readonly comboTable: Combo[];
   private readonly morseTable: Morse[];
   private readonly forkTable: Fork[];
@@ -286,6 +306,10 @@ class MockSession implements RynkSession {
     this.layers = spec.defaultLayers.map((actions) => [...actions]);
     this.encoders = spec.defaultEncoders.map((perLayer) => perLayer.map((action) => ({ ...action })));
     this.knownLeds = new Set(spec.topology.leds.map((led) => led.id));
+    for (const cell of spec.seedScenes ?? []) {
+      this.checkSceneCell(cell);
+      this.sceneTable.set(sceneKey(cell), cloneScene(cell));
+    }
     this.battery = spec.battery;
     this.brightness = spec.brightness;
     this.background = { ...spec.background };
@@ -403,6 +427,38 @@ class MockSession implements RynkSession {
         this.background = { ...state.background };
         return this.touchLighting();
       }),
+    scenes: {
+      sceneStatus: () => latency(() => this.sceneStatus()),
+      readScenes: () =>
+        latency(() => {
+          this.requireScenes();
+          return [...this.sceneTable.values()].map(cloneScene);
+        }),
+      replaceScenes: (cells) =>
+        latency(() => {
+          this.requireScenes();
+          const capacity = this.spec.sceneCapacity!;
+          if (cells.length > capacity) {
+            throw new Error(`scene table full: ${cells.length} cells, capacity ${capacity}`);
+          }
+          // Validate the whole batch before mutating, like the transactional
+          // commit on real firmware: a bad cell leaves the table untouched.
+          const next = new Map<string, LightingSceneCell>();
+          for (const cell of cells) {
+            this.checkSceneCell(cell);
+            next.set(sceneKey(cell), cloneScene(cell));
+          }
+          this.sceneTable.clear();
+          for (const [key, cell] of next) this.sceneTable.set(key, cell);
+          return this.touchLighting();
+        }),
+      setLayerPolicy: (policy) =>
+        latency(() => {
+          this.requireScenes();
+          this.layerPolicy = policy;
+          return this.touchLighting();
+        }),
+    },
   };
 
   readonly combos: ComboOps = {
@@ -532,9 +588,34 @@ class MockSession implements RynkSession {
       overlay_capacity: topology.leds.length,
       page_capacity: 32,
       overlay_chunk_capacity: 16,
-      features: 0,
+      features: (this.spec.sceneCapacity ?? 0) > 0 ? LAYER_SCENES : 0,
       effects: 0b111, // solid | blink | breathe
     };
+  }
+
+  private requireScenes(): void {
+    if ((this.spec.sceneCapacity ?? 0) === 0) {
+      throw new Error("this firmware does not support on-device layer scenes");
+    }
+  }
+
+  private sceneStatus(): LightingSceneStatus {
+    this.requireScenes();
+    return {
+      revision: this.revision,
+      capacity: this.spec.sceneCapacity!,
+      scene_len: this.sceneTable.size,
+      policy: this.layerPolicy,
+      chunk_capacity: SCENE_CHUNK_CAPACITY,
+    };
+  }
+
+  private checkSceneCell(cell: LightingSceneCell): void {
+    const { num_layers } = this.spec.capabilities;
+    if (!Number.isInteger(cell.layer) || cell.layer < 0 || cell.layer >= num_layers) {
+      throw new Error(`layer ${cell.layer} out of range`);
+    }
+    if (!this.knownLeds.has(cell.led_id)) throw new Error(`unknown LED ${cell.led_id}`);
   }
 
   /** After any overlay mutation: bump revision, rearm TTL expiry, notify. */

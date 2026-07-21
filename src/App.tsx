@@ -9,6 +9,8 @@ import type {
   KeyAction,
   LightingCapabilities,
   LightingOverlayCell,
+  LightingSceneCell,
+  LightingSceneStatus,
   LightingState,
 } from "./vendor/rynk-wasm/rynk_wasm";
 import type { LightingTopology, RynkSession, SessionProvider } from "./session/types";
@@ -69,6 +71,8 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
   let lightingState: LightingState | null = null;
   let overlay: LightingOverlayCell[] = [];
   let overlayReadSupported = true;
+  let sceneStatus: LightingSceneStatus | null = null;
+  let scenes: LightingSceneCell[] = [];
   if (caps.lighting_enabled) {
     try {
       [topology, lightingCaps, lightingState] = await Promise.all([
@@ -83,6 +87,17 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
       overlay = await session.lighting.readOverlay();
     } catch {
       overlayReadSupported = false;
+    }
+    // Layer scenes are a newer firmware feature; a rejected status read just
+    // means this device falls back to browser-local layer presets.
+    try {
+      const status = await session.lighting.scenes.sceneStatus();
+      if (status.capacity > 0) {
+        sceneStatus = status;
+        scenes = await session.lighting.scenes.readScenes();
+      }
+    } catch {
+      sceneStatus = null;
     }
   }
 
@@ -132,6 +147,8 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     connection,
     lightingState,
     overlay,
+    sceneStatus,
+    scenes,
     combos,
     morse,
     forks,

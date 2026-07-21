@@ -1,2 +1,1 @@
-# This generated package is intentionally committed so Lightbench builds
-# without requiring a Rust/wasm-pack toolchain during npm install.
+*

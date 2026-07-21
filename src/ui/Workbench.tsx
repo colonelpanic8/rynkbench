@@ -78,8 +78,16 @@ export function Workbench({
   stateRef.current = state;
 
   const io = useMemo(
-    () => makeIo(bundle.session, () => stateRef.current, dispatch, bundle.caps.num_cols, onClose),
-    [bundle.session, bundle.caps.num_cols, onClose],
+    () =>
+      makeIo(
+        bundle.session,
+        () => stateRef.current,
+        dispatch,
+        bundle.caps.num_cols,
+        onClose,
+        bundle.sceneStatus !== null,
+      ),
+    [bundle.session, bundle.caps.num_cols, onClose, bundle.sceneStatus],
   );
 
   // Server-push topics.

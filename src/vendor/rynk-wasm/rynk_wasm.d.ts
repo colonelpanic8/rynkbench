@@ -310,6 +310,18 @@ export interface Fork {
 }
 
 /**
+ * Human-readable identity of the firmware build.
+ *
+ * Unlike [`ProtocolVersion`], this label is deliberately application-defined:
+ * it is for diagnostics and display, never compatibility decisions. RMK
+ * supplies an RMK-only default and downstream firmware may replace it with a
+ * label containing its own package, source revision, or configuration name.
+ */
+export interface BuildInfo {
+    label: string;
+}
+
+/**
  * Identifies a specific key position in the keymap.
  */
 export interface KeyPosition {
@@ -378,12 +390,30 @@ export interface LightingZone {
 }
 
 /**
+ * One ordered scene transaction chunk. Chunks are applied only by commit.
+ */
+export interface PutLightingSceneChunkRequest {
+    transaction_id: number;
+    offset: number;
+    cells: LightingSceneCell[];
+}
+
+/**
  * One ordered transaction chunk. Chunks are applied only by commit.
  */
 export interface PutLightingOverlayChunkRequest {
     transaction_id: number;
     offset: number;
     cells: LightingOverlayCell[];
+}
+
+/**
+ * One page of stored scene cells, echoing the pinned state revision.
+ */
+export interface LightingScenesPage {
+    revision: number;
+    total_count: number;
+    items: LightingSceneCell[];
 }
 
 /**
@@ -620,6 +650,14 @@ export interface BeginLightingOverlayReplaceRequest {
 }
 
 /**
+ *r" Begin an atomic, multi-packet scene-table replacement.
+ */
+export interface BeginLightingSceneReplaceRequest {
+    expected_revision: number;
+    cell_count: number;
+}
+
+/**
  *r" Best-effort invalidation marker. Hosts recover current authoritative
  *r" state with `GetLightingState`; events never carry a second state copy.
  */
@@ -671,7 +709,7 @@ export type LightingOutputId = number;
 /**
  *r" Lighting-domain rejection carried inside Rynk's outer protocol result.
  */
-export type LightingError = "Unsupported" | "InvalidRequest" | "InvalidEffect" | "InvalidTtl" | { TopologyRevisionConflict: { expected: number; current: number } } | { StateRevisionConflict: { expected: number; current: number } } | { UnknownLed: { led_id: LightingLedId } } | { OverlayFull: { capacity: number } } | "TransactionBusy" | "InvalidTransaction" | "TransactionExpired" | { TransactionIncomplete: { expected: number; received: number } };
+export type LightingError = "Unsupported" | "InvalidRequest" | "InvalidEffect" | "InvalidTtl" | { TopologyRevisionConflict: { expected: number; current: number } } | { StateRevisionConflict: { expected: number; current: number } } | { UnknownLed: { led_id: LightingLedId } } | { OverlayFull: { capacity: number } } | "TransactionBusy" | "InvalidTransaction" | "TransactionExpired" | { TransactionIncomplete: { expected: number; received: number } } | { UnknownLayer: { layer: number } } | { SceneFull: { capacity: number } };
 
 /**
  *r" One concrete output on one lighting node.
@@ -682,6 +720,15 @@ export interface LightingOutput {
     pixel_count: number;
     capabilities: LightingOutputCapabilities;
     coverage: LightingOutputCoverage;
+}
+
+/**
+ *r" One durable scene cell: an effect bound to a stable LED on one layer.
+ */
+export interface LightingSceneCell {
+    layer: number;
+    led_id: LightingLedId;
+    effect: LightingEffect;
 }
 
 /**
@@ -721,6 +768,14 @@ export interface LightingOverlayCell {
 }
 
 /**
+ *r" Opaque scene transaction token allocated by the firmware.
+ */
+export interface LightingSceneTransaction {
+    id: number;
+    cell_count: number;
+}
+
+/**
  *r" Opaque transaction token allocated by the firmware.
  */
 export interface LightingOverlayTransaction {
@@ -747,6 +802,39 @@ export interface LightingKeySize {
 export interface LightingPageRequest {
     topology_revision: number;
     offset: number;
+}
+
+/**
+ *r" Revision-pinned request for one scene page. `revision` is the expected
+ *r" [`LightingState::revision`]; a stale read is rejected so multi-page
+ *r" reads stay self-consistent.
+ */
+export interface LightingScenePageRequest {
+    revision: number;
+    offset: number;
+}
+
+/**
+ *r" Scene limits and current occupancy. Kept out of
+ *r" [`LightingCapabilities`]/[`LightingState`] so their postcard layout is
+ *r" unchanged for existing hosts; discovery uses
+ *r" [`LightingFeatureFlags::LAYER_SCENES`] plus this endpoint.
+ */
+export interface LightingSceneStatus {
+    /**
+     *r" Current [`LightingState::revision`]; scene mutations advance it.
+     */
+    revision: number;
+    /**
+     *r" Maximum stored scene cells. `0` means scenes are absent.
+     */
+    capacity: number;
+    scene_len: number;
+    policy: LightingLayerPolicy;
+    /**
+     *r" Cells per `GetLightingScenes` page and per replacement chunk.
+     */
+    chunk_capacity: number;
 }
 
 /**
@@ -823,7 +911,16 @@ export interface LightingBackgroundState {
  */
 export type LightingOutputCoverage = "Complete" | "Sparse";
 
+/**
+ *r" Wire mirror of the engine's layer composition policy.
+ */
+export type LightingLayerPolicy = "EffectiveOnly" | "ActiveStack";
+
 export interface AbortLightingOverlayReplaceRequest {
+    transaction_id: number;
+}
+
+export interface AbortLightingSceneReplaceRequest {
     transaction_id: number;
 }
 
@@ -832,6 +929,10 @@ export interface ClearLightingOverlayRequest {
 }
 
 export interface CommitLightingOverlayReplaceRequest {
+    transaction_id: number;
+}
+
+export interface CommitLightingSceneReplaceRequest {
     transaction_id: number;
 }
 
@@ -883,9 +984,19 @@ export interface LightingZonesPage {
     items: LightingZone[];
 }
 
+export interface SetLightingLayerPolicyRequest {
+    expected_revision: number;
+    policy: LightingLayerPolicy;
+}
+
 export interface SetLightingOverlayRequest {
     expected_revision: number;
     cell: LightingOverlayCell;
+}
+
+export interface SetLightingSceneCellRequest {
+    expected_revision: number;
+    cell: LightingSceneCell;
 }
 
 export interface SetLightingStateRequest {
@@ -895,6 +1006,12 @@ export interface SetLightingStateRequest {
 
 export interface UnsetLightingOverlayRequest {
     expected_revision: number;
+    led_id: LightingLedId;
+}
+
+export interface UnsetLightingSceneCellRequest {
+    expected_revision: number;
+    layer: number;
     led_id: LightingLedId;
 }
 
@@ -927,14 +1044,18 @@ export class RynkClient {
     free(): void;
     [Symbol.dispose](): void;
     abort_lighting_overlay_replace(request: AbortLightingOverlayReplaceRequest): Promise<void>;
+    abort_lighting_scene_replace(request: AbortLightingSceneReplaceRequest): Promise<void>;
     begin_lighting_overlay_replace(request: BeginLightingOverlayReplaceRequest): Promise<LightingOverlayTransaction>;
+    begin_lighting_scene_replace(request: BeginLightingSceneReplaceRequest): Promise<LightingSceneTransaction>;
     bootloader_jump(): Promise<void>;
     clear_ble_profile(slot: number): Promise<void>;
     clear_lighting_overlay(request: ClearLightingOverlayRequest): Promise<LightingState>;
     commit_lighting_overlay_replace(request: CommitLightingOverlayReplaceRequest): Promise<LightingState>;
+    commit_lighting_scene_replace(request: CommitLightingSceneReplaceRequest): Promise<LightingState>;
     get_battery_status(): Promise<BatteryStatus>;
     get_behavior(): Promise<BehaviorConfig>;
     get_ble_status(): Promise<BleStatus>;
+    get_build_info(): Promise<BuildInfo>;
     get_capabilities(): Promise<DeviceCapabilities>;
     get_combo(index: number): Promise<Combo>;
     get_combo_bulk(start_index: number): Promise<GetComboBulkResponse>;
@@ -955,6 +1076,8 @@ export class RynkClient {
     get_lighting_outputs(request: LightingPageRequest): Promise<LightingOutputsPage>;
     get_lighting_physical_keys(request: LightingPageRequest): Promise<LightingPhysicalKeysPage>;
     get_lighting_routes(request: LightingPageRequest): Promise<LightingRoutesPage>;
+    get_lighting_scene_status(): Promise<LightingSceneStatus>;
+    get_lighting_scenes(request: LightingScenePageRequest): Promise<LightingScenesPage>;
     get_lighting_state(): Promise<LightingState>;
     get_lighting_zone_memberships(request: LightingPageRequest): Promise<LightingZoneMembershipsPage>;
     get_lighting_zones(request: LightingPageRequest): Promise<LightingZonesPage>;
@@ -975,7 +1098,9 @@ export class RynkClient {
      * runs concurrently with the request methods.
      */
     next_topic(): Promise<TopicEvent>;
+    peripheral_bootloader_jump(slot: number): Promise<void>;
     put_lighting_overlay_chunk(request: PutLightingOverlayChunkRequest): Promise<void>;
+    put_lighting_scene_chunk(request: PutLightingSceneChunkRequest): Promise<void>;
     reboot(): Promise<void>;
     set_behavior(config: BehaviorConfig): Promise<void>;
     set_combo(index: number, config: Combo): Promise<void>;
@@ -985,7 +1110,9 @@ export class RynkClient {
     set_fork(index: number, config: Fork): Promise<void>;
     set_key(layer: number, row: number, col: number, action: KeyAction): Promise<void>;
     set_keymap_bulk(request: SetKeymapBulkRequest): Promise<void>;
+    set_lighting_layer_policy(request: SetLightingLayerPolicyRequest): Promise<LightingState>;
     set_lighting_overlay(request: SetLightingOverlayRequest): Promise<LightingState>;
+    set_lighting_scene_cell(request: SetLightingSceneCellRequest): Promise<LightingState>;
     set_lighting_state(request: SetLightingStateRequest): Promise<LightingState>;
     set_macro(offset: number, data: MacroData): Promise<void>;
     set_morse(index: number, config: Morse): Promise<void>;
@@ -994,6 +1121,7 @@ export class RynkClient {
     switch_ble_profile(slot: number): Promise<void>;
     unlock_poll(): Promise<LockStatus>;
     unset_lighting_overlay(request: UnsetLightingOverlayRequest): Promise<LightingState>;
+    unset_lighting_scene_cell(request: UnsetLightingSceneCellRequest): Promise<LightingState>;
 }
 
 /**
@@ -1014,14 +1142,18 @@ export interface InitOutput {
     readonly __wbg_rynkclient_free: (a: number, b: number) => void;
     readonly connect: (a: any) => any;
     readonly rynkclient_abort_lighting_overlay_replace: (a: number, b: any) => any;
+    readonly rynkclient_abort_lighting_scene_replace: (a: number, b: any) => any;
     readonly rynkclient_begin_lighting_overlay_replace: (a: number, b: any) => any;
+    readonly rynkclient_begin_lighting_scene_replace: (a: number, b: any) => any;
     readonly rynkclient_bootloader_jump: (a: number) => any;
     readonly rynkclient_clear_ble_profile: (a: number, b: number) => any;
     readonly rynkclient_clear_lighting_overlay: (a: number, b: any) => any;
     readonly rynkclient_commit_lighting_overlay_replace: (a: number, b: any) => any;
+    readonly rynkclient_commit_lighting_scene_replace: (a: number, b: any) => any;
     readonly rynkclient_get_battery_status: (a: number) => any;
     readonly rynkclient_get_behavior: (a: number) => any;
     readonly rynkclient_get_ble_status: (a: number) => any;
+    readonly rynkclient_get_build_info: (a: number) => any;
     readonly rynkclient_get_capabilities: (a: number) => any;
     readonly rynkclient_get_combo: (a: number, b: number) => any;
     readonly rynkclient_get_combo_bulk: (a: number, b: number) => any;
@@ -1042,6 +1174,8 @@ export interface InitOutput {
     readonly rynkclient_get_lighting_outputs: (a: number, b: any) => any;
     readonly rynkclient_get_lighting_physical_keys: (a: number, b: any) => any;
     readonly rynkclient_get_lighting_routes: (a: number, b: any) => any;
+    readonly rynkclient_get_lighting_scene_status: (a: number) => any;
+    readonly rynkclient_get_lighting_scenes: (a: number, b: any) => any;
     readonly rynkclient_get_lighting_state: (a: number) => any;
     readonly rynkclient_get_lighting_zone_memberships: (a: number, b: any) => any;
     readonly rynkclient_get_lighting_zones: (a: number, b: any) => any;
@@ -1056,7 +1190,9 @@ export interface InitOutput {
     readonly rynkclient_get_wpm: (a: number) => any;
     readonly rynkclient_lock: (a: number) => any;
     readonly rynkclient_next_topic: (a: number) => any;
+    readonly rynkclient_peripheral_bootloader_jump: (a: number, b: number) => any;
     readonly rynkclient_put_lighting_overlay_chunk: (a: number, b: any) => any;
+    readonly rynkclient_put_lighting_scene_chunk: (a: number, b: any) => any;
     readonly rynkclient_reboot: (a: number) => any;
     readonly rynkclient_set_behavior: (a: number, b: any) => any;
     readonly rynkclient_set_combo: (a: number, b: number, c: any) => any;
@@ -1066,7 +1202,9 @@ export interface InitOutput {
     readonly rynkclient_set_fork: (a: number, b: number, c: any) => any;
     readonly rynkclient_set_key: (a: number, b: number, c: number, d: number, e: any) => any;
     readonly rynkclient_set_keymap_bulk: (a: number, b: any) => any;
+    readonly rynkclient_set_lighting_layer_policy: (a: number, b: any) => any;
     readonly rynkclient_set_lighting_overlay: (a: number, b: any) => any;
+    readonly rynkclient_set_lighting_scene_cell: (a: number, b: any) => any;
     readonly rynkclient_set_lighting_state: (a: number, b: any) => any;
     readonly rynkclient_set_macro: (a: number, b: number, c: any) => any;
     readonly rynkclient_set_morse: (a: number, b: number, c: any) => any;
@@ -1075,6 +1213,7 @@ export interface InitOutput {
     readonly rynkclient_switch_ble_profile: (a: number, b: number) => any;
     readonly rynkclient_unlock_poll: (a: number) => any;
     readonly rynkclient_unset_lighting_overlay: (a: number, b: any) => any;
+    readonly rynkclient_unset_lighting_scene_cell: (a: number, b: any) => any;
     readonly init: () => void;
     readonly wasm_bindgen_131d9c369ca8bda___convert__closures_____invoke___wasm_bindgen_131d9c369ca8bda___JsValue__core_7d5f0a2ba6a62c33___result__Result_____wasm_bindgen_131d9c369ca8bda___JsError___true_: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen_131d9c369ca8bda___convert__closures_____invoke___js_sys_bfa7dc20d6a7225c___Function_fn_wasm_bindgen_131d9c369ca8bda___JsValue_____wasm_bindgen_131d9c369ca8bda___sys__Undefined___js_sys_bfa7dc20d6a7225c___Function_fn_wasm_bindgen_131d9c369ca8bda___JsValue_____wasm_bindgen_131d9c369ca8bda___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;

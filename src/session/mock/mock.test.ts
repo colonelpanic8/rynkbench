@@ -198,6 +198,84 @@ describe("lighting overlay", () => {
   });
 });
 
+describe("lighting scenes", () => {
+  const sceneCell = (layer: number, led_id: number) => ({
+    layer,
+    led_id,
+    effect: { Solid: { color: { r: 0, g: 128, b: 255 } } },
+  });
+
+  it("reports status and the seeded number-row scene on the Glove80", async () => {
+    await withSession(glove80Board, async (session) => {
+      const status = await session.lighting.scenes.sceneStatus();
+      expect(status.capacity).toBe(256);
+      expect(status.policy).toBe("EffectiveOnly");
+      expect(status.chunk_capacity).toBeGreaterThan(0);
+      const cells = await session.lighting.scenes.readScenes();
+      expect(cells).toHaveLength(status.scene_len);
+      expect(cells.length).toBe(10);
+      expect(cells.every((cell) => cell.layer === 1)).toBe(true);
+      // Advertised via the LAYER_SCENES feature bit too.
+      expect((await session.lighting.capabilities()).features & (1 << 6)).not.toBe(0);
+    });
+  });
+
+  it("round-trips replaceScenes with a revision bump and a LightingChange push", async () => {
+    await withSession(glove80Board, async (session) => {
+      const events: TopicEvent[] = [];
+      session.onTopic((event) => events.push(event));
+      const before = await session.lighting.scenes.sceneStatus();
+      const next = [sceneCell(0, 0), sceneCell(2, 41)];
+      const state = await session.lighting.scenes.replaceScenes(next);
+      expect(state.revision).toBeGreaterThan(before.revision);
+      const readBack = await session.lighting.scenes.readScenes();
+      expect(readBack).toHaveLength(2);
+      expect(readBack).toContainEqual(next[0]);
+      expect(readBack).toContainEqual(next[1]);
+      expect((await session.lighting.scenes.sceneStatus()).scene_len).toBe(2);
+      expect(events.filter((event) => "LightingChange" in event).length).toBe(1);
+    });
+  });
+
+  it("round-trips the layer policy with a revision bump", async () => {
+    await withSession(glove80Board, async (session) => {
+      const before = await session.lighting.scenes.sceneStatus();
+      const state = await session.lighting.scenes.setLayerPolicy("ActiveStack");
+      expect(state.revision).toBeGreaterThan(before.revision);
+      expect((await session.lighting.scenes.sceneStatus()).policy).toBe("ActiveStack");
+    });
+  });
+
+  it("rejects unknown layers, unknown LEDs, and over-capacity tables untouched", async () => {
+    await withSession(glove80Board, async (session) => {
+      const caps = await session.device.capabilities();
+      await expect(
+        session.lighting.scenes.replaceScenes([sceneCell(caps.num_layers, 0)]),
+      ).rejects.toThrow(/layer .* out of range/);
+      await expect(session.lighting.scenes.replaceScenes([sceneCell(0, 999)])).rejects.toThrow(
+        /unknown LED/,
+      );
+      const status = await session.lighting.scenes.sceneStatus();
+      const tooMany = Array.from({ length: status.capacity + 1 }, () => sceneCell(0, 0));
+      await expect(session.lighting.scenes.replaceScenes(tooMany)).rejects.toThrow(/capacity/);
+      // Failed writes leave the seeded table intact.
+      expect((await session.lighting.scenes.readScenes()).length).toBe(10);
+    });
+  });
+
+  it("rejects every scene op on the pre-scene Ortho 60", async () => {
+    await withSession(ortho60Board, async (session) => {
+      expect((await session.lighting.capabilities()).features & (1 << 6)).toBe(0);
+      await expect(session.lighting.scenes.sceneStatus()).rejects.toThrow(/does not support/);
+      await expect(session.lighting.scenes.readScenes()).rejects.toThrow(/does not support/);
+      await expect(session.lighting.scenes.replaceScenes([])).rejects.toThrow(/does not support/);
+      await expect(session.lighting.scenes.setLayerPolicy("ActiveStack")).rejects.toThrow(
+        /does not support/,
+      );
+    });
+  });
+});
+
 describe("lighting state", () => {
   it("applies setState with a revision bump and a LightingChange push", async () => {
     await withSession(glove80Board, async (session) => {

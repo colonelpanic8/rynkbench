@@ -548,6 +548,23 @@ class StubSession implements RynkSession {
       this.lightingRevision += 1;
       return this.lightingStateNow();
     },
+    // The stub predates layer scenes; every scene op reports unsupported, so
+    // the UI exercises the localStorage fallback path.
+    scenes: {
+      sceneStatus: async (): Promise<never> => {
+        await lag();
+        throw new Error("this firmware does not support on-device layer scenes");
+      },
+      readScenes: async (): Promise<never> => {
+        throw new Error("this firmware does not support on-device layer scenes");
+      },
+      replaceScenes: async (): Promise<never> => {
+        throw new Error("this firmware does not support on-device layer scenes");
+      },
+      setLayerPolicy: async (): Promise<never> => {
+        throw new Error("this firmware does not support on-device layer scenes");
+      },
+    },
   };
 
   private lightingStateNow(): LightingState {

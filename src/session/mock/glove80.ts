@@ -14,6 +14,7 @@ import type {
   HidKeyCode,
   Key,
   KeyAction,
+  LightingSceneCell,
   LightingZone,
   Morse,
 } from "../../vendor/rynk-wasm/rynk_wasm";
@@ -216,6 +217,16 @@ const seedForks: Fork[] = [
   },
 ];
 
+// A small on-device scene: layer 1 tints the number row amber, the durable
+// per-layer lighting the real firmware keeps in flash.
+const seedScenes: LightingSceneCell[] = gridEntries
+  .filter(({ row, col }) => /^[0-9]$/.test(labels[`${row},${col}`] ?? ""))
+  .map(({ logical }) => ({
+    layer: 1,
+    led_id: boardKeys.get(logical)!.led,
+    effect: { Solid: { color: { r: 255, g: 170, b: 30 } } },
+  }));
+
 const info: DeviceInfo = {
   rmk_version: { major: 0, minor: 7, patch: 0 },
   vendor_id: 0x16c0,
@@ -259,4 +270,6 @@ export const glove80Board: BoardSpec = {
   seedCombos,
   seedMorse,
   seedForks,
+  sceneCapacity: 256,
+  seedScenes,
 };

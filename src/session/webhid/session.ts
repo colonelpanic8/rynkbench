@@ -12,9 +12,12 @@ import type {
   Fork,
   KeyAction,
   LightingCapabilities,
+  LightingLayerPolicy,
   LightingMutableState,
   LightingOverlayCell,
   LightingPageRequest,
+  LightingSceneCell,
+  LightingSceneStatus,
   LightingState,
   Morse,
   RynkClient,
@@ -42,6 +45,11 @@ interface LightingPage<T> {
 }
 
 const TOPOLOGY_READ_ATTEMPTS = 3;
+const SCENE_READ_ATTEMPTS = 3;
+
+// LightingFeatureFlags::LAYER_SCENES (rmk-types); the generated .d.ts erases
+// the bitflag constants to a plain number, so the value is mirrored here.
+const LAYER_SCENES = 1 << 6;
 
 /** The topology changed under a paged read; the whole read restarts. */
 class TopologyDrift extends Error {
@@ -137,6 +145,12 @@ export class WebHidSession implements RynkSession {
         );
       },
       setState: (state) => this.run(() => this.setLightingState(state)),
+      scenes: {
+        sceneStatus: () => this.run(() => this.readSceneStatus()),
+        readScenes: () => this.run(() => this.readAllScenes()),
+        replaceScenes: (cells) => this.run(() => this.replaceSceneCells(cells)),
+        setLayerPolicy: (policy) => this.run(() => this.setSceneLayerPolicy(policy)),
+      },
     };
 
     this.combos = {
@@ -443,5 +457,90 @@ export class WebHidSession implements RynkSession {
       this.chunkCapacity = Math.max(1, caps.overlay_chunk_capacity);
     }
     return this.chunkCapacity;
+  }
+
+  private async readSceneStatus(): Promise<LightingSceneStatus> {
+    // Feature-gate before touching the endpoint: pre-scene firmware would
+    // reject the unknown request with an opaque protocol error.
+    const caps = await this.client.get_lighting_capabilities();
+    if ((caps.features & LAYER_SCENES) === 0) {
+      throw new Error("this firmware does not support on-device layer scenes");
+    }
+    return this.client.get_lighting_scene_status();
+  }
+
+  private async readAllScenes(): Promise<LightingSceneCell[]> {
+    // Scene pages are pinned to the lighting state revision; a mutation
+    // mid-read rejects the stale page, so restart the whole read.
+    let lastConflict: unknown;
+    for (let attempt = 0; attempt < SCENE_READ_ATTEMPTS; attempt++) {
+      const status = await this.readSceneStatus();
+      try {
+        const cells: LightingSceneCell[] = [];
+        while (cells.length < status.scene_len) {
+          const page = await this.client.get_lighting_scenes({
+            revision: status.revision,
+            offset: cells.length,
+          });
+          if (page.revision !== status.revision || page.total_count !== status.scene_len) {
+            throw new Error(
+              `StateRevisionConflict: scene table changed mid-read (${status.revision} -> ${page.revision})`,
+            );
+          }
+          if (page.items.length === 0) {
+            throw new Error(`scene read stalled at cell ${cells.length} of ${status.scene_len}`);
+          }
+          cells.push(...page.items);
+        }
+        return cells;
+      } catch (error) {
+        if (!String(error).includes("RevisionConflict")) throw error;
+        lastConflict = error;
+      }
+    }
+    throw new Error(`scene table kept changing across ${SCENE_READ_ATTEMPTS} read attempts`, {
+      cause: lastConflict,
+    });
+  }
+
+  private async replaceSceneCells(cells: LightingSceneCell[]): Promise<LightingState> {
+    const status = await this.readSceneStatus();
+    const chunkCapacity = Math.max(1, status.chunk_capacity);
+    const transaction = await this.client.begin_lighting_scene_replace({
+      expected_revision: status.revision,
+      cell_count: cells.length,
+    });
+    try {
+      for (let offset = 0; offset < cells.length; offset += chunkCapacity) {
+        await this.client.put_lighting_scene_chunk({
+          transaction_id: transaction.id,
+          offset,
+          cells: cells.slice(offset, offset + chunkCapacity),
+        });
+      }
+      return await this.client.commit_lighting_scene_replace({
+        transaction_id: transaction.id,
+      });
+    } catch (error) {
+      await this.client
+        .abort_lighting_scene_replace({ transaction_id: transaction.id })
+        .catch(() => undefined);
+      throw error;
+    }
+  }
+
+  private async setSceneLayerPolicy(policy: LightingLayerPolicy): Promise<LightingState> {
+    // Same one-retry revision handshake as setLightingState.
+    const current = await this.readSceneStatus();
+    try {
+      return await this.client.set_lighting_layer_policy({
+        expected_revision: current.revision,
+        policy,
+      });
+    } catch (error) {
+      if (!String(error).includes("RevisionConflict")) throw error;
+      const fresh = await this.client.get_lighting_scene_status();
+      return this.client.set_lighting_layer_policy({ expected_revision: fresh.revision, policy });
+    }
   }
 }

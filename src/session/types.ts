@@ -34,8 +34,11 @@ import type {
   LightingMatrixPosition,
   LightingMutableState,
   LightingOverlayCell,
+  LightingLayerPolicy,
   LightingPhysicalKey,
   LightingRoute,
+  LightingSceneCell,
+  LightingSceneStatus,
   LightingState,
   LightingZone,
   LightingZoneId,
@@ -88,6 +91,21 @@ export interface LightingOps {
   readOverlay(): Promise<LightingOverlayCell[]>;
   /** Mutate background/output state; revision handshake is the backend's job. */
   setState(state: LightingMutableState): Promise<LightingState>;
+  /** Durable per-layer scenes (firmware feature; localStorage presets are the
+   *  fallback). Supported iff the firmware advertises LAYER_SCENES and
+   *  sceneStatus() reports capacity > 0; on unsupported firmware
+   *  sceneStatus() rejects with a descriptive error. */
+  scenes: LightingSceneOps;
+}
+
+export interface LightingSceneOps {
+  sceneStatus(): Promise<LightingSceneStatus>;
+  /** Read the whole stored scene table (paging is the backend's job). */
+  readScenes(): Promise<LightingSceneCell[]>;
+  /** Atomically replace the whole scene table (wraps the chunked transaction). */
+  replaceScenes(cells: LightingSceneCell[]): Promise<LightingState>;
+  /** Set the layer-composition policy; revision handshake is the backend's job. */
+  setLayerPolicy(policy: LightingLayerPolicy): Promise<LightingState>;
 }
 
 /** Slot-table ops (combos, morse, forks) share one shape: the backend reads

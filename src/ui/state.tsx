@@ -15,8 +15,11 @@ import type {
   KeyAction,
   LedIndicator,
   LightingCapabilities,
+  LightingLayerPolicy,
   LightingMutableState,
   LightingOverlayCell,
+  LightingSceneCell,
+  LightingSceneStatus,
   LightingState,
   Morse,
   ProtocolVersion,
@@ -46,6 +49,10 @@ export interface ConnectedBundle {
   connection: ConnectionStatus | null;
   lightingState: LightingState | null;
   overlay: LightingOverlayCell[];
+  /** null when the firmware has no layer-scene support (local-preset mode). */
+  sceneStatus: LightingSceneStatus | null;
+  /** On-device scene table; always empty when sceneStatus is null. */
+  scenes: LightingSceneCell[];
   /** Advanced tables; empty arrays when the device reports zero capacity. */
   combos: Combo[];
   morse: Morse[];
@@ -91,6 +98,10 @@ export interface WorkbenchState {
   applied: Record<number, LightingOverlayCell>;
   /** Overlay as the user wants it (staged), keyed by LED id. */
   draft: Record<number, LightingOverlayCell>;
+  /** On-device scene table as last known (empty without firmware support). */
+  scenes: LightingSceneCell[];
+  /** Layer-composition policy; null when scenes are unsupported. */
+  scenePolicy: LightingLayerPolicy | null;
   selection: Selection | null;
   /** `${layer}:${row}:${col}` or `e:${layer}:${id}` → write status. */
   pending: Record<string, PendingInfo>;
@@ -139,6 +150,8 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     lightingState: bundle.lightingState,
     applied,
     draft: { ...applied },
+    scenes: bundle.scenes,
+    scenePolicy: bundle.sceneStatus?.policy ?? null,
     selection: null,
     pending: {},
     lightingBusy: false,
@@ -185,12 +198,21 @@ export type WorkbenchAction =
   | { type: "topicLayer"; layer: number }
   | { type: "topicBattery"; battery: BatteryStatus }
   | { type: "topicConnection"; connection: ConnectionStatus }
-  | { type: "lightingRefresh"; state: LightingState; overlay: LightingOverlayCell[] }
+  | {
+      type: "lightingRefresh";
+      state: LightingState;
+      overlay: LightingOverlayCell[];
+      /** Present only when the device supports on-device scenes. */
+      scenes?: LightingSceneCell[];
+    }
   | { type: "paint"; cells: LightingOverlayCell[] }
   | { type: "erase"; ledIds: number[] }
   | { type: "draftReset" }
+  | { type: "draftSet"; cells: LightingOverlayCell[] }
   | { type: "lightingBusy"; busy: boolean; error?: string | null }
   | { type: "overlayApplied"; state: LightingState; cells: LightingOverlayCell[] }
+  | { type: "scenesApplied"; state: LightingState; cells: LightingSceneCell[] }
+  | { type: "scenePolicySet"; state: LightingState; policy: LightingLayerPolicy }
   | { type: "hoverLeds"; leds: number[] | null }
   | { type: "lightingSelect"; leds: number[] }
   | { type: "lightingStateSet"; state: LightingState }
@@ -311,6 +333,7 @@ export function makeWorkbenchReducer(cols: number) {
           lightingState: act.state,
           applied,
           draft: draftWasClean ? { ...applied } : state.draft,
+          scenes: act.scenes ?? state.scenes,
         };
       }
       case "paint": {
@@ -333,6 +356,8 @@ export function makeWorkbenchReducer(cols: number) {
       }
       case "draftReset":
         return { ...state, draft: { ...state.applied }, lightingError: null };
+      case "draftSet":
+        return { ...state, draft: cellsToRecord(act.cells), lightingError: null };
       case "lightingBusy":
         return {
           ...state,
@@ -353,6 +378,22 @@ export function makeWorkbenchReducer(cols: number) {
           lightingSelection: [],
         };
       }
+      case "scenesApplied":
+        return {
+          ...state,
+          lightingState: act.state,
+          scenes: act.cells,
+          lightingBusy: false,
+          lightingError: null,
+        };
+      case "scenePolicySet":
+        return {
+          ...state,
+          lightingState: act.state,
+          scenePolicy: act.policy,
+          lightingBusy: false,
+          lightingError: null,
+        };
       case "hoverLeds":
         return { ...state, hoverLeds: act.leds };
       case "lightingSelect":
@@ -481,6 +522,9 @@ export interface WorkbenchIo {
   clearOverlay(): void;
   refreshLighting(): void;
   setLightingState(state: LightingMutableState): void;
+  /** Replace the on-device scene table (only when scenes are supported). */
+  applyScenes(cells: LightingSceneCell[]): void;
+  setScenePolicy(policy: LightingLayerPolicy): void;
   setSlot<K extends SlotKind>(kind: K, index: number, value: SlotValueOf<K>): void;
   writeMacros(bytes: Uint8Array): void;
   setBehavior(config: BehaviorConfig): void;
@@ -508,6 +552,7 @@ export function makeIo(
   dispatch: Dispatch<WorkbenchAction>,
   cols: number,
   onDisconnect: () => void,
+  scenesSupported = false,
 ): WorkbenchIo {
   return {
     setKey(layer, row, col, action) {
@@ -568,9 +613,12 @@ export function makeIo(
       Promise.all([
         session.lighting.state(),
         session.lighting.readOverlay().catch(() => Object.values(getState().applied)),
+        scenesSupported
+          ? session.lighting.scenes.readScenes().catch(() => getState().scenes)
+          : Promise.resolve(undefined),
       ]).then(
-        ([lightingState, overlay]) =>
-          dispatch({ type: "lightingRefresh", state: lightingState, overlay }),
+        ([lightingState, overlay, scenes]) =>
+          dispatch({ type: "lightingRefresh", state: lightingState, overlay, scenes }),
         () => {},
       );
     },
@@ -578,6 +626,20 @@ export function makeIo(
       dispatch({ type: "lightingBusy", busy: true, error: null });
       session.lighting.setState(mutable).then(
         (lightingState) => dispatch({ type: "lightingStateSet", state: lightingState }),
+        (err) => dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
+      );
+    },
+    applyScenes(cells) {
+      dispatch({ type: "lightingBusy", busy: true, error: null });
+      session.lighting.scenes.replaceScenes(cells).then(
+        (lightingState) => dispatch({ type: "scenesApplied", state: lightingState, cells }),
+        (err) => dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
+      );
+    },
+    setScenePolicy(policy) {
+      dispatch({ type: "lightingBusy", busy: true, error: null });
+      session.lighting.scenes.setLayerPolicy(policy).then(
+        (lightingState) => dispatch({ type: "scenePolicySet", state: lightingState, policy }),
         (err) => dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
       );
     },

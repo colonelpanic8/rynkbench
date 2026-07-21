@@ -1,11 +1,5 @@
 # rynk-wasm
 
-The checked-in browser package is generated from
-`dependencies/rmk/rynk/rynk-wasm` at the exact RMK submodule revision recorded
-in `provenance.json`. `make check` verifies that revision and the generated
-WASM checksum so firmware and native/browser Rynk clients cannot silently
-drift apart.
-
 `rynk-wasm` is the browser-facing Rynk host client. It compiles the typed
 `rynk::Client` protocol layer to wasm and exposes a `RynkClient` API to
 JavaScript.
