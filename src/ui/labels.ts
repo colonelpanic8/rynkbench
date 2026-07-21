@@ -85,14 +85,14 @@ const HID_SYMBOLS: Partial<Record<HidKeyCode, string>> = {
   KbMute: "Mute",
   KbVolumeUp: "Vol+",
   KbVolumeDown: "Vol−",
-  LCtrl: "⌃",
-  LShift: "⇧",
-  LAlt: "⌥",
-  LGui: "⌘",
-  RCtrl: "⌃",
-  RShift: "⇧",
-  RAlt: "⌥",
-  RGui: "⌘",
+  LCtrl: "L⌃",
+  LShift: "L⇧",
+  LAlt: "L⌥",
+  LGui: "L⌘",
+  RCtrl: "R⌃",
+  RShift: "R⇧",
+  RAlt: "R⌥",
+  RGui: "R⌘",
   MouseUp: "🖱↑",
   MouseDown: "🖱↓",
   MouseLeft: "🖱←",
@@ -120,10 +120,14 @@ export function hidName(code: HidKeyCode): string {
 
 export function modifierSymbols(mods: ModifierCombination): string {
   let out = "";
-  if (mods.left_ctrl || mods.right_ctrl) out += "⌃";
-  if (mods.left_alt || mods.right_alt) out += "⌥";
-  if (mods.left_shift || mods.right_shift) out += "⇧";
-  if (mods.left_gui || mods.right_gui) out += "⌘";
+  if (mods.left_ctrl) out += "L⌃";
+  if (mods.right_ctrl) out += "R⌃";
+  if (mods.left_alt) out += "L⌥";
+  if (mods.right_alt) out += "R⌥";
+  if (mods.left_shift) out += "L⇧";
+  if (mods.right_shift) out += "R⇧";
+  if (mods.left_gui) out += "L⌘";
+  if (mods.right_gui) out += "R⌘";
   return out;
 }
 

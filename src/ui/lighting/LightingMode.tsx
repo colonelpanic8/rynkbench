@@ -316,7 +316,6 @@ export function LightingMode() {
   // It stays dimmed so the paint color remains the loudest thing.
   const cols = bundle.caps.num_cols;
   const legendFor = (key: KeyView): KeyDecor["glyph"] => {
-    if (key.label) return { text: key.label, dim: true };
     const action = effectiveAction(
       state.layers,
       state.activeLayers,
@@ -324,7 +323,8 @@ export function LightingMode() {
       key.row * cols + key.col,
     );
     const text = keyActionGlyph(action).text;
-    return text ? { text, dim: true } : undefined;
+    if (text) return { text, dim: true };
+    return key.label ? { text: key.label, dim: true } : undefined;
   };
 
   const decorFor = (key: KeyView): KeyDecor => {
