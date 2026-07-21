@@ -318,6 +318,7 @@ describe("compiled firmware lighting", () => {
       expect((await session.lighting.capabilities()).features & (1 << 9)).not.toBe(0);
       expect(await session.lighting.outputMode()).toMatchObject({
         mode: "PoweredOnly",
+        powered_only_scope: "Local",
         cycle_user_action: 13,
         wake_layer: 2,
       });

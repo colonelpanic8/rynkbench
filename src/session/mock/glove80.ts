@@ -361,6 +361,7 @@ export const glove80Board: BoardSpec = {
     powered: false,
     wake_active: true,
     effective_enabled: true,
+    powered_only_scope: "Local",
     cycle_user_action: 13,
     wake_layer: 2,
     indicator: {

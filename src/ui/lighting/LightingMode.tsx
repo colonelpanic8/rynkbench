@@ -291,6 +291,7 @@ function FirmwareRulesPanel({ activeCount }: { activeCount: number }) {
               : "plugged-in only"}
           {` · ${outputMode.effective_enabled ? "lights on" : "lights off"}`}
           {` · ${outputMode.powered ? "USB powered" : "on battery"}`}
+          {outputMode.powered_only_scope === "Local" && " · power evaluated per half"}
         </p>
       )}
       <details className="mt-2 rounded-lg border border-line-soft bg-well px-3 py-2">
