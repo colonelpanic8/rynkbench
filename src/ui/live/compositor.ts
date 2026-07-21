@@ -51,9 +51,10 @@ export function compositeScenes(
 }
 
 /**
- * The binding a key resolves to right now: walk from the effective layer down
- * to the default floor, skipping Transparent fall-throughs. The default layer
- * is the last consulted; layers below it never participate.
+ * The binding a key resolves to right now. RMK walks every *active* layer from
+ * the top index down, but only the effective and default layers are known
+ * active here — indices between them are not reported — so the walk consults
+ * exactly those two, mirroring what compositeScenes does for lighting.
  */
 export function effectiveAction(
   layers: KeyAction[][],
@@ -61,8 +62,9 @@ export function effectiveAction(
   defaultLayer: number,
   index: number,
 ): KeyAction {
-  const top = Math.max(effectiveLayer, defaultLayer);
-  for (let layer = top; layer >= defaultLayer; layer--) {
+  const known =
+    effectiveLayer > defaultLayer ? [effectiveLayer, defaultLayer] : [Math.max(effectiveLayer, defaultLayer)];
+  for (const layer of known) {
     const action = layers[layer]?.[index];
     if (action === undefined) continue;
     // The floor's action stands even when Transparent (nothing lies below it).

@@ -30,6 +30,12 @@ describe("effectiveAction", () => {
     expect(effectiveAction(layers, 2, 0, 0)).toEqual(tap("A"));
   });
 
+  it("consults only the known-active layers, never unreported middles", () => {
+    // L1 is concrete but unreported (possibly inactive): fall through to floor.
+    const l: KeyAction[][] = [[tap("A")], [tap("B")], ["Transparent"]];
+    expect(effectiveAction(l, 2, 0, 0)).toEqual(tap("A"));
+  });
+
   it("stops at the default floor and never consults layers below it", () => {
     // Floor is L1 (Transparent). L0's A must not be reached.
     expect(effectiveAction(layers, 2, 1, 0)).toEqual("Transparent");
