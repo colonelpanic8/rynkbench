@@ -305,6 +305,9 @@ describe("lighting scenes", () => {
 describe("compiled firmware lighting", () => {
   it("exposes keyboard.toml conditional rules and feature flags", async () => {
     await withSession(glove80Board, async (session) => {
+      const magic = (await session.keymap.readAll())[2].actions;
+      expect(magic[3 * 14 + 2]).toEqual({ Single: { User: 13 } });
+      expect(magic[3 * 14 + 3]).toEqual({ Single: { User: 13 } });
       const status = await session.lighting.scenes.conditionalStatus();
       const cells = await session.lighting.scenes.readConditionalScenes();
       expect(cells.length).toBeGreaterThan(10);

@@ -158,7 +158,10 @@ function buildLayers(): KeyAction[][] {
     });
   const base = layerAt(actionForLegend);
   const transparent = layerAt(() => "Transparent");
-  return [base, ...Array.from({ length: NUM_LAYERS - 1 }, () => [...transparent])];
+  const layers = [base, ...Array.from({ length: NUM_LAYERS - 1 }, () => [...transparent])];
+  layers[2][3 * GLOVE80_COLS + 2] = { Single: { User: 13 } };
+  layers[2][3 * GLOVE80_COLS + 3] = { Single: { User: 13 } };
+  return layers;
 }
 
 const capabilities: DeviceCapabilities = {
@@ -304,6 +307,11 @@ for (const [node, leds] of [
     });
   });
 }
+conditionalScenes.push({
+  conditions: { layer: { layer: 2, active: true }, battery: undefined },
+  led_id: ledForLabel("S"),
+  effect: solid(160, 160, 160),
+});
 
 const info: DeviceInfo = {
   rmk_version: { major: 0, minor: 7, patch: 0 },
@@ -365,7 +373,7 @@ export const glove80Board: BoardSpec = {
     cycle_user_action: 13,
     wake_layer: 2,
     indicator: {
-      led_id: 8,
+      led_id: ledForLabel("D"),
       always_on: { Solid: { color: { r: 0, g: 128, b: 0 } } },
       always_off: { Solid: { color: { r: 128, g: 0, b: 0 } } },
       powered_only: { Solid: { color: { r: 0, g: 64, b: 160 } } },
