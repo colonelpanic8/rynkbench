@@ -53,11 +53,11 @@ export function TopBar() {
       <div
         key={state.currentLayer}
         className="animate-pop"
-        title={`Layer ${state.currentLayer} is active on the keyboard right now`}
+        title="Effective layer — the topmost active layer. Other layers can be active beneath it; the firmware reports only the top."
       >
         <Chip tone="accent" className="tnum">
           <span className="size-1.5 rounded-full bg-accent" />
-          Live: L{state.currentLayer}
+          Effective: L{state.currentLayer}
         </Chip>
       </div>
 

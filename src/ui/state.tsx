@@ -29,6 +29,10 @@ import type { KeyboardModel } from "../model/keyboard";
 
 export type Mode = "keymap" | "lighting" | "advanced" | "device";
 
+/** Which lighting surface the canvas edits: the transient overlay, or one
+ *  layer's durable scene table. Only ever a number when scenes are supported. */
+export type LightingTarget = "overlay" | number;
+
 export type Selection =
   | { type: "key"; row: number; col: number }
   | { type: "encoder"; id: number };
@@ -86,6 +90,7 @@ export function slotPendingId(kind: SlotKind, index: number): string {
 export interface WorkbenchState {
   mode: Mode;
   uiLayer: number;
+  /** The effective (topmost active) layer — the only layer the wire reports. */
   currentLayer: number;
   defaultLayer: number;
   layers: KeyAction[][];
@@ -98,6 +103,11 @@ export interface WorkbenchState {
   applied: Record<number, LightingOverlayCell>;
   /** Overlay as the user wants it (staged), keyed by LED id. */
   draft: Record<number, LightingOverlayCell>;
+  /** Which surface the canvas edits: "overlay" or a layer index. */
+  lightingTarget: LightingTarget;
+  /** Per-layer staged scene edits: layer → (led id → cell). A layer's full
+   *  desired table, seeded from `scenes` on first edit; staged = its diff. */
+  layerDrafts: Record<number, Record<number, LightingOverlayCell>>;
   /** On-device scene table as last known (empty without firmware support). */
   scenes: LightingSceneCell[];
   /** Layer-composition policy; null when scenes are unsupported. */
@@ -136,6 +146,58 @@ function cellsToRecord(cells: LightingOverlayCell[]): Record<number, LightingOve
   return out;
 }
 
+/** One layer's stored scene cells, as an overlay-shaped draft (scenes have no
+ *  TTL, so the ttl_ms slot is always empty). This is a layer draft's baseline. */
+function layerSceneCells(
+  scenes: LightingSceneCell[],
+  layer: number,
+): Record<number, LightingOverlayCell> {
+  const out: Record<number, LightingOverlayCell> = {};
+  for (const cell of scenes) {
+    if (cell.layer === layer)
+      out[cell.led_id] = { led_id: cell.led_id, effect: cell.effect, ttl_ms: undefined };
+  }
+  return out;
+}
+
+/** The draft the given target edits, seeding a layer draft from `scenes` when
+ *  the target has not been touched yet. */
+function targetDraft(
+  state: WorkbenchState,
+  target: LightingTarget,
+): Record<number, LightingOverlayCell> {
+  if (target === "overlay") return state.draft;
+  return state.layerDrafts[target] ?? layerSceneCells(state.scenes, target);
+}
+
+/** Write a target's draft back, into `draft` or the right `layerDrafts` slot. */
+function setTargetDraft(
+  state: WorkbenchState,
+  target: LightingTarget,
+  draft: Record<number, LightingOverlayCell>,
+): Partial<WorkbenchState> {
+  return target === "overlay"
+    ? { draft }
+    : { layerDrafts: { ...state.layerDrafts, [target]: draft } };
+}
+
+/** After the scene table changes, re-sync every layer draft that was clean
+ *  against the old table (mirrors the overlay's follow-when-clean rule);
+ *  drafts with staged edits are left untouched. */
+function reseedLayerDrafts(
+  layerDrafts: Record<number, Record<number, LightingOverlayCell>>,
+  oldScenes: LightingSceneCell[],
+  newScenes: LightingSceneCell[],
+): Record<number, Record<number, LightingOverlayCell>> {
+  const next = { ...layerDrafts };
+  for (const key of Object.keys(layerDrafts)) {
+    const layer = Number(key);
+    if (overlaysEqual(layerDrafts[layer], layerSceneCells(oldScenes, layer)))
+      next[layer] = layerSceneCells(newScenes, layer);
+  }
+  return next;
+}
+
 export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
   const applied = cellsToRecord(bundle.overlay);
   return {
@@ -150,6 +212,8 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     lightingState: bundle.lightingState,
     applied,
     draft: { ...applied },
+    lightingTarget: "overlay",
+    layerDrafts: {},
     scenes: bundle.scenes,
     scenePolicy: bundle.sceneStatus?.policy ?? null,
     selection: null,
@@ -205,10 +269,10 @@ export type WorkbenchAction =
       /** Present only when the device supports on-device scenes. */
       scenes?: LightingSceneCell[];
     }
+  | { type: "lightingTarget"; target: LightingTarget }
   | { type: "paint"; cells: LightingOverlayCell[] }
   | { type: "erase"; ledIds: number[] }
   | { type: "draftReset" }
-  | { type: "draftSet"; cells: LightingOverlayCell[] }
   | { type: "lightingBusy"; busy: boolean; error?: string | null }
   | { type: "overlayApplied"; state: LightingState; cells: LightingOverlayCell[] }
   | { type: "scenesApplied"; state: LightingState; cells: LightingSceneCell[] }
@@ -334,30 +398,58 @@ export function makeWorkbenchReducer(cols: number) {
           applied,
           draft: draftWasClean ? { ...applied } : state.draft,
           scenes: act.scenes ?? state.scenes,
+          layerDrafts: act.scenes
+            ? reseedLayerDrafts(state.layerDrafts, state.scenes, act.scenes)
+            : state.layerDrafts,
         };
       }
+      case "lightingTarget":
+        return {
+          ...state,
+          lightingTarget: act.target,
+          ...(act.target !== "overlay" && state.layerDrafts[act.target] === undefined
+            ? {
+                layerDrafts: {
+                  ...state.layerDrafts,
+                  [act.target]: layerSceneCells(state.scenes, act.target),
+                },
+              }
+            : {}),
+        };
       case "paint": {
-        const draft = { ...state.draft };
+        const draft = { ...targetDraft(state, state.lightingTarget) };
         const paintTick = { ...state.paintTick };
         for (const cell of act.cells) {
           draft[cell.led_id] = cell;
           paintTick[cell.led_id] = (paintTick[cell.led_id] ?? 0) + 1;
         }
-        return { ...state, draft, paintTick, lightingError: null };
+        return {
+          ...state,
+          ...setTargetDraft(state, state.lightingTarget, draft),
+          paintTick,
+          lightingError: null,
+        };
       }
       case "erase": {
-        const draft = { ...state.draft };
+        const draft = { ...targetDraft(state, state.lightingTarget) };
         const paintTick = { ...state.paintTick };
         for (const id of act.ledIds) {
           delete draft[id];
           paintTick[id] = (paintTick[id] ?? 0) + 1;
         }
-        return { ...state, draft, paintTick };
+        return { ...state, ...setTargetDraft(state, state.lightingTarget, draft), paintTick };
       }
-      case "draftReset":
-        return { ...state, draft: { ...state.applied }, lightingError: null };
-      case "draftSet":
-        return { ...state, draft: cellsToRecord(act.cells), lightingError: null };
+      case "draftReset": {
+        const reset =
+          state.lightingTarget === "overlay"
+            ? { ...state.applied }
+            : layerSceneCells(state.scenes, state.lightingTarget);
+        return {
+          ...state,
+          ...setTargetDraft(state, state.lightingTarget, reset),
+          lightingError: null,
+        };
+      }
       case "lightingBusy":
         return {
           ...state,
@@ -383,6 +475,7 @@ export function makeWorkbenchReducer(cols: number) {
           ...state,
           lightingState: act.state,
           scenes: act.cells,
+          layerDrafts: reseedLayerDrafts(state.layerDrafts, state.scenes, act.cells),
           lightingBusy: false,
           lightingError: null,
         };
@@ -490,19 +583,35 @@ export function overlaysEqual(
   return true;
 }
 
-/** LED ids whose draft differs from the applied overlay. */
-export function stagedLedIds(state: WorkbenchState): Set<number> {
+/** LED ids where `draft` diverges from its `base` (staged, unapplied edits). */
+export function stagedBetween(
+  draft: Record<number, LightingOverlayCell>,
+  base: Record<number, LightingOverlayCell>,
+): Set<number> {
   const out = new Set<number>();
-  for (const k of Object.keys(state.draft)) {
+  for (const k of Object.keys(draft)) {
     const id = Number(k);
-    const a = state.applied[id];
-    if (!a || JSON.stringify(a) !== JSON.stringify(state.draft[id])) out.add(id);
+    const b = base[id];
+    if (!b || JSON.stringify(b) !== JSON.stringify(draft[id])) out.add(id);
   }
-  for (const k of Object.keys(state.applied)) {
+  for (const k of Object.keys(base)) {
     const id = Number(k);
-    if (!(id in state.draft)) out.add(id);
+    if (!(id in draft)) out.add(id);
   }
   return out;
+}
+
+/** The draft the active target edits (overlay draft, or the selected layer's). */
+export function activeLightingDraft(state: WorkbenchState): Record<number, LightingOverlayCell> {
+  return targetDraft(state, state.lightingTarget);
+}
+
+/** The baseline the active target stages against: the on-device overlay, or
+ *  the selected layer's stored scene cells. */
+export function activeLightingBase(state: WorkbenchState): Record<number, LightingOverlayCell> {
+  return state.lightingTarget === "overlay"
+    ? state.applied
+    : layerSceneCells(state.scenes, state.lightingTarget);
 }
 
 export interface WorkbenchContextValue {

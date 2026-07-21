@@ -2,18 +2,18 @@
 //
 // - On-device scenes (LAYER_SCENES firmware): the layer→effect table lives on
 //   the keyboard, composited natively as layers activate, and survives
-//   disconnect and reboot. Editing stages cells through the same canvas draft
-//   as the overlay; Apply rewrites the stored table atomically.
+//   disconnect and reboot. Each layer is painted WYSIWYG from its own canvas
+//   tab (see LightingMode); this panel keeps only the device-wide policy,
+//   capacity readout, and the one-time local-preset migration.
 // - Local presets (older firmware): Rynkbench stores named overlay snapshots
 //   per layer (localStorage, keyed by device serial) and, when "follow" is on,
 //   pushes the matching preset via replaceOverlay whenever the live layer
 //   changes. Honest by design: this only works while Rynkbench is connected.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   LightingLayerPolicy,
   LightingOverlayCell,
-  LightingSceneCell,
   LightingSceneStatus,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import { useWorkbench } from "../state";
@@ -98,50 +98,13 @@ const POLICIES: Array<{ id: LightingLayerPolicy; label: string; hint: string }> 
 ];
 
 function DeviceScenes({ status }: { status: LightingSceneStatus }) {
-  const { bundle, state, dispatch, io } = useWorkbench();
+  const { bundle, state, io } = useWorkbench();
   const serial = bundle.info.serial_number;
   const numLayers = bundle.caps.num_layers;
-
-  const [sel, setSel] = useState(state.currentLayer);
-
-  const byLayer = useMemo(() => {
-    const map = new Map<number, LightingSceneCell[]>();
-    for (const cell of state.scenes) {
-      const arr = map.get(cell.layer) ?? [];
-      arr.push(cell);
-      map.set(cell.layer, arr);
-    }
-    return map;
-  }, [state.scenes]);
-
-  const layerCells = byLayer.get(sel) ?? [];
-  const drawnCount = Object.keys(state.draft).length;
 
   // Presets left in this browser by pre-scene firmware sessions.
   const [localPresets, setLocalPresets] = useState<PresetMap>(() => load(serial).presets);
   const localCount = Object.keys(localPresets).length;
-
-  /** The stored table with layer `sel` replaced by the canvas draft. */
-  const applyDraft = () => {
-    const passThrough = state.scenes.filter((cell) => cell.layer !== sel);
-    const replaced = Object.values(state.draft).map(
-      (cell): LightingSceneCell => ({ layer: sel, led_id: cell.led_id, effect: cell.effect }),
-    );
-    io.applyScenes([...passThrough, ...replaced]);
-  };
-
-  const clearLayer = () => {
-    io.applyScenes(state.scenes.filter((cell) => cell.layer !== sel));
-  };
-
-  const loadLayer = () => {
-    dispatch({
-      type: "draftSet",
-      cells: layerCells.map(
-        (cell): LightingOverlayCell => ({ led_id: cell.led_id, effect: cell.effect, ttl_ms: undefined }),
-      ),
-    });
-  };
 
   /** Layers with a local preset take that preset; the rest pass through. */
   const copyLocalPresets = () => {
@@ -164,54 +127,9 @@ function DeviceScenes({ status }: { status: LightingSceneStatus }) {
     <div>
       <SectionLabel>Layer lighting</SectionLabel>
 
-      <LayerChips
-        numLayers={numLayers}
-        sel={sel}
-        onSel={setSel}
-        hasContent={(n) => byLayer.has(n)}
-        live={state.currentLayer}
-        titleFor={(n) => {
-          const count = byLayer.get(n)?.length ?? 0;
-          return `Layer ${n} · ${count ? `${count} lit key${count === 1 ? "" : "s"}` : "unlit"}${
-            n === state.currentLayer ? " · live" : ""
-          }`;
-        }}
-      />
-
-      <div className="mt-2.5 flex flex-col gap-2">
+      <div className="mt-2 flex flex-col gap-2">
         <div className="tnum text-[11px] text-faint">
-          L{sel}: {layerCells.length} lit key{layerCells.length === 1 ? "" : "s"} on keyboard ·{" "}
-          {state.scenes.length}/{status.capacity} cells used
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            className="flex-1 py-1"
-            title={`Replace Layer ${sel}'s stored lights with the ${drawnCount}-key canvas drawing`}
-            disabled={state.lightingBusy}
-            onClick={applyDraft}
-          >
-            Apply canvas to L{sel}
-          </Button>
-          <Button
-            variant="ghost"
-            className="py-1"
-            title={`Load Layer ${sel}'s stored lights onto the canvas for editing`}
-            disabled={layerCells.length === 0}
-            onClick={loadLayer}
-          >
-            Load
-          </Button>
-          <button
-            type="button"
-            title={`Remove Layer ${sel}'s lights from the keyboard`}
-            disabled={layerCells.length === 0 || state.lightingBusy}
-            onClick={clearLayer}
-            className="cursor-pointer rounded-md border border-line p-1.5 text-faint transition-colors duration-120 hover:border-danger/50 hover:text-danger disabled:cursor-default disabled:opacity-40 disabled:hover:border-line disabled:hover:text-faint"
-          >
-            <TrashIcon size={12} />
-          </button>
+          {state.scenes.length}/{status.capacity} scene cells used
         </div>
 
         <div>
@@ -250,8 +168,8 @@ function DeviceScenes({ status }: { status: LightingSceneStatus }) {
         )}
 
         <div className="text-[10.5px] leading-relaxed text-faint">
-          Stored on the keyboard — layer lighting keeps working after Rynkbench disconnects, and
-          survives reboot.
+          Edit each layer's scene with the target tabs above the board. Scenes are stored on the
+          keyboard — layer lighting keeps working after Rynkbench disconnects, and survives reboot.
         </div>
       </div>
     </div>

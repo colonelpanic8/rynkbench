@@ -1,15 +1,22 @@
 // Lighting mode: drag-paint overlay cells on the canvas, stage vs apply.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   LightingEffect,
   LightingOverlayCell,
+  LightingSceneCell,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import type { KeyView } from "../../model/keyboard";
 import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
 import { keyActionGlyph } from "../labels";
-import { stagedLedIds, useWorkbench } from "../state";
+import type { LightingTarget } from "../state";
+import {
+  activeLightingBase,
+  activeLightingDraft,
+  stagedBetween,
+  useWorkbench,
+} from "../state";
 import { ColorPicker } from "./ColorPicker";
 import { BackgroundPanel } from "./BackgroundPanel";
 import { LayerPresets } from "./LayerPresets";
@@ -70,11 +77,11 @@ function brushEffect(brush: Brush): LightingEffect {
   }
 }
 
-function brushCell(brush: Brush, ledId: number): LightingOverlayCell {
+function brushCell(brush: Brush, ledId: number, allowTtl: boolean): LightingOverlayCell {
   return {
     led_id: ledId,
     effect: brushEffect(brush),
-    ttl_ms: brush.ttlOn ? brush.ttlMs : undefined,
+    ttl_ms: allowTtl && brush.ttlOn ? brush.ttlMs : undefined,
   };
 }
 
@@ -131,6 +138,78 @@ function NumberField({
   );
 }
 
+/** Overlay + per-layer edit targets, styled like Keymap mode's layer tabs.
+ *  Only rendered when the firmware supports on-device scenes. */
+function LightingTargets() {
+  const { bundle, state, dispatch } = useWorkbench();
+  const numLayers = bundle.caps.num_layers;
+  const target = state.lightingTarget;
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [underline, setUnderline] = useState({ left: 0, width: 0 });
+
+  const layersWithCells = useMemo(() => {
+    const set = new Set<number>();
+    for (const cell of state.scenes) set.add(cell.layer);
+    return set;
+  }, [state.scenes]);
+
+  const key = (t: LightingTarget) => (t === "overlay" ? "overlay" : `L${t}`);
+
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const btn = wrap.querySelector<HTMLButtonElement>(`[data-target="${key(target)}"]`);
+    if (btn) setUnderline({ left: btn.offsetLeft, width: btn.offsetWidth });
+  }, [target, numLayers]);
+
+  const targets: LightingTarget[] = ["overlay", ...Array.from({ length: numLayers }, (_, n) => n)];
+
+  return (
+    <div className="flex items-center gap-3 px-1">
+      <div ref={wrapRef} className="relative flex items-center gap-1">
+        {targets.map((t) => {
+          const selected = t === target;
+          const isLayer = t !== "overlay";
+          const live = isLayer && t === state.currentLayer;
+          const hasContent = isLayer && layersWithCells.has(t);
+          const title = isLayer
+            ? `Layer ${t} scene${hasContent ? " · lit" : " · unlit"}${
+                live ? " · effective layer" : ""
+              }`
+            : "Transient overlay — cleared on reboot";
+          return (
+            <button
+              key={key(t)}
+              type="button"
+              data-target={key(t)}
+              onClick={() => dispatch({ type: "lightingTarget", target: t })}
+              title={title}
+              className={cx(
+                "relative flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors duration-150",
+                selected ? "text-ink" : "text-faint hover:text-mute",
+              )}
+            >
+              <span className="tnum">{t === "overlay" ? "Overlay" : `L${t}`}</span>
+              {hasContent && <span className="size-1 rounded-full bg-accent" />}
+              {live && (
+                <span title="Effective layer" className="size-1.5 rounded-full bg-ok" />
+              )}
+            </button>
+          );
+        })}
+        <div
+          className="absolute -bottom-px h-0.5 rounded-full bg-accent transition-all duration-180"
+          style={{
+            left: underline.left,
+            width: underline.width,
+            transitionTimingFunction: "cubic-bezier(0.25,0.8,0.35,1)",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function LightingMode() {
   const { bundle, state, dispatch, io } = useWorkbench();
   const [brush, setBrush] = useState<Brush>(DEFAULT_BRUSH);
@@ -144,10 +223,13 @@ export function LightingMode() {
     return () => window.removeEventListener("pointerup", up);
   }, []);
 
+  const target = state.lightingTarget;
+  const isLayerTarget = target !== "overlay";
+  const draftMap = activeLightingDraft(state);
+  const baseMap = activeLightingBase(state);
   const staged = useMemo(
-    () => stagedLedIds(state),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.draft, state.applied],
+    () => stagedBetween(draftMap, baseMap),
+    [draftMap, baseMap],
   );
 
   const zoneMembers = useMemo(() => {
@@ -174,7 +256,7 @@ export function LightingMode() {
     if (brush.mode === "erase") {
       dispatch({ type: "erase", ledIds: [key.ledId] });
     } else {
-      dispatch({ type: "paint", cells: [brushCell(brush, key.ledId)] });
+      dispatch({ type: "paint", cells: [brushCell(brush, key.ledId, !isLayerTarget)] });
     }
   };
 
@@ -194,7 +276,7 @@ export function LightingMode() {
     if (key.ledId === undefined) {
       return { glyph: legendFor(key), disabled: true };
     }
-    const cell = state.draft[key.ledId];
+    const cell = draftMap[key.ledId];
     return {
       fill: cell ? effectColor(cell.effect) : undefined,
       fillAnim: cell ? effectAnim(cell.effect) : undefined,
@@ -213,23 +295,48 @@ export function LightingMode() {
     } else {
       dispatch({
         type: "paint",
-        cells: state.lightingSelection.map((id) => brushCell(brush, id)),
+        cells: state.lightingSelection.map((id) => brushCell(brush, id, !isLayerTarget)),
       });
     }
   };
 
   const stagedCount = staged.size;
-  const drawnCount = Object.keys(state.draft).length;
+  const drawnCount = Object.keys(draftMap).length;
+  const sceneStatus = bundle.sceneStatus;
+
+  const applyLayerDraft = () => {
+    if (!isLayerTarget) return;
+    const passThrough = state.scenes.filter((cell) => cell.layer !== target);
+    const replaced = Object.values(draftMap).map(
+      (cell): LightingSceneCell => ({ layer: target, led_id: cell.led_id, effect: cell.effect }),
+    );
+    io.applyScenes([...passThrough, ...replaced]);
+  };
+
+  const clearLayer = () => {
+    if (!isLayerTarget) return;
+    io.applyScenes(state.scenes.filter((cell) => cell.layer !== target));
+  };
+
+  const appliedCount = isLayerTarget
+    ? Object.keys(baseMap).length
+    : Object.keys(state.applied).length;
 
   return (
     <>
       <div className="flex min-h-0 flex-1 flex-col gap-3 max-lg:min-h-[380px]">
+        {sceneStatus && <LightingTargets />}
         <div className="flex items-center gap-3 px-1">
-          <SectionLabel>Overlay</SectionLabel>
+          <SectionLabel>{isLayerTarget ? `Layer ${target} scene` : "Overlay"}</SectionLabel>
           <span className="tnum text-[12px] text-faint">
             {drawnCount} lit · {stagedCount} staged
           </span>
-          {!bundle.overlayReadSupported && (
+          {isLayerTarget && sceneStatus && (
+            <span className="tnum text-[11.5px] text-faint">
+              · {state.scenes.length}/{sceneStatus.capacity} cells used
+            </span>
+          )}
+          {!isLayerTarget && !bundle.overlayReadSupported && (
             <span className="text-[11.5px] text-warn">overlay readback unsupported — started empty</span>
           )}
           <div className="flex-1" />
@@ -351,28 +458,31 @@ export function LightingMode() {
                 )}
               </div>
 
-              <div>
-                <label className="flex cursor-pointer items-center justify-between text-[12.5px] text-mute">
-                  <span>Auto-expire (TTL)</span>
-                  <input
-                    type="checkbox"
-                    checked={brush.ttlOn}
-                    onChange={(e) => setBrush({ ...brush, ttlOn: e.target.checked })}
-                    className="accent-(--color-accent)"
-                  />
-                </label>
-                {brush.ttlOn && (
-                  <div className="mt-1.5">
-                    <NumberField
-                      label="Lifetime"
-                      unit="ms"
-                      min={100}
-                      value={brush.ttlMs}
-                      onChange={(v) => setBrush({ ...brush, ttlMs: v })}
+              {/* Scene cells have no TTL — only the transient overlay expires. */}
+              {!isLayerTarget && (
+                <div>
+                  <label className="flex cursor-pointer items-center justify-between text-[12.5px] text-mute">
+                    <span>Auto-expire (TTL)</span>
+                    <input
+                      type="checkbox"
+                      checked={brush.ttlOn}
+                      onChange={(e) => setBrush({ ...brush, ttlOn: e.target.checked })}
+                      className="accent-(--color-accent)"
                     />
-                  </div>
-                )}
-              </div>
+                  </label>
+                  {brush.ttlOn && (
+                    <div className="mt-1.5">
+                      <NumberField
+                        label="Lifetime"
+                        unit="ms"
+                        min={100}
+                        value={brush.ttlMs}
+                        onChange={(v) => setBrush({ ...brush, ttlMs: v })}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
 
@@ -403,7 +513,7 @@ export function LightingMode() {
                         } else {
                           dispatch({
                             type: "paint",
-                            cells: members.map((id) => brushCell(brush, id)),
+                            cells: members.map((id) => brushCell(brush, id, !isLayerTarget)),
                           });
                         }
                         dispatch({ type: "lightingSelect", leds: members });
@@ -461,16 +571,26 @@ export function LightingMode() {
             <Button
               variant="primary"
               disabled={stagedCount === 0 || state.lightingBusy}
-              onClick={() => io.applyOverlay(Object.values(state.draft))}
+              title={
+                isLayerTarget
+                  ? `Replace Layer ${target}'s stored scene with the canvas`
+                  : "Apply the staged overlay to the device"
+              }
+              onClick={() => (isLayerTarget ? applyLayerDraft() : io.applyOverlay(Object.values(draftMap)))}
             >
               {state.lightingBusy && <SpinnerIcon size={13} />}
-              Apply{stagedCount > 0 ? ` ${stagedCount} staged` : ""}
+              Apply{isLayerTarget ? ` to L${target}` : ""}
+              {stagedCount > 0 ? ` · ${stagedCount} staged` : ""}
             </Button>
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
                 className="flex-1 whitespace-nowrap"
-                title="Throw away staged edits and return to what's on the device"
+                title={
+                  isLayerTarget
+                    ? "Throw away staged edits and return to the stored scene"
+                    : "Throw away staged edits and return to what's on the device"
+                }
                 disabled={stagedCount === 0 || state.lightingBusy}
                 onClick={() => dispatch({ type: "draftReset" })}
               >
@@ -479,11 +599,15 @@ export function LightingMode() {
               <Button
                 variant="danger"
                 className="flex-1 whitespace-nowrap"
-                title="Remove the overlay that is currently applied on the device"
-                disabled={state.lightingBusy || Object.keys(state.applied).length === 0}
-                onClick={io.clearOverlay}
+                title={
+                  isLayerTarget
+                    ? `Remove Layer ${target}'s stored scene from the keyboard`
+                    : "Remove the overlay that is currently applied on the device"
+                }
+                disabled={state.lightingBusy || appliedCount === 0}
+                onClick={() => (isLayerTarget ? clearLayer() : io.clearOverlay())}
               >
-                Clear applied
+                Clear {isLayerTarget ? "layer" : "applied"}
               </Button>
             </div>
           </div>
