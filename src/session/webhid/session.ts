@@ -14,6 +14,8 @@ import type {
   LayerState,
   LightingCapabilities,
   LightingCompiledSceneStatus,
+  LightingConditionalSceneCell,
+  LightingConditionalSceneStatus,
   LightingLayerPolicy,
   LightingMutableState,
   LightingOverlayCell,
@@ -57,6 +59,7 @@ const SCENE_READ_ATTEMPTS = 3;
 // the bitflag constants to a plain number, so the value is mirrored here.
 const LAYER_SCENES = 1 << 6;
 const COMPILED_LAYER_SCENES = 1 << 8;
+const COMPILED_CONDITIONAL_SCENES = 1 << 9;
 
 /** The topology changed under a paged read; the whole read restarts. */
 class TopologyDrift extends Error {
@@ -237,6 +240,8 @@ export class WebHidSession implements RynkSession {
         setLayerPolicy: (policy) => this.run(() => this.setSceneLayerPolicy(policy)),
         compiledStatus: () => this.run(() => this.readCompiledSceneStatus()),
         readCompiledScenes: () => this.run(() => this.readAllCompiledScenes()),
+        conditionalStatus: () => this.run(() => this.readConditionalSceneStatus()),
+        readConditionalScenes: () => this.run(() => this.readAllConditionalScenes()),
       },
     };
 
@@ -632,6 +637,35 @@ export class WebHidSession implements RynkSession {
     }
     throw new Error(
       `compiled scene topology kept changing across ${TOPOLOGY_READ_ATTEMPTS} read attempts`,
+      { cause: lastConflict },
+    );
+  }
+
+  private async readConditionalSceneStatus(): Promise<LightingConditionalSceneStatus> {
+    const caps = await this.client.get_lighting_capabilities();
+    if ((caps.features & COMPILED_CONDITIONAL_SCENES) === 0) {
+      throw new Error("this firmware does not support conditional-scene readback");
+    }
+    return this.client.get_lighting_conditional_scene_status();
+  }
+
+  private async readAllConditionalScenes(): Promise<LightingConditionalSceneCell[]> {
+    let lastConflict: unknown;
+    for (let attempt = 0; attempt < TOPOLOGY_READ_ATTEMPTS; attempt++) {
+      const status = await this.readConditionalSceneStatus();
+      try {
+        return await this.readPages(
+          (request) => this.client.get_lighting_conditional_scenes(request),
+          status.topology_revision,
+          status.cell_len,
+        );
+      } catch (error) {
+        if (!isRevisionConflict(error)) throw error;
+        lastConflict = error;
+      }
+    }
+    throw new Error(
+      `conditional scene topology kept changing across ${TOPOLOGY_READ_ATTEMPTS} read attempts`,
       { cause: lastConflict },
     );
   }

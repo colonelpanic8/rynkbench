@@ -302,6 +302,24 @@ describe("lighting scenes", () => {
   });
 });
 
+describe("compiled firmware lighting", () => {
+  it("exposes keyboard.toml conditional rules and feature flags", async () => {
+    await withSession(glove80Board, async (session) => {
+      const status = await session.lighting.scenes.conditionalStatus();
+      const cells = await session.lighting.scenes.readConditionalScenes();
+      expect(cells.length).toBeGreaterThan(10);
+      expect(cells.some((cell) => cell.conditions.battery?.node === 0)).toBe(true);
+      expect(cells.some((cell) => cell.conditions.battery?.node === 1)).toBe(true);
+      expect(cells.some((cell) => cell.conditions.layer?.layer === 3)).toBe(true);
+      expect(status.controls).toEqual({
+        output_toggle_user_action: 13,
+        wake_layer: 2,
+      });
+      expect((await session.lighting.capabilities()).features & (1 << 9)).not.toBe(0);
+    });
+  });
+});
+
 describe("lighting state", () => {
   it("applies setState with a revision bump and a LightingChange push", async () => {
     await withSession(glove80Board, async (session) => {

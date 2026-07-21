@@ -14,6 +14,7 @@ import type {
   HidKeyCode,
   Key,
   KeyAction,
+  LightingConditionalSceneCell,
   LightingSceneCell,
   LightingZone,
   Morse,
@@ -249,6 +250,61 @@ const compiledScenes: LightingSceneCell[] = [
   ),
 ];
 
+const solid = (r: number, g: number, b: number) =>
+  ({ Solid: { color: { r, g, b } } }) as const;
+
+function ledForLabel(wanted: string): number {
+  const entry = gridEntries.find(({ row, col }) => labels[`${row},${col}`] === wanted);
+  if (!entry) throw new Error(`mock Glove80 has no ${wanted} key`);
+  return boardKeys.get(entry.logical)!.led;
+}
+
+// Representative keyboard.toml-compiled rules: F1-F5 show active layers,
+// layer 3 marks its gaming keys, and the Magic layer exposes both batteries.
+const conditionalScenes: LightingConditionalSceneCell[] = [];
+for (let layer = 0; layer < 5; layer++) {
+  const led_id = ledForLabel(`F${layer + 1}`);
+  conditionalScenes.push(
+    {
+      conditions: { layer: { layer, active: false }, battery: undefined },
+      led_id,
+      effect: solid(180, 20, 20),
+    },
+    {
+      conditions: { layer: { layer, active: true }, battery: undefined },
+      led_id,
+      effect: solid(20, 180, 70),
+    },
+  );
+}
+for (const label of ["W", "A", "S", "D"]) {
+  conditionalScenes.push({
+    conditions: { layer: { layer: 3, active: true }, battery: undefined },
+    led_id: ledForLabel(label),
+    effect: solid(220, 35, 35),
+  });
+}
+conditionalScenes.push({
+  conditions: { layer: { layer: 3, active: true }, battery: undefined },
+  led_id: ledForLabel("⌫"),
+  effect: solid(255, 155, 25),
+});
+for (const [node, leds] of [
+  [0, [39, 38, 37, 36, 35]],
+  [1, [79, 78, 77, 76, 75]],
+] as const) {
+  leds.forEach((led_id, index) => {
+    conditionalScenes.push({
+      conditions: {
+        layer: { layer: 2, active: true },
+        battery: { node, min_level: 1 + index * 20, max_level: undefined, charge: "Any" },
+      },
+      led_id,
+      effect: solid(30, 190, 70),
+    });
+  });
+}
+
 const info: DeviceInfo = {
   rmk_version: { major: 0, minor: 7, patch: 0 },
   vendor_id: 0x16c0,
@@ -298,4 +354,6 @@ export const glove80Board: BoardSpec = {
   seedScenes,
   compiledScenes,
   compiledScenePolicy: "EffectiveOnly",
+  conditionalScenes,
+  lightingControls: { output_toggle_user_action: 13, wake_layer: 2 },
 };

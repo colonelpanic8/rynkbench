@@ -9,6 +9,8 @@ import type {
   KeyAction,
   LightingCapabilities,
   LightingCompiledSceneStatus,
+  LightingConditionalSceneCell,
+  LightingControls,
   LightingOverlayCell,
   LightingSceneCell,
   LightingSceneStatus,
@@ -77,6 +79,11 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
   let scenes: LightingSceneCell[] = [];
   let compiledSceneStatus: LightingCompiledSceneStatus | null = null;
   let compiledScenes: LightingSceneCell[] = [];
+  let conditionalScenes: LightingConditionalSceneCell[] = [];
+  let lightingControls: LightingControls = {
+    output_toggle_user_action: undefined,
+    wake_layer: undefined,
+  };
   if (caps.lighting_enabled) {
     try {
       [topology, lightingCaps, lightingState] = await Promise.all([
@@ -111,6 +118,15 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     } catch {
       compiledSceneStatus = null;
     }
+    // Conditional rules and board-level lighting controls are compiled from
+    // keyboard.toml and exposed as another immutable firmware source.
+    try {
+      const status = await session.lighting.scenes.conditionalStatus();
+      lightingControls = status.controls;
+      conditionalScenes = await session.lighting.scenes.readConditionalScenes();
+    } catch {
+      conditionalScenes = [];
+    }
   }
 
   const enrichment = await loadEnrichment(info);
@@ -124,10 +140,16 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     return layerKeymaps.find((l) => l.layer === i)?.actions ?? [];
   });
 
-  const [layerState, battery, connection] = await Promise.all([
+  const [layerState, battery, connection, peripheralBattery] = await Promise.all([
     session.keymap.layerState(),
     session.device.battery(),
     session.device.connectionStatus().catch(() => null),
+    caps.num_split_peripherals > 0
+      ? session.device
+          .peripheralStatus(0)
+          .then((status) => status.battery)
+          .catch(() => "Unavailable" as const)
+      : Promise.resolve("Unavailable" as const),
   ]);
   const activeLayers = layerState.activeLayers.filter((layer) => layer < caps.num_layers);
   const defaultLayer = layerState.defaultLayer;
@@ -162,6 +184,7 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     activeLayers,
     layerStateComplete: layerState.complete,
     battery,
+    peripheralBattery,
     connection,
     lightingState,
     overlay,
@@ -169,6 +192,8 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     scenes,
     compiledSceneStatus,
     compiledScenes,
+    conditionalScenes,
+    lightingControls,
     combos,
     morse,
     forks,

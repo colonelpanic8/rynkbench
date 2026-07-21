@@ -26,6 +26,7 @@ import { Button, InspectorShell, SectionLabel, TextInput, cx } from "../kit";
 import { EraserIcon, SpinnerIcon, WarningIcon } from "../icons";
 import { effectiveAction } from "../live/compositor";
 import { targetPreviewEffects } from "./preview";
+import { describeConditions, firmwarePreviewCells } from "./firmwareRules";
 
 type EffectKind = "Solid" | "Blink" | "Breathe";
 
@@ -227,6 +228,85 @@ function LightingTargets() {
   );
 }
 
+function FirmwareRulesPanel({ activeCount }: { activeCount: number }) {
+  const { bundle, state } = useWorkbench();
+  const total = state.compiledScenes.length + state.conditionalScenes.length;
+  const labels = useMemo(() => {
+    const result = new Map<number, string>();
+    for (const key of bundle.model.keys) {
+      if (key.ledId !== undefined) result.set(key.ledId, key.label || `LED ${key.ledId}`);
+    }
+    return result;
+  }, [bundle.model]);
+  const groups = useMemo(() => {
+    const result = new Map<string, { description: string; color: string; leds: number[] }>();
+    for (const cell of state.compiledScenes) {
+      const key = JSON.stringify({ layer: cell.layer, effect: cell.effect });
+      const group = result.get(key) ?? {
+        description: `L${cell.layer} active`,
+        color: effectColor(cell.effect),
+        leds: [],
+      };
+      group.leds.push(cell.led_id);
+      result.set(key, group);
+    }
+    for (const cell of state.conditionalScenes) {
+      const key = JSON.stringify({ conditions: cell.conditions, effect: cell.effect });
+      const group = result.get(key) ?? {
+        description: describeConditions(cell),
+        color: effectColor(cell.effect),
+        leds: [],
+      };
+      group.leds.push(cell.led_id);
+      result.set(key, group);
+    }
+    return [...result.values()];
+  }, [state.compiledScenes, state.conditionalScenes]);
+
+  if (total === 0) return null;
+  const { output_toggle_user_action: toggleAction, wake_layer: wakeLayer } =
+    state.lightingControls;
+  return (
+    <div>
+      <SectionLabel>Configured firmware rules</SectionLabel>
+      <p className="mt-1 text-[11.5px] leading-relaxed text-faint">
+        Read-only from keyboard.toml · {total} cells · {activeCount} active in this preview
+      </p>
+      {(toggleAction !== undefined || wakeLayer !== undefined) && (
+        <p className="mt-1 text-[11.5px] leading-relaxed text-mute">
+          {toggleAction !== undefined && `User${toggleAction} toggles all lighting`}
+          {toggleAction !== undefined && wakeLayer !== undefined && " · "}
+          {wakeLayer !== undefined && `L${wakeLayer} wakes lighting and presents status`}
+        </p>
+      )}
+      <details className="mt-2 rounded-lg border border-line-soft bg-well px-3 py-2">
+        <summary className="cursor-pointer text-[12px] font-medium text-mute">
+          Show {groups.length} conditions
+        </summary>
+        <div className="mt-2 flex flex-col gap-2">
+          {groups.map((group, index) => {
+            const names = group.leds.map((id) => labels.get(id) ?? `LED ${id}`).join(", ");
+            return (
+              <div key={index} className="flex items-start gap-2 text-[11.5px]">
+                <span
+                  className="mt-1 size-2 shrink-0 rounded-full"
+                  style={{ background: group.color }}
+                />
+                <div className="min-w-0">
+                  <div className="text-mute">{group.description}</div>
+                  <div className="truncate text-faint" title={names}>
+                    {names}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </details>
+    </div>
+  );
+}
+
 export function LightingMode() {
   const { bundle, state, dispatch, io } = useWorkbench();
   const [brush, setBrush] = useState<Brush>(DEFAULT_BRUSH);
@@ -257,6 +337,31 @@ export function LightingMode() {
     () => targetPreviewEffects(target, draftMap, state.compiledScenes),
     [draftMap, state.compiledScenes, target],
   );
+  const conditionalPreview = useMemo(() => {
+    const activeLayers =
+      target === "overlay"
+        ? new Set(state.activeLayers)
+        : new Set([state.defaultLayer, target]);
+    return firmwarePreviewCells([], state.conditionalScenes, {
+      activeLayers,
+      batteries: new Map([
+        [0, state.battery],
+        [1, state.peripheralBattery],
+      ]),
+    });
+  }, [
+    state.activeLayers,
+    state.battery,
+    state.conditionalScenes,
+    state.defaultLayer,
+    state.peripheralBattery,
+    target,
+  ]);
+  const previewEffects = useMemo(() => {
+    const result = new Map(visibleEffects);
+    for (const cell of conditionalPreview.values()) result.set(cell.led_id, cell.effect);
+    return result;
+  }, [conditionalPreview, visibleEffects]);
 
   const lighting = state.lightingState;
   const backgroundColor =
@@ -331,7 +436,7 @@ export function LightingMode() {
     if (key.ledId === undefined) {
       return { glyph: legendFor(key), disabled: true };
     }
-    const effect = visibleEffects.get(key.ledId);
+    const effect = previewEffects.get(key.ledId);
     return {
       fill: effect ? effectColor(effect) : undefined,
       backgroundFill: isLayerTarget ? backgroundColor : undefined,
@@ -357,7 +462,7 @@ export function LightingMode() {
   };
 
   const stagedCount = staged.size;
-  const visibleCount = visibleEffects.size;
+  const visibleCount = previewEffects.size;
   const compiledCount = Object.keys(compiledLayerMap).length;
   const sceneStatus = bundle.sceneStatus;
 
@@ -606,6 +711,10 @@ export function LightingMode() {
               )}
             </div>
           )}
+
+          <div className="border-t border-line-soft pt-4">
+            <FirmwareRulesPanel activeCount={conditionalPreview.size + compiledCount} />
+          </div>
 
           <div className="border-t border-line-soft pt-4">
             <BackgroundPanel />

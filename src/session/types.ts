@@ -31,6 +31,8 @@ import type {
   LedIndicator,
   LightingCapabilities,
   LightingCompiledSceneStatus,
+  LightingConditionalSceneCell,
+  LightingConditionalSceneStatus,
   LightingLed,
   LightingMatrixPosition,
   LightingMutableState,
@@ -121,6 +123,10 @@ export interface LightingSceneOps {
   compiledStatus(): Promise<LightingCompiledSceneStatus>;
   /** Read the whole immutable compiled scene source (paging is the backend's job). */
   readCompiledScenes(): Promise<LightingSceneCell[]>;
+  /** Discover conditional scenes and board-level controls compiled from keyboard.toml. */
+  conditionalStatus(): Promise<LightingConditionalSceneStatus>;
+  /** Read immutable conditional cells in firmware composition order. */
+  readConditionalScenes(): Promise<LightingConditionalSceneCell[]>;
 }
 
 /** Slot-table ops (combos, morse, forks) share one shape: the backend reads

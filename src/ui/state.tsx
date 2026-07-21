@@ -16,6 +16,8 @@ import type {
   LedIndicator,
   LightingCapabilities,
   LightingCompiledSceneStatus,
+  LightingConditionalSceneCell,
+  LightingControls,
   LightingLayerPolicy,
   LightingMutableState,
   LightingOverlayCell,
@@ -54,6 +56,7 @@ export interface ConnectedBundle {
   activeLayers: number[];
   layerStateComplete: boolean;
   battery: BatteryStatus;
+  peripheralBattery: BatteryStatus;
   connection: ConnectionStatus | null;
   lightingState: LightingState | null;
   overlay: LightingOverlayCell[];
@@ -64,6 +67,8 @@ export interface ConnectedBundle {
   /** Immutable layer scenes compiled into this firmware build. */
   compiledSceneStatus: LightingCompiledSceneStatus | null;
   compiledScenes: LightingSceneCell[];
+  conditionalScenes: LightingConditionalSceneCell[];
+  lightingControls: LightingControls;
   /** Advanced tables; empty arrays when the device reports zero capacity. */
   combos: Combo[];
   morse: Morse[];
@@ -108,6 +113,7 @@ export interface WorkbenchState {
   /** `${layer}:${encoderId}` → loaded encoder action. */
   encoders: Record<string, EncoderAction>;
   battery: BatteryStatus;
+  peripheralBattery: BatteryStatus;
   connection: ConnectionStatus | null;
   lightingState: LightingState | null;
   /** Overlay as last known on-device, keyed by LED id. */
@@ -123,6 +129,9 @@ export interface WorkbenchState {
   scenes: LightingSceneCell[];
   /** Immutable firmware defaults, kept separate from editable runtime cells. */
   compiledScenes: LightingSceneCell[];
+  /** Conditional firmware rules compiled from keyboard.toml. */
+  conditionalScenes: LightingConditionalSceneCell[];
+  lightingControls: LightingControls;
   /** Layer-composition policy; null when scenes are unsupported. */
   scenePolicy: LightingLayerPolicy | null;
   compiledScenePolicy: LightingLayerPolicy | null;
@@ -226,6 +235,7 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     layers: bundle.layers,
     encoders: {},
     battery: bundle.battery,
+    peripheralBattery: bundle.peripheralBattery,
     connection: bundle.connection,
     lightingState: bundle.lightingState,
     applied,
@@ -234,6 +244,8 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     layerDrafts: {},
     scenes: bundle.scenes,
     compiledScenes: bundle.compiledScenes,
+    conditionalScenes: bundle.conditionalScenes,
+    lightingControls: bundle.lightingControls,
     scenePolicy: bundle.sceneStatus?.policy ?? null,
     compiledScenePolicy: bundle.compiledSceneStatus?.policy ?? null,
     selection: null,

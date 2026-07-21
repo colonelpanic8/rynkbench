@@ -582,6 +582,12 @@ class StubSession implements RynkSession {
       readCompiledScenes: async (): Promise<never> => {
         throw new Error("this firmware does not support compiled layer-scene readback");
       },
+      conditionalStatus: async (): Promise<never> => {
+        throw new Error("this firmware does not support conditional-scene readback");
+      },
+      readConditionalScenes: async (): Promise<never> => {
+        throw new Error("this firmware does not support conditional-scene readback");
+      },
     },
   };
 

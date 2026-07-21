@@ -22,6 +22,9 @@ import type {
   LightingBackgroundState,
   LightingCapabilities,
   LightingCompiledSceneStatus,
+  LightingConditionalSceneCell,
+  LightingConditionalSceneStatus,
+  LightingControls,
   LightingLayerPolicy,
   LightingLed,
   LightingLedId,
@@ -91,6 +94,9 @@ export interface BoardSpec {
    *  simulate firmware predating compiled-scene readback; [] is supported. */
   compiledScenes?: LightingSceneCell[];
   compiledScenePolicy?: LightingLayerPolicy;
+  /** Immutable conditional rules and controls compiled from keyboard.toml. */
+  conditionalScenes?: LightingConditionalSceneCell[];
+  lightingControls?: LightingControls;
 }
 
 export function hid(code: HidKeyCode): KeyAction {
@@ -243,6 +249,7 @@ export function buildTopology(
 // the bitflag constants to a plain number, so the value is mirrored here.
 export const LAYER_SCENES = 1 << 6;
 export const COMPILED_LAYER_SCENES = 1 << 8;
+export const COMPILED_CONDITIONAL_SCENES = 1 << 9;
 const SCENE_CHUNK_CAPACITY = 16;
 
 const sceneKey = (cell: { layer: number; led_id: LightingLedId }): string =>
@@ -489,6 +496,12 @@ class MockSession implements RynkSession {
           this.requireCompiledScenes();
           return this.spec.compiledScenes!.map(cloneScene);
         }),
+      conditionalStatus: () => latency(() => this.conditionalSceneStatus()),
+      readConditionalScenes: () =>
+        latency(() => {
+          this.requireConditionalScenes();
+          return structuredClone(this.spec.conditionalScenes ?? []);
+        }),
     },
   };
 
@@ -621,7 +634,10 @@ class MockSession implements RynkSession {
       overlay_chunk_capacity: 16,
       features:
         ((this.spec.sceneCapacity ?? 0) > 0 ? LAYER_SCENES : 0) |
-        (this.spec.compiledScenes !== undefined ? COMPILED_LAYER_SCENES : 0),
+        (this.spec.compiledScenes !== undefined ? COMPILED_LAYER_SCENES : 0) |
+        (this.spec.conditionalScenes !== undefined || this.spec.lightingControls !== undefined
+          ? COMPILED_CONDITIONAL_SCENES
+          : 0),
       effects: 0b111, // solid | blink | breathe
     };
   }
@@ -656,6 +672,27 @@ class MockSession implements RynkSession {
       scene_len: this.spec.compiledScenes!.length,
       policy: this.spec.compiledScenePolicy ?? "EffectiveOnly",
       chunk_capacity: SCENE_CHUNK_CAPACITY,
+    };
+  }
+
+  private requireConditionalScenes(): void {
+    if (this.spec.conditionalScenes === undefined && this.spec.lightingControls === undefined) {
+      throw new Error("this firmware does not support conditional-scene readback");
+    }
+  }
+
+  private conditionalSceneStatus(): LightingConditionalSceneStatus {
+    this.requireConditionalScenes();
+    return {
+      topology_revision: this.spec.topology.revision,
+      cell_len: this.spec.conditionalScenes?.length ?? 0,
+      chunk_capacity: SCENE_CHUNK_CAPACITY,
+      controls: structuredClone(
+        this.spec.lightingControls ?? {
+          output_toggle_user_action: undefined,
+          wake_layer: undefined,
+        },
+      ),
     };
   }
 
