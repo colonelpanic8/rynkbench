@@ -1,0 +1,191 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ */
+/* Rynkbench design tokens — dark-first, near-black cool neutrals with */
+/* a single electric-cyan accent. Tailwind v4 CSS-first configuration. */
+/* ------------------------------------------------------------------ */
+
+@theme {
+  /* Surfaces, darkest → lightest */
+  --color-bg: oklch(15% 0.01 240);
+  --color-well: oklch(13.2% 0.009 240);
+  --color-panel: oklch(18% 0.011 240);
+  --color-raised: oklch(21.5% 0.012 240);
+  --color-hover: oklch(25% 0.013 240);
+
+  /* Hairlines */
+  --color-line: oklch(28% 0.014 240);
+  --color-line-soft: oklch(23% 0.012 240);
+  --color-line-strong: oklch(36% 0.016 240);
+
+  /* Ink. Secondary tiers are tuned to keep ≥4.5:1 against every surface
+     they sit on (bg/panel/raised), so "subdued" never means "illegible". */
+  --color-ink: oklch(93% 0.006 240);
+  --color-mute: oklch(72% 0.012 240);
+  --color-faint: oklch(62% 0.012 240);
+
+  /* The one accent: electric cyan */
+  --color-accent: oklch(84% 0.126 195);
+  --color-accent-deep: oklch(62% 0.104 200);
+  --color-accent-dim: oklch(35% 0.055 200);
+
+  /* Semantics */
+  --color-danger: oklch(66% 0.185 25);
+  --color-danger-dim: oklch(30% 0.075 25);
+  --color-ok: oklch(76% 0.14 152);
+  --color-warn: oklch(82% 0.135 85);
+
+  /* Keycaps */
+  --color-cap: oklch(25.5% 0.012 240);
+  --color-cap-side: oklch(18.5% 0.011 240);
+  --color-cap-edge: oklch(33% 0.014 240);
+  --color-cap-ink: oklch(88% 0.008 240);
+  /* Dimmed-but-legible legend ink (Transparent ▽, enrichment fallbacks). */
+  --color-cap-ink-dim: oklch(67% 0.01 240);
+  /* Soft backplate grouping connected key clusters (split halves). */
+  --color-plate: oklch(17.2% 0.011 240);
+
+  --font-sans: "Inter", "Inter Variable", system-ui, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --ease-out-soft: cubic-bezier(0.25, 0.8, 0.35, 1);
+
+  --animate-fade-up: fade-up 260ms var(--ease-out-soft) both;
+  --animate-pop: pop 160ms var(--ease-out-soft) both;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* LED effect previews. Duration is set inline from the effect's period. */
+@keyframes led-blink {
+  0%,
+  49.9% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.08;
+  }
+}
+
+@keyframes led-breathe {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Base                                                                */
+/* ------------------------------------------------------------------ */
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-accent-dim);
+  color: var(--color-ink);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+
+/* Numeric readouts should never jitter. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ */
+/* Keyboard canvas                                                     */
+/* ------------------------------------------------------------------ */
+
+.key-group {
+  cursor: pointer;
+}
+
+.key-group.key-static {
+  cursor: default;
+}
+
+/* Hover affordance: CSS wins over the SVG fill attribute. */
+.key-group:not(.key-static):hover .key-cap {
+  fill: var(--color-hover);
+}
+
+/* The recessed board well behind every canvas. */
+.canvas-well {
+  background:
+    radial-gradient(
+      ellipse 60% 55% at 50% 48%,
+      oklch(17% 0.012 240 / 60%),
+      transparent 75%
+    ),
+    var(--color-well);
+  box-shadow: inset 0 1px 8px rgb(0 0 0 / 0.25);
+}
+
+.key-lift {
+  transition: transform 140ms var(--ease-out-soft);
+}
+
+.key-cap {
+  transition: fill 140ms var(--ease-out-soft);
+}
+
+.key-paint-pop {
+  animation: pop 160ms var(--ease-out-soft) both;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+/* Focus rings for interactive chrome */
+button:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 1.5px solid var(--color-accent);
+  outline-offset: 1.5px;
+  border-radius: 6px;
+}
