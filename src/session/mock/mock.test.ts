@@ -162,7 +162,7 @@ describe("lighting overlay", () => {
 
       const initial = await session.lighting.state();
       expect(initial.overlay_len).toBe(0);
-      expect(initial.background.enabled).toBe(true);
+      expect(initial.background.enabled).toBe(false);
 
       const replaced = await session.lighting.replaceOverlay([cellFor(0), cellFor(41)]);
       expect(replaced.overlay_len).toBe(2);

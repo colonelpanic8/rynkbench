@@ -338,7 +338,7 @@ export const glove80Board: BoardSpec = {
   defaultEncoders,
   battery: { Available: { charge_state: "Discharging", level: 84 } },
   brightness: 180,
-  background: { enabled: true, hue: 0, saturation: 0, value: 32, speed: 128, mode: "Solid" },
+  background: { enabled: false, hue: 0, saturation: 0, value: 32, speed: 128, mode: "Solid" },
   behavior: {
     combo_timeout_ms: 50,
     oneshot_timeout_ms: 1000,
