@@ -355,5 +355,19 @@ export const glove80Board: BoardSpec = {
   compiledScenes,
   compiledScenePolicy: "EffectiveOnly",
   conditionalScenes,
-  lightingControls: { output_toggle_user_action: 13, wake_layer: 2 },
+  lightingControls: { output_toggle_user_action: undefined, wake_layer: 2 },
+  lightingOutputMode: {
+    mode: "PoweredOnly",
+    powered: false,
+    wake_active: true,
+    effective_enabled: true,
+    cycle_user_action: 13,
+    wake_layer: 2,
+    indicator: {
+      led_id: 8,
+      always_on: { Solid: { color: { r: 0, g: 128, b: 0 } } },
+      always_off: { Solid: { color: { r: 128, g: 0, b: 0 } } },
+      powered_only: { Solid: { color: { r: 0, g: 64, b: 160 } } },
+    },
+  },
 };

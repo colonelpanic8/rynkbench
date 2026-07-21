@@ -312,10 +312,16 @@ describe("compiled firmware lighting", () => {
       expect(cells.some((cell) => cell.conditions.battery?.node === 1)).toBe(true);
       expect(cells.some((cell) => cell.conditions.layer?.layer === 3)).toBe(true);
       expect(status.controls).toEqual({
-        output_toggle_user_action: 13,
+        output_toggle_user_action: undefined,
         wake_layer: 2,
       });
       expect((await session.lighting.capabilities()).features & (1 << 9)).not.toBe(0);
+      expect(await session.lighting.outputMode()).toMatchObject({
+        mode: "PoweredOnly",
+        cycle_user_action: 13,
+        wake_layer: 2,
+      });
+      expect((await session.lighting.capabilities()).features & (1 << 10)).not.toBe(0);
     });
   });
 });

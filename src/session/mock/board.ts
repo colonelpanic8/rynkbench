@@ -29,6 +29,7 @@ import type {
   LightingLed,
   LightingLedId,
   LightingOverlayCell,
+  LightingOutputModeState,
   LightingPhysicalKey,
   LightingRoute,
   LightingSceneCell,
@@ -97,6 +98,8 @@ export interface BoardSpec {
   /** Immutable conditional rules and controls compiled from keyboard.toml. */
   conditionalScenes?: LightingConditionalSceneCell[];
   lightingControls?: LightingControls;
+  /** Three-state output policy readback. Omit for older simulated firmware. */
+  lightingOutputMode?: LightingOutputModeState;
 }
 
 export function hid(code: HidKeyCode): KeyAction {
@@ -250,6 +253,7 @@ export function buildTopology(
 export const LAYER_SCENES = 1 << 6;
 export const COMPILED_LAYER_SCENES = 1 << 8;
 export const COMPILED_CONDITIONAL_SCENES = 1 << 9;
+export const OUTPUT_MODE = 1 << 10;
 const SCENE_CHUNK_CAPACITY = 16;
 
 const sceneKey = (cell: { layer: number; led_id: LightingLedId }): string =>
@@ -422,6 +426,13 @@ class MockSession implements RynkSession {
   readonly lighting: LightingOps = {
     capabilities: () => latency(() => this.lightingCapabilities()),
     state: () => latency(() => this.lightingState()),
+    outputMode: () =>
+      latency(() => {
+        if (this.spec.lightingOutputMode === undefined) {
+          throw new Error("this firmware does not support lighting output-mode readback");
+        }
+        return structuredClone(this.spec.lightingOutputMode);
+      }),
     topology: () => latency(() => this.spec.topology),
     replaceOverlay: (cells) =>
       latency(() => {
@@ -637,7 +648,8 @@ class MockSession implements RynkSession {
         (this.spec.compiledScenes !== undefined ? COMPILED_LAYER_SCENES : 0) |
         (this.spec.conditionalScenes !== undefined || this.spec.lightingControls !== undefined
           ? COMPILED_CONDITIONAL_SCENES
-          : 0),
+          : 0) |
+        (this.spec.lightingOutputMode !== undefined ? OUTPUT_MODE : 0),
       effects: 0b111, // solid | blink | breathe
     };
   }

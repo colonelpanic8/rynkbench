@@ -16,6 +16,7 @@ import type {
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
   LightingConditionalSceneStatus,
+  LightingOutputModeState,
   LightingLayerPolicy,
   LightingMutableState,
   LightingOverlayCell,
@@ -60,6 +61,7 @@ const SCENE_READ_ATTEMPTS = 3;
 const LAYER_SCENES = 1 << 6;
 const COMPILED_LAYER_SCENES = 1 << 8;
 const COMPILED_CONDITIONAL_SCENES = 1 << 9;
+const OUTPUT_MODE = 1 << 10;
 
 /** The topology changed under a paged read; the whole read restarts. */
 class TopologyDrift extends Error {
@@ -224,6 +226,7 @@ export class WebHidSession implements RynkSession {
     this.lighting = {
       capabilities: () => this.run(() => client.get_lighting_capabilities()),
       state: () => this.run(() => client.get_lighting_state()),
+      outputMode: () => this.run(() => this.readOutputMode()),
       topology: () => this.run(() => this.readTopology()),
       replaceOverlay: (cells) => this.run(() => this.replaceOverlayCells(cells)),
       clearOverlay: () =>
@@ -647,6 +650,14 @@ export class WebHidSession implements RynkSession {
       throw new Error("this firmware does not support conditional-scene readback");
     }
     return this.client.get_lighting_conditional_scene_status();
+  }
+
+  private async readOutputMode(): Promise<LightingOutputModeState> {
+    const caps = await this.client.get_lighting_capabilities();
+    if ((caps.features & OUTPUT_MODE) === 0) {
+      throw new Error("this firmware does not support lighting output-mode readback");
+    }
+    return this.client.get_lighting_output_mode();
   }
 
   private async readAllConditionalScenes(): Promise<LightingConditionalSceneCell[]> {

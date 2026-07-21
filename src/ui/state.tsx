@@ -21,6 +21,7 @@ import type {
   LightingLayerPolicy,
   LightingMutableState,
   LightingOverlayCell,
+  LightingOutputModeState,
   LightingSceneCell,
   LightingSceneStatus,
   LightingState,
@@ -59,6 +60,7 @@ export interface ConnectedBundle {
   peripheralBattery: BatteryStatus;
   connection: ConnectionStatus | null;
   lightingState: LightingState | null;
+  lightingOutputMode: LightingOutputModeState | null;
   overlay: LightingOverlayCell[];
   /** null when the firmware has no layer-scene support (local-preset mode). */
   sceneStatus: LightingSceneStatus | null;
@@ -116,6 +118,7 @@ export interface WorkbenchState {
   peripheralBattery: BatteryStatus;
   connection: ConnectionStatus | null;
   lightingState: LightingState | null;
+  lightingOutputMode: LightingOutputModeState | null;
   /** Overlay as last known on-device, keyed by LED id. */
   applied: Record<number, LightingOverlayCell>;
   /** Overlay as the user wants it (staged), keyed by LED id. */
@@ -238,6 +241,7 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     peripheralBattery: bundle.peripheralBattery,
     connection: bundle.connection,
     lightingState: bundle.lightingState,
+    lightingOutputMode: bundle.lightingOutputMode,
     applied,
     draft: { ...applied },
     lightingTarget: "overlay",
@@ -303,6 +307,7 @@ export type WorkbenchAction =
   | {
       type: "lightingRefresh";
       state: LightingState;
+      outputMode?: LightingOutputModeState | null;
       overlay: LightingOverlayCell[];
       /** Present only when the device supports on-device scenes. */
       scenes?: LightingSceneCell[];
@@ -440,6 +445,7 @@ export function makeWorkbenchReducer(cols: number) {
         return {
           ...state,
           lightingState: act.state,
+          lightingOutputMode: act.outputMode ?? state.lightingOutputMode,
           applied,
           draft: draftWasClean ? { ...applied } : state.draft,
           scenes: act.scenes ?? state.scenes,
@@ -781,13 +787,14 @@ export function makeIo(
     refreshLighting() {
       Promise.all([
         session.lighting.state(),
+        session.lighting.outputMode().catch(() => getState().lightingOutputMode),
         session.lighting.readOverlay().catch(() => Object.values(getState().applied)),
         scenesSupported
           ? session.lighting.scenes.readScenes().catch(() => getState().scenes)
           : Promise.resolve(undefined),
       ]).then(
-        ([lightingState, overlay, scenes]) =>
-          dispatch({ type: "lightingRefresh", state: lightingState, overlay, scenes }),
+        ([lightingState, outputMode, overlay, scenes]) =>
+          dispatch({ type: "lightingRefresh", state: lightingState, outputMode, overlay, scenes }),
         () => {},
       );
     },

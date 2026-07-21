@@ -12,6 +12,7 @@ import type {
   LightingConditionalSceneCell,
   LightingControls,
   LightingOverlayCell,
+  LightingOutputModeState,
   LightingSceneCell,
   LightingSceneStatus,
   LightingState,
@@ -73,6 +74,7 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
   let topology = EMPTY_TOPOLOGY;
   let lightingCaps: LightingCapabilities | null = null;
   let lightingState: LightingState | null = null;
+  let lightingOutputMode: LightingOutputModeState | null = null;
   let overlay: LightingOverlayCell[] = [];
   let overlayReadSupported = true;
   let sceneStatus: LightingSceneStatus | null = null;
@@ -93,6 +95,11 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
       ]);
     } catch {
       topology = EMPTY_TOPOLOGY;
+    }
+    try {
+      lightingOutputMode = await session.lighting.outputMode();
+    } catch {
+      lightingOutputMode = null;
     }
     try {
       overlay = await session.lighting.readOverlay();
@@ -187,6 +194,7 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     peripheralBattery,
     connection,
     lightingState,
+    lightingOutputMode,
     overlay,
     sceneStatus,
     scenes,

@@ -37,6 +37,7 @@ import type {
   LightingMatrixPosition,
   LightingMutableState,
   LightingOverlayCell,
+  LightingOutputModeState,
   LightingLayerPolicy,
   LightingPhysicalKey,
   LightingRoute,
@@ -97,6 +98,8 @@ export interface KeymapOps {
 export interface LightingOps {
   capabilities(): Promise<LightingCapabilities>;
   state(): Promise<LightingState>;
+  /** Configured three-state output policy and its live effective state. */
+  outputMode(): Promise<LightingOutputModeState>;
   topology(): Promise<LightingTopology>;
   /** Atomically replace the whole overlay (wraps the chunked transaction). */
   replaceOverlay(cells: LightingOverlayCell[]): Promise<LightingState>;

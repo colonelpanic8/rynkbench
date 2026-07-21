@@ -263,7 +263,8 @@ function FirmwareRulesPanel({ activeCount }: { activeCount: number }) {
     return [...result.values()];
   }, [state.compiledScenes, state.conditionalScenes]);
 
-  if (total === 0) return null;
+  const outputMode = state.lightingOutputMode;
+  if (total === 0 && outputMode === null) return null;
   const { output_toggle_user_action: toggleAction, wake_layer: wakeLayer } =
     state.lightingControls;
   return (
@@ -277,6 +278,19 @@ function FirmwareRulesPanel({ activeCount }: { activeCount: number }) {
           {toggleAction !== undefined && `User${toggleAction} toggles all lighting`}
           {toggleAction !== undefined && wakeLayer !== undefined && " · "}
           {wakeLayer !== undefined && `L${wakeLayer} wakes lighting and presents status`}
+        </p>
+      )}
+      {outputMode !== null && (
+        <p className="mt-1 text-[11.5px] leading-relaxed text-mute">
+          {outputMode.cycle_user_action !== undefined &&
+            `User${outputMode.cycle_user_action} cycles always on → always off → plugged-in only · `}
+          Current: {outputMode.mode === "AlwaysOn"
+            ? "always on"
+            : outputMode.mode === "AlwaysOff"
+              ? "always off"
+              : "plugged-in only"}
+          {` · ${outputMode.effective_enabled ? "lights on" : "lights off"}`}
+          {` · ${outputMode.powered ? "USB powered" : "on battery"}`}
         </p>
       )}
       <details className="mt-2 rounded-lg border border-line-soft bg-well px-3 py-2">
@@ -360,8 +374,26 @@ export function LightingMode() {
   const previewEffects = useMemo(() => {
     const result = new Map(visibleEffects);
     for (const cell of conditionalPreview.values()) result.set(cell.led_id, cell.effect);
+    const outputMode = state.lightingOutputMode;
+    const activeLayers =
+      target === "overlay"
+        ? new Set(state.activeLayers)
+        : new Set([state.defaultLayer, target]);
+    if (
+      outputMode?.indicator !== undefined &&
+      outputMode.wake_layer !== undefined &&
+      activeLayers.has(outputMode.wake_layer)
+    ) {
+      const effect =
+        outputMode.mode === "AlwaysOn"
+          ? outputMode.indicator.always_on
+          : outputMode.mode === "AlwaysOff"
+            ? outputMode.indicator.always_off
+            : outputMode.indicator.powered_only;
+      result.set(outputMode.indicator.led_id, effect);
+    }
     return result;
-  }, [conditionalPreview, visibleEffects]);
+  }, [conditionalPreview, state.activeLayers, state.defaultLayer, state.lightingOutputMode, target, visibleEffects]);
 
   const lighting = state.lightingState;
   const backgroundColor =

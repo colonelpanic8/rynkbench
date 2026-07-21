@@ -45,6 +45,7 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     peripheralBattery: "Unavailable",
     connection: null,
     lightingState: LIGHTING,
+    lightingOutputMode: null,
     applied: {},
     draft: {},
     lightingTarget: "overlay",
