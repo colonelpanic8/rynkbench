@@ -4,10 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "wasm": "nix build .#rynk-wasm --out-link src/vendor/rynk-wasm",
+    "predev": "npm run wasm",
     "dev": "vite",
+    "prebuild": "npm run wasm",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "pretest": "npm run wasm",
     "test": "vitest run"
   },
   "dependencies": {

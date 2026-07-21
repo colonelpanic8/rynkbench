@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Generated from the flake-pinned RMK source by `npm run wasm`.
+src/vendor/rynk-wasm
+
 # Nix
 result
 result-*

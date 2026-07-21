@@ -67,8 +67,8 @@
       },
       "original": {
         "owner": "colonelpanic8",
+        "ref": "glove80-rmk/scene-master-merge",
         "repo": "rmk",
-        "rev": "228f9bcdfa012512f89a8bc1b48f2a3daa0a8d53",
         "type": "github"
       }
     },

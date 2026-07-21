@@ -25,13 +25,13 @@ With [Nix](https://nixos.org) (flakes enabled):
 ```bash
 nix develop            # drops you into a shell with the right Node
 npm install
-npm run dev            # Vite dev server; open the printed localhost URL in Chrome
+npm run dev            # builds Rynk WASM, then starts the Vite dev server
 ```
-
-Without Nix, use Node 22+ and the same `npm` commands.
 
 Other scripts: `npm run build` (typecheck + production build), `npm run test`
 (vitest), `npm run lint` (oxlint), `npm run preview` (serve the built site).
+The dev, build, and test commands use Nix to materialize the pinned Rynk WASM
+package first; Node 22+ is still used for the web build itself.
 
 ## Architecture
 
@@ -40,34 +40,35 @@ Other scripts: `npm run build` (typecheck + production build), `npm run test`
 - **The session seam** (`src/session/types.ts`) is the one interface the UI talks
   to. Two implementations back it: a `mock` backend with demo boards, and a
   `webhid` backend that drives real hardware. The UI never imports a transport
-  or wasm directly — only *types* from the vendored client and the seam.
-- **`src/vendor/rynk-wasm`** is the Rynk protocol client: Rust compiled to wasm
-  with `wasm-pack`. The browser owns transports (WebHID chooser, stream locks,
-  hot-plug); the wasm owns request/response typing and protocol validation.
+  or WASM directly — only *types* from the generated client and the seam.
+- **`src/vendor/rynk-wasm`** is an ignored build output containing the Rynk
+  protocol client compiled to WASM with `wasm-pack`. The browser owns transports
+  (WebHID chooser, stream locks, hot-plug); the WASM owns request/response typing
+  and protocol validation.
 
-## The vendored Rynk client
+## The Rynk WASM build artifact
 
-The compiled client (`rynk_wasm_bg.wasm`, `rynk_wasm.js`, `rynk_wasm.d.ts`) is
-**committed** to this repo, so the app builds with only Node — no Rust toolchain
-required. `src/vendor/rynk-wasm/provenance.json` records exactly which
-[`colonelpanic8/rmk`](https://github.com/colonelpanic8/rmk) commit it was built
-from and the command that produced it.
-
-To regenerate it against the pinned source:
+The compiled client (`rynk_wasm_bg.wasm`, `rynk_wasm.js`, and its generated
+types) is built from the locked
+[`colonelpanic8/rmk`](https://github.com/colonelpanic8/rmk) source rather than
+committed to this repository. To materialize it explicitly:
 
 ```bash
-nix run .#regen-wasm          # rebuilds src/vendor/rynk-wasm and rewrites provenance.json
+npm run wasm                  # links the Nix artifact at src/vendor/rynk-wasm
 ```
 
-Or work in the regen shell against your own RMK checkout:
+`npm run dev`, `npm run build`, and `npm test` do this automatically. A complete
+release-ready static site, including the generated WASM, is available as a Nix
+artifact:
 
 ```bash
-nix develop .#regen
-RMK_SRC=/path/to/rmk regen-wasm
+nix build                     # result/ contains the deployable site
 ```
 
-Bump the pin by editing the `rmk` input rev in [`flake.nix`](flake.nix), then
-`nix flake lock --update-input rmk` and regenerate.
+The flake input names the RMK integration branch used by `glove80-rmk`, while
+`flake.lock` pins an exact commit for reproducible builds. Update with
+`nix flake update rmk`; switch the branch in `flake.nix` when `glove80-rmk`
+promotes its RMK pin to another branch.
 
 ## License
 

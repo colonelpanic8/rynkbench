@@ -1,6 +1,0 @@
-{
-  "source": "dependencies/rmk/rynk/rynk-wasm",
-  "rmkCommit": "228f9bcdfa012512f89a8bc1b48f2a3daa0a8d53",
-  "generationCommand": "RUSTUP_TOOLCHAIN=1.97.0 wasm-pack build --release --target web --out-dir apps/rynkbench/src/vendor/rynk-wasm dependencies/rmk/rynk/rynk-wasm",
-  "wasmSha256": "b35c00c7dbda470012f42e684bed33c753a87630c81e810b27feacb7ce4a508e"
-}

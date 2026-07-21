@@ -8,11 +8,11 @@
       url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    # The Rynk protocol client under src/vendor/rynk-wasm is committed wasm-pack
-    # output; this pin is the source it is built from. `regen-wasm` rebuilds the
-    # vendored package against it. Keep the rev in sync with provenance.json.
+    # Match the branch containing glove80-rmk's pinned RMK gitlink. The flake
+    # lock keeps builds reproducible while retaining the branch as update intent.
+    # Switch this to master when glove80-rmk promotes the candidate there.
     rmk = {
-      url = "github:colonelpanic8/rmk/228f9bcdfa012512f89a8bc1b48f2a3daa0a8d53";
+      url = "github:colonelpanic8/rmk/glove80-rmk/scene-master-merge";
       flake = false;
     };
   };
@@ -22,80 +22,96 @@
       let
         pkgs = import nixpkgs { inherit system; };
         rmkRev = rmk.rev or "unknown";
-
-        # Toolchain for regenerating the vendored wasm. wasm-pack fetches the
-        # matching wasm-bindgen itself, so the network is needed on regen.
         rustToolchain = fenix.packages.${system}.combine [
           fenix.packages.${system}.stable.rustc
           fenix.packages.${system}.stable.cargo
           fenix.packages.${system}.targets.wasm32-unknown-unknown.stable.rust-std
         ];
-        regenInputs = [
-          rustToolchain
-          pkgs.wasm-pack
-          pkgs.binaryen
-          pkgs.nodejs_22
-          pkgs.git
-        ];
+        rustPlatform = pkgs.makeRustPlatform {
+          cargo = rustToolchain;
+          rustc = rustToolchain;
+        };
 
-        regen-wasm = pkgs.writeShellApplication {
-          name = "regen-wasm";
-          runtimeInputs = regenInputs;
-          text = ''
-            out="src/vendor/rynk-wasm"
-            if [ ! -f package.json ] || ! grep -q '"rynkbench"' package.json; then
-              echo "regen-wasm: run from the rynkbench repo root" >&2
-              exit 1
-            fi
+        rynk-wasm = rustPlatform.buildRustPackage {
+          pname = "rynk-wasm";
+          version = "0.0.0-${builtins.substring 0 8 rmkRev}";
+          src = rmk;
+          cargoRoot = "rynk";
+          buildAndTestSubdir = "rynk";
 
-            # Default to the flake-pinned source; RMK_SRC overrides with a local
-            # checkout. Capture the rev before any copy for provenance.
-            src="''${RMK_SRC:-${rmk}}"
-            rev="${rmkRev}"
-            if [ -n "''${RMK_SRC:-}" ] && git -C "$src" rev-parse HEAD >/dev/null 2>&1; then
-              rev="$(git -C "$src" rev-parse HEAD)"
-            fi
+          cargoLock = {
+            lockFile = ./nix/rynk-wasm-Cargo.lock;
+            outputHashes = {
+              "trouble-host-0.7.0" = "sha256-OpuLHCdML9llLAEvYR1ZUvl2WnBekO3Cglunync5iZU=";
+            };
+          };
+          nativeBuildInputs = [
+            pkgs.binaryen
+            pkgs.wasm-bindgen-cli_0_2_126
+            pkgs.wasm-pack
+          ];
 
-            # The Nix store copy is read-only; cargo needs a writable workspace.
-            if [ ! -w "$src" ]; then
-              tmp="$(mktemp -d)"
-              trap 'rm -rf "$tmp"' EXIT
-              cp -a "$src"/. "$tmp"/
-              chmod -R u+w "$tmp"
-              src="$tmp"
-            fi
-            CARGO_TARGET_DIR="$(mktemp -d)"
-            export CARGO_TARGET_DIR
+          postPatch = ''
+            cp ${./nix/rynk-wasm-Cargo.lock} rynk/Cargo.lock
+          '';
 
-            wasm-pack build --release --target web --out-dir "$PWD/$out" "$src/rynk/rynk-wasm"
+          buildPhase = ''
+            runHook preBuild
+            export HOME="$TMPDIR/home"
+            mkdir -p "$HOME"
+            pushd rynk
+            wasm-pack build --release --target web --mode no-install \
+              --out-dir pkg rynk-wasm
+            popd
+            runHook postBuild
+          '';
 
-            sha="$(sha256sum "$out/rynk_wasm_bg.wasm" | cut -d' ' -f1)"
-            cat > "$out/provenance.json" <<EOF
-            {
-              "source": "github:colonelpanic8/rmk (rynk/rynk-wasm)",
-              "rmkCommit": "$rev",
-              "generationCommand": "nix run .#regen-wasm",
-              "wasmSha256": "$sha"
-            }
-            EOF
-            echo "regen-wasm: wrote $out from rmk $rev (sha256 $sha)"
+          installPhase = ''
+            runHook preInstall
+            mkdir -p "$out"
+            cp -r rynk/rynk-wasm/pkg/. "$out/"
+            runHook postInstall
+          '';
+
+          doCheck = false;
+        };
+
+        rynkbench = pkgs.buildNpmPackage {
+          pname = "rynkbench";
+          version = "0.0.0";
+          src = self;
+          npmDepsHash = "sha256-RFEkBVhRRTnM6hDVL+wQz65EnPz8YOhzLmLBf92aKfQ=";
+
+          preBuild = ''
+            rm -rf src/vendor/rynk-wasm
+            mkdir -p src/vendor/rynk-wasm
+            cp -r ${rynk-wasm}/. src/vendor/rynk-wasm/
+          '';
+
+          buildPhase = ''
+            runHook preBuild
+            npm exec tsc -b
+            npm exec vite build
+            runHook postBuild
+          '';
+
+          installPhase = ''
+            runHook preInstall
+            cp -r dist "$out"
+            runHook postInstall
           '';
         };
       in
       {
-        # Development: just Node. The app builds from the committed wasm.
         devShells.default = pkgs.mkShell {
           packages = [ pkgs.nodejs_22 ];
         };
 
-        # Regenerating the vendored wasm: Rust + wasm-pack, plus `regen-wasm`.
-        devShells.regen = pkgs.mkShell {
-          packages = regenInputs ++ [ regen-wasm ];
-          RMK_SRC = "${rmk}";
-        };
+        packages.default = rynkbench;
+        packages.rynkbench = rynkbench;
+        packages.rynk-wasm = rynk-wasm;
 
-        packages.regen-wasm = regen-wasm;
-        apps.regen-wasm = flake-utils.lib.mkApp { drv = regen-wasm; };
+        checks.default = rynkbench;
 
         formatter = pkgs.nixpkgs-fmt;
       });
