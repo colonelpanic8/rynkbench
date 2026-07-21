@@ -23,15 +23,16 @@ counts, so local dev works out of the box.
 With [Nix](https://nixos.org) (flakes enabled):
 
 ```bash
-nix develop            # drops you into a shell with the right Node
-npm install
-npm run dev            # builds Rynk WASM, then starts the Vite dev server
+nix develop            # drops you into a shell with Node 22 and just
+just setup
+just dev                # builds Rynk WASM, then starts Vite on a fresh port
 ```
 
-Other scripts: `npm run build` (typecheck + production build), `npm run test`
-(vitest), `npm run lint` (oxlint), `npm run preview` (serve the built site).
-The dev, build, and test commands use Nix to materialize the pinned Rynk WASM
-package first; Node 22+ is still used for the web build itself.
+Run `just` to list all project commands. `just check` runs lint, tests, and the
+production build; `just preview` builds and serves that production bundle.
+Both `just dev` and `just preview` accept an optional explicit port, for example
+`just dev 50000`. The dev, build, and test commands use Nix to materialize the
+pinned Rynk WASM package first; Node 22+ is still used for the web build itself.
 
 ## Architecture
 

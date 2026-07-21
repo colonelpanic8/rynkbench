@@ -104,7 +104,10 @@
       in
       {
         devShells.default = pkgs.mkShell {
-          packages = [ pkgs.nodejs_22 ];
+          packages = [
+            pkgs.just
+            pkgs.nodejs_22
+          ];
         };
 
         packages.default = rynkbench;
