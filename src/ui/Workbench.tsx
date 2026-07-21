@@ -105,8 +105,16 @@ export function Workbench({
         io.refreshLighting();
       } else if ("LedIndicatorChange" in event) {
         dispatch({ type: "topicLedIndicator", indicator: event.LedIndicatorChange });
+      } else if ("ModifierChange" in event) {
+        dispatch({ type: "topicModifier", modifiers: event.ModifierChange });
       }
     });
+    // Subscribe first, then resample to close the connect-to-mount race. Old
+    // firmware rejects this additive endpoint and keeps the matrix fallback.
+    bundle.session.device.modifierState().then(
+      (modifiers) => dispatch({ type: "topicModifier", modifiers }),
+      () => {},
+    );
     bundle.session.onDisconnect(onUnexpectedDisconnect);
   }, [bundle.session, io, onUnexpectedDisconnect]);
 

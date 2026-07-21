@@ -22,6 +22,7 @@ import type {
   LightingSceneCell,
   LightingSceneStatus,
   LightingState,
+  ModifierCombination,
   Morse,
   ProtocolVersion,
 } from "../vendor/rynk-wasm/rynk_wasm";
@@ -71,6 +72,8 @@ export interface ConnectedBundle {
   /** null when the device rejected the read (feature-gated out). */
   behavior: BehaviorConfig | null;
   ledIndicator: LedIndicator | null;
+  /** null only when legacy firmware lacks GetModifierState. */
+  modifierState: ModifierCombination | null;
 }
 
 export interface PendingInfo {
@@ -141,6 +144,8 @@ export interface WorkbenchState {
   macroBytes: Uint8Array;
   behavior: BehaviorConfig | null;
   ledIndicator: LedIndicator | null;
+  /** Authoritative resolved HID modifiers; null enables the legacy matrix fallback. */
+  modifierState: ModifierCombination | null;
 }
 
 export function keyPendingId(layer: number, row: number, col: number): string {
@@ -244,6 +249,7 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     macroBytes: bundle.macroBytes,
     behavior: bundle.behavior,
     ledIndicator: bundle.ledIndicator,
+    modifierState: bundle.modifierState,
   };
 }
 
@@ -318,7 +324,8 @@ export type WorkbenchAction =
   | { type: "behaviorWriteOk" }
   | { type: "behaviorWriteErr"; prev: BehaviorConfig | null; message: string }
   | { type: "behaviorErrDismiss" }
-  | { type: "topicLedIndicator"; indicator: LedIndicator };
+  | { type: "topicLedIndicator"; indicator: LedIndicator }
+  | { type: "topicModifier"; modifiers: ModifierCombination };
 
 function setLayerKey(
   layers: KeyAction[][],
@@ -591,6 +598,8 @@ export function makeWorkbenchReducer(cols: number) {
       }
       case "topicLedIndicator":
         return { ...state, ledIndicator: act.indicator };
+      case "topicModifier":
+        return { ...state, modifierState: act.modifiers };
     }
   };
 }

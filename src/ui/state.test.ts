@@ -3,7 +3,12 @@
 // baselines (applied overlay vs. that layer's stored scene cells).
 
 import { describe, expect, it } from "vitest";
-import type { LightingEffect, LightingSceneCell, LightingState } from "../vendor/rynk-wasm/rynk_wasm";
+import type {
+  LightingEffect,
+  LightingSceneCell,
+  LightingState,
+  ModifierCombination,
+} from "../vendor/rynk-wasm/rynk_wasm";
 import {
   activeLightingBase,
   activeLightingDraft,
@@ -60,6 +65,7 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     macroBytes: new Uint8Array(),
     behavior: null,
     ledIndicator: null,
+    modifierState: null,
     ...over,
   };
 }
@@ -159,5 +165,22 @@ describe("layer-state snapshots", () => {
     expect(next.activeLayers).toEqual([1, 2, 4]);
     expect(next.currentLayer).toBe(4);
     expect(next.layerStateComplete).toBe(true);
+  });
+});
+
+describe("modifier-state snapshots", () => {
+  it("replaces the resolved HID modifier state from a topic", () => {
+    const modifiers: ModifierCombination = {
+      left_ctrl: false,
+      left_shift: true,
+      left_alt: false,
+      left_gui: false,
+      right_ctrl: false,
+      right_shift: false,
+      right_alt: false,
+      right_gui: false,
+    };
+    const next = reducer(baseState(), { type: "topicModifier", modifiers });
+    expect(next.modifierState).toEqual(modifiers);
   });
 });

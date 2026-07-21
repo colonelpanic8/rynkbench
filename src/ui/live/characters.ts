@@ -62,6 +62,11 @@ function shifted(mods: ModifierCombination): boolean {
   return mods.left_shift || mods.right_shift;
 }
 
+/** Authoritative Shift state, or null when the firmware cannot report it. */
+export function reportedShiftState(mods: ModifierCombination | null): boolean | null {
+  return mods === null ? null : shifted(mods);
+}
+
 function printableCharacter(code: HidKeyCode, shift: boolean): string | null {
   if (/^[A-Z]$/.test(code)) return shift ? code : code.toLowerCase();
   return (shift ? SHIFTED[code] : UNSHIFTED[code]) ?? null;

@@ -13,6 +13,7 @@ import type {
   LightingSceneCell,
   LightingSceneStatus,
   LightingState,
+  ModifierCombination,
 } from "./vendor/rynk-wasm/rynk_wasm";
 import type { LightingTopology, RynkSession, SessionProvider } from "./session/types";
 import type { ConnectAttempt } from "./ui/ConnectScreen";
@@ -134,16 +135,18 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
 
   // Advanced tables — every read is capability-gated and failure-tolerant so
   // sparse firmware degrades to hidden features, never a failed connect.
-  const [combos, morse, forks, macroBytes, behavior, ledIndicator] = await Promise.all([
-    caps.max_combos > 0 ? session.combos.readAll().catch(() => []) : [],
-    caps.max_morse > 0 ? session.morse.readAll().catch(() => []) : [],
-    caps.max_forks > 0 ? session.forks.readAll().catch(() => []) : [],
-    caps.macro_space_size > 0
-      ? session.macros.read().catch(() => new Uint8Array(0))
-      : new Uint8Array(0),
-    session.behavior.get().catch(() => null),
-    session.device.ledIndicator().catch(() => null),
-  ]);
+  const [combos, morse, forks, macroBytes, behavior, ledIndicator, modifierState] =
+    await Promise.all([
+      caps.max_combos > 0 ? session.combos.readAll().catch(() => []) : [],
+      caps.max_morse > 0 ? session.morse.readAll().catch(() => []) : [],
+      caps.max_forks > 0 ? session.forks.readAll().catch(() => []) : [],
+      caps.macro_space_size > 0
+        ? session.macros.read().catch(() => new Uint8Array(0))
+        : new Uint8Array(0),
+      session.behavior.get().catch(() => null),
+      session.device.ledIndicator().catch(() => null),
+      session.device.modifierState().catch((): ModifierCombination | null => null),
+    ]);
 
   return {
     session,
@@ -172,6 +175,7 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     macroBytes,
     behavior,
     ledIndicator,
+    modifierState,
   };
 }
 

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { KeyAction, ModifierCombination } from "../../vendor/rynk-wasm/rynk_wasm";
-import { keyActionHoldsShift, liveKeyActionGlyph, pressedMatrixIndices } from "./characters";
+import {
+  keyActionHoldsShift,
+  liveKeyActionGlyph,
+  pressedMatrixIndices,
+  reportedShiftState,
+} from "./characters";
 
 const key = (code: "A" | "Kc1" | "Slash" | "Enter" | "LShift"): KeyAction => ({
   Single: { Key: { Hid: code } },
@@ -39,6 +44,12 @@ describe("live character glyphs", () => {
 });
 
 describe("held Shift detection", () => {
+  it("distinguishes authoritative unshifted state from unsupported readback", () => {
+    expect(reportedShiftState(mods(false))).toBe(false);
+    expect(reportedShiftState(mods(true))).toBe(true);
+    expect(reportedShiftState(null)).toBeNull();
+  });
+
   it("recognizes physical Shift and modifier-bearing layer actions", () => {
     expect(keyActionHoldsShift(key("LShift"))).toBe(true);
     expect(

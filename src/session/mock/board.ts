@@ -303,6 +303,7 @@ class MockSession implements RynkSession {
   private readonly indicator: LedIndicator;
   private readonly ble: BleStatus;
   private readonly matrixBitmap: Uint8Array;
+  private readonly modifiers = noModifiers();
   private matrixTimer: ReturnType<typeof setInterval> | null = null;
   private lastMatrixPoll = 0;
   private topicHandler: ((event: TopicEvent) => void) | null = null;
@@ -377,6 +378,7 @@ class MockSession implements RynkSession {
         this.ensureMatrixSim();
         return { pressed_bitmap: [...this.matrixBitmap] };
       }),
+    modifierState: () => latency(() => ({ ...this.modifiers })),
     ledIndicator: () => latency(() => ({ ...this.indicator })),
   };
 

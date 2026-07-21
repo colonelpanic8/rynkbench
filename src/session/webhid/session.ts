@@ -202,6 +202,7 @@ export class WebHidSession implements RynkSession {
       clearBleProfile: (slot) => this.run(() => client.clear_ble_profile(slot)),
       peripheralStatus: (slot) => this.run(() => client.get_peripheral_status(slot)),
       matrixState: () => this.run(() => client.get_matrix_state()),
+      modifierState: () => this.run(() => client.get_modifier_state()),
       ledIndicator: () => this.run(() => client.get_led_indicator()),
     };
 

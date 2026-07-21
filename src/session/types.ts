@@ -44,6 +44,7 @@ import type {
   LightingZone,
   LightingZoneId,
   MatrixState,
+  ModifierCombination,
   Morse,
   PeripheralStatus,
   ProtocolVersion,
@@ -164,6 +165,8 @@ export interface DeviceOps {
   peripheralStatus(slot: number): Promise<PeripheralStatus>;
   /** Live pressed-key bitmap, for the matrix tester. */
   matrixState(): Promise<MatrixState>;
+  /** Final resolved modifier bitmap used by the HID keyboard report. */
+  modifierState(): Promise<ModifierCombination>;
   ledIndicator(): Promise<LedIndicator>;
 }
 

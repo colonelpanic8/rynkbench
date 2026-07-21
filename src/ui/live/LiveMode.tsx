@@ -13,7 +13,12 @@ import { cssEmissiveRgb, hsvToRgb } from "../color";
 import { InspectorShell, Panel, Row, SectionLabel, cx } from "../kit";
 import { KIND_LABEL } from "../TopBar";
 import { compositeScenes, effectiveAction } from "./compositor";
-import { keyActionHoldsShift, liveKeyActionGlyph, pressedMatrixIndices } from "./characters";
+import {
+  keyActionHoldsShift,
+  liveKeyActionGlyph,
+  pressedMatrixIndices,
+  reportedShiftState,
+} from "./characters";
 
 const MATRIX_POLL_MS = 100;
 
@@ -157,6 +162,7 @@ export function LiveMode() {
   const bgColor = bg && bgOn ? wireHsvCss(bg.hue, bg.saturation, bg.value) : null;
 
   useEffect(() => {
+    if (state.modifierState !== null) return;
     let cancelled = false;
     const poll = async () => {
       if (matrixPollInFlight.current) return;
@@ -173,7 +179,7 @@ export function LiveMode() {
           );
         }
       } catch {
-        // Legacy/transient read failure: retain the last known modifier state.
+        // Legacy/transient read failure: retain the last matrix-derived state.
       } finally {
         matrixPollInFlight.current = false;
       }
@@ -184,16 +190,19 @@ export function LiveMode() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [bundle.caps.num_cols, bundle.caps.num_rows, bundle.session]);
+  }, [bundle.caps.num_cols, bundle.caps.num_rows, bundle.session, state.modifierState]);
 
   const shiftActive = useMemo(
-    () =>
-      pressedIndices.some((index) =>
+    () => {
+      const reported = reportedShiftState(state.modifierState);
+      if (reported !== null) return reported;
+      return pressedIndices.some((index) =>
         keyActionHoldsShift(
           effectiveAction(state.layers, state.activeLayers, state.defaultLayer, index),
         ),
-      ),
-    [pressedIndices, state.activeLayers, state.defaultLayer, state.layers],
+      );
+    },
+    [pressedIndices, state.activeLayers, state.defaultLayer, state.layers, state.modifierState],
   );
 
   const lit = useMemo(

@@ -391,6 +391,10 @@ class StubSession implements RynkSession {
       const bitmap = new Array(ROWS * Math.ceil(COLS / 8)).fill(0);
       return { pressed_bitmap: bitmap };
     },
+    modifierState: async () => {
+      await lag();
+      return emptyBits().modifiers;
+    },
     ledIndicator: async (): Promise<LedIndicator> => {
       await lag();
       return { num_lock: false, caps_lock: false, scroll_lock: false, compose: false, kana: false };

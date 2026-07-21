@@ -504,6 +504,14 @@ describe.each(boards)("%s device status", (_name, spec) => {
       expect(typeof indicator.num_lock).toBe("boolean");
     });
   });
+
+  it("reports resolved modifiers", async () => {
+    await withSession(spec, async (session) => {
+      const modifiers = await session.device.modifierState();
+      expect(modifiers.left_shift).toBe(false);
+      expect(modifiers.right_shift).toBe(false);
+    });
+  });
 });
 
 describe("BLE and peripherals", () => {
