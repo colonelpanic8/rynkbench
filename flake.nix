@@ -8,11 +8,10 @@
       url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    # Match the branch containing glove80-rmk's pinned RMK gitlink. The flake
-    # lock keeps builds reproducible while retaining the branch as update intent.
-    # Switch this to master when glove80-rmk promotes the candidate there.
+    # Follow the fork's composed master; flake.lock pins the exact protocol
+    # revision used by firmware and the generated browser client.
     rmk = {
-      url = "github:colonelpanic8/rmk/glove80-rmk/scene-master-merge";
+      url = "github:colonelpanic8/rmk/master";
       flake = false;
     };
   };

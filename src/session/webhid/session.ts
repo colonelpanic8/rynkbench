@@ -15,6 +15,8 @@ import type {
   LightingLayerPolicy,
   LightingMutableState,
   LightingOverlayCell,
+  LightingOverlayPage,
+  LightingOverlayPageRequest,
   LightingPageRequest,
   LightingSceneCell,
   LightingSceneStatus,
@@ -45,6 +47,7 @@ interface LightingPage<T> {
 }
 
 const TOPOLOGY_READ_ATTEMPTS = 3;
+const OVERLAY_READ_ATTEMPTS = 3;
 const SCENE_READ_ATTEMPTS = 3;
 
 // LightingFeatureFlags::LAYER_SCENES (rmk-types); the generated .d.ts erases
@@ -63,6 +66,70 @@ function isRevisionConflict(error: unknown): boolean {
   // a fresh-revision page; the wasm layer surfaces that as a serialized
   // LightingError. Either shape means: restart the read.
   return error instanceof TopologyDrift || String(error).includes("TopologyRevisionConflict");
+}
+
+function isStateRevisionConflict(error: unknown): boolean {
+  return String(error).includes("StateRevisionConflict");
+}
+
+interface OverlayReadClient {
+  get_lighting_state(): Promise<LightingState>;
+  get_lighting_overlay(request: LightingOverlayPageRequest): Promise<LightingOverlayPage>;
+}
+
+/** Read one coherent overlay snapshot, retrying if mutation or TTL expiry
+ * invalidates the pinned lighting-state revision between pages. */
+export async function readLightingOverlay(
+  client: OverlayReadClient,
+  attempts = OVERLAY_READ_ATTEMPTS,
+): Promise<LightingOverlayCell[]> {
+  let lastConflict: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const state = await client.get_lighting_state();
+    const cells: LightingOverlayCell[] = [];
+    let offset = 0;
+    let firstPage = true;
+    try {
+      // Request one page even for an empty overlay. Besides returning the
+      // empty snapshot, this probes endpoint support on older firmware.
+      while (firstPage || offset < state.overlay_len) {
+        firstPage = false;
+        const page = await client.get_lighting_overlay({
+          revision: state.revision,
+          offset,
+        });
+        if (page.revision !== state.revision || page.total_count !== state.overlay_len) {
+          throw new Error(
+            `overlay page disagrees with pinned state ` +
+              `(revision ${state.revision}, count ${state.overlay_len})`,
+          );
+        }
+        if (offset >= state.overlay_len) {
+          if (page.items.length !== 0) {
+            throw new Error("empty overlay snapshot returned unexpected cells");
+          }
+          break;
+        }
+        if (page.items.length === 0 || offset + page.items.length > state.overlay_len) {
+          throw new Error(`overlay page stalled or exceeded count at cell ${offset}`);
+        }
+        cells.push(...page.items);
+        offset = cells.length;
+      }
+      if (cells.length !== state.overlay_len) {
+        throw new Error(
+          `overlay pagination ended at ${cells.length} of ${state.overlay_len} cells`,
+        );
+      }
+      return cells;
+    } catch (error) {
+      if (!isStateRevisionConflict(error)) throw error;
+      lastConflict = error;
+    }
+  }
+  throw new Error(`lighting overlay kept changing across ${attempts} read attempts`, {
+    cause: lastConflict,
+  });
 }
 
 export class WebHidSession implements RynkSession {
@@ -138,12 +205,7 @@ export class WebHidSession implements RynkSession {
           const state = await client.get_lighting_state();
           return client.clear_lighting_overlay({ expected_revision: state.revision });
         }),
-      readOverlay: async () => {
-        throw new Error(
-          "Overlay readback is not part of the Rynk wire protocol; " +
-            "the WebHID backend cannot read the overlay back",
-        );
-      },
+      readOverlay: () => this.run(() => readLightingOverlay(client)),
       setState: (state) => this.run(() => this.setLightingState(state)),
       scenes: {
         sceneStatus: () => this.run(() => this.readSceneStatus()),

@@ -58,16 +58,16 @@
     "rmk": {
       "flake": false,
       "locked": {
-        "lastModified": 1784611960,
-        "narHash": "sha256-7yh/44agKnBd4vak3R+GHKotm2u0ibOCsptVigltKkM=",
+        "lastModified": 1784627925,
+        "narHash": "sha256-KqaayJjmWsqYwD0UOuOnprTbofqyTpthzd9CD9Sjyo0=",
         "owner": "colonelpanic8",
         "repo": "rmk",
-        "rev": "228f9bcdfa012512f89a8bc1b48f2a3daa0a8d53",
+        "rev": "d74ee7f4e139affaa7e7c69ad9da866453d96cf9",
         "type": "github"
       },
       "original": {
         "owner": "colonelpanic8",
-        "ref": "glove80-rmk/scene-master-merge",
+        "ref": "master",
         "repo": "rmk",
         "type": "github"
       }
