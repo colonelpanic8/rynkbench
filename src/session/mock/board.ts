@@ -488,24 +488,7 @@ class MockSession implements RynkSession {
         const pack = this.requireExtensionEffects();
         return [...(kind === "Effects" ? pack.effects : pack.palettes)];
       }),
-    setExtensionState: (state) => {
-      // The revision handshake reads the current revision, then writes the
-      // guarded set — mirrored here by snapshotting at call time so any
-      // mutation landing in the latency window rejects the stale write,
-      // exactly like the firmware's compare-and-set.
-      const expected = this.revision;
-      return latency(() => {
-        const pack = this.requireExtensionEffects();
-        this.checkExtensionState(pack, state);
-        if (this.revision !== expected) {
-          throw new Error(
-            `StateRevisionConflict: lighting revision moved (expected ${expected}, now ${this.revision})`,
-          );
-        }
-        this.extensionState = { ...state };
-        return this.touchLighting();
-      });
-    },
+    setExtensionState: (state) => this.setExtensionSelection(state),
     scenes: {
       sceneStatus: () => latency(() => this.sceneStatus()),
       readScenes: () =>
@@ -709,6 +692,32 @@ class MockSession implements RynkSession {
     };
   }
 
+  private async setExtensionSelection(state: LightingExtensionState): Promise<LightingState> {
+    // Match the live backend: discover the current revision, perform a
+    // guarded write, and retry that handshake once if another lighting
+    // mutation wins the race.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const current = await latency(() => this.readExtension());
+      try {
+        return await latency(() => {
+          const pack = this.requireExtensionEffects();
+          this.checkExtensionState(pack, state);
+          if (this.revision !== current.revision) {
+            throw new Error(
+              `StateRevisionConflict: lighting revision moved ` +
+                `(expected ${current.revision}, now ${this.revision})`,
+            );
+          }
+          this.extensionState = { ...state };
+          return this.touchLighting();
+        });
+      } catch (error) {
+        if (attempt !== 0 || !String(error).includes("RevisionConflict")) throw error;
+      }
+    }
+    throw new Error("extension revision retry exhausted");
+  }
+
   private checkExtensionState(
     pack: NonNullable<BoardSpec["extensionEffects"]>,
     state: LightingExtensionState,
@@ -722,6 +731,14 @@ class MockSession implements RynkSession {
       state.palette >= pack.palettes.length
     ) {
       throw new Error(`extension palette ${state.palette} out of range`);
+    }
+    for (const [name, value] of [
+      ["value", state.value],
+      ["speed", state.speed],
+    ] as const) {
+      if (!Number.isInteger(value) || value < 0 || value > 255) {
+        throw new Error(`extension ${name} ${value} is not a u8`);
+      }
     }
   }
 

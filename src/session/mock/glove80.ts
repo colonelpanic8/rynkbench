@@ -386,7 +386,7 @@ export const glove80Board: BoardSpec = {
       "Viridis",
       "Watermelon",
     ],
-    initial: { effect: 0, palette: 4, value: 180, speed: 128 },
+    initial: { effect: 1, palette: 0, value: 128, speed: 128 },
   },
   lightingOutputMode: {
     mode: "PoweredOnly",

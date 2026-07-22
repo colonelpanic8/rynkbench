@@ -55,6 +55,14 @@ interface LightingPage<T> {
   items: T[];
 }
 
+interface ExtensionNamesClient {
+  get_lighting_extension(): Promise<LightingExtension>;
+  get_lighting_extension_names(request: {
+    kind: LightingExtensionNameKind;
+    offset: number;
+  }): Promise<{ total: number; items: string[] }>;
+}
+
 const TOPOLOGY_READ_ATTEMPTS = 3;
 const OVERLAY_READ_ATTEMPTS = 3;
 const SCENE_READ_ATTEMPTS = 3;
@@ -160,6 +168,30 @@ export async function readLightingOverlay(
   throw new Error(`lighting overlay kept changing across ${attempts} read attempts`, {
     cause: lastConflict,
   });
+}
+
+export async function readLightingExtensionNames(
+  client: ExtensionNamesClient,
+  kind: LightingExtensionNameKind,
+  discovered?: LightingExtension,
+): Promise<string[]> {
+  const extension = discovered ?? (await client.get_lighting_extension());
+  const total = kind === "Effects" ? extension.effect_count : extension.palette_count;
+  const names: string[] = [];
+  while (names.length < total) {
+    const page = await client.get_lighting_extension_names({ kind, offset: names.length });
+    if (page.total !== total) {
+      throw new Error(`extension name list disagrees with discovery (${page.total} vs ${total})`);
+    }
+    if (page.items.length === 0) {
+      throw new Error(`extension name read stalled at ${names.length} of ${total}`);
+    }
+    if (names.length + page.items.length > total) {
+      throw new Error(`extension name page exceeded advertised total ${total}`);
+    }
+    names.push(...page.items);
+  }
+  return names;
 }
 
 export class WebHidSession implements RynkSession {
@@ -678,27 +710,9 @@ export class WebHidSession implements RynkSession {
   }
 
   private async readExtensionNames(kind: LightingExtensionNameKind): Promise<string[]> {
-    // Names are static for a firmware build, so pages carry no revision pin;
-    // just walk offsets until the advertised total is collected.
+    // Feature-gate before touching the names endpoint on older firmware.
     const extension = await this.readExtension();
-    const total = kind === "Effects" ? extension.effect_count : extension.palette_count;
-    const names: string[] = [];
-    while (names.length < total) {
-      const page = await this.client.get_lighting_extension_names({
-        kind,
-        offset: names.length,
-      });
-      if (page.total !== total) {
-        throw new Error(
-          `extension name list disagrees with discovery (${page.total} vs ${total})`,
-        );
-      }
-      if (page.items.length === 0) {
-        throw new Error(`extension name read stalled at ${names.length} of ${total}`);
-      }
-      names.push(...page.items.slice(0, total - names.length));
-    }
-    return names;
+    return readLightingExtensionNames(this.client, kind, extension);
   }
 
   private async setExtensionSelection(state: LightingExtensionState): Promise<LightingState> {

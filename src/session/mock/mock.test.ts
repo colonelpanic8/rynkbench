@@ -394,33 +394,50 @@ describe("lighting extension effects", () => {
     });
   });
 
-  it("rejects a set whose pinned revision went stale mid-flight", async () => {
+  it("retries once when the pinned extension revision goes stale mid-flight", async () => {
     await withSession(glove80Board, async (session) => {
-      const random = vi.spyOn(Math, "random");
+      const random = vi.spyOn(Math, "random").mockReturnValue(0);
+      const next = {
+        effect: 1,
+        palette: 1,
+        value: 10,
+        speed: 10,
+      };
       try {
-        // The guarded set pins the revision it read, then lands late (~15 ms);
-        // a faster mutation (~5 ms) moves the revision underneath it.
-        random.mockReturnValue(0.999);
-        const stale = session.lighting.setExtensionState({
-          effect: 1,
-          palette: 1,
-          value: 10,
-          speed: 10,
-        });
-        random.mockReturnValue(0);
+        // Both first reads land together. The extension handshake registers
+        // first and pins the old revision; setState then moves it before the
+        // guarded write, forcing the live-compatible retry path.
+        const apply = session.lighting.setExtensionState(next);
         await session.lighting.setState({
           output_enabled: true,
           output_brightness: 99,
           background: glove80Board.background,
         });
-        await expect(stale).rejects.toThrow(/StateRevisionConflict/);
+        await expect(apply).resolves.toMatchObject({ output_brightness: 99 });
       } finally {
         random.mockRestore();
       }
-      // The stale write left the selection untouched.
-      expect((await session.lighting.extension()).state).toEqual(
-        glove80Board.extensionEffects!.initial,
-      );
+      expect((await session.lighting.extension()).state).toEqual(next);
+    });
+  });
+
+  it.each([
+    ["value", -1],
+    ["value", 256],
+    ["value", 1.5],
+    ["speed", -1],
+    ["speed", 256],
+    ["speed", 1.5],
+  ] as const)("rejects non-u8 extension %s values", async (field, invalid) => {
+    await withSession(glove80Board, async (session) => {
+      const before = await session.lighting.extension();
+      await expect(
+        session.lighting.setExtensionState({
+          ...before.state,
+          [field]: invalid,
+        }),
+      ).rejects.toThrow(/is not a u8/);
+      expect((await session.lighting.extension()).state).toEqual(before.state);
     });
   });
 
