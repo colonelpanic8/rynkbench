@@ -11,6 +11,7 @@ import type {
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
   LightingControls,
+  LightingExtension,
   LightingOverlayCell,
   LightingOutputModeState,
   LightingSceneCell,
@@ -86,6 +87,9 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     output_toggle_user_action: undefined,
     wake_layer: undefined,
   };
+  let lightingExtension: LightingExtension | null = null;
+  let extensionEffectNames: string[] = [];
+  let extensionPaletteNames: string[] = [];
   if (caps.lighting_enabled) {
     try {
       [topology, lightingCaps, lightingState] = await Promise.all([
@@ -133,6 +137,19 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
       conditionalScenes = await session.lighting.scenes.readConditionalScenes();
     } catch {
       conditionalScenes = [];
+    }
+    // Extension effects (animated effect packs with selectable palettes) are
+    // feature-gated newer firmware; absence just hides the panel.
+    try {
+      lightingExtension = await session.lighting.extension();
+      [extensionEffectNames, extensionPaletteNames] = await Promise.all([
+        session.lighting.extensionNames("Effects"),
+        session.lighting.extensionNames("Palettes"),
+      ]);
+    } catch {
+      lightingExtension = null;
+      extensionEffectNames = [];
+      extensionPaletteNames = [];
     }
   }
 
@@ -202,6 +219,9 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     compiledScenes,
     conditionalScenes,
     lightingControls,
+    lightingExtension,
+    extensionEffectNames,
+    extensionPaletteNames,
     combos,
     morse,
     forks,

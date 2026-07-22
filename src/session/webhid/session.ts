@@ -16,6 +16,9 @@ import type {
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
   LightingConditionalSceneStatus,
+  LightingExtension,
+  LightingExtensionNameKind,
+  LightingExtensionState,
   LightingOutputModeState,
   LightingLayerPolicy,
   LightingMutableState,
@@ -62,6 +65,7 @@ const LAYER_SCENES = 1 << 6;
 const COMPILED_LAYER_SCENES = 1 << 8;
 const COMPILED_CONDITIONAL_SCENES = 1 << 9;
 const OUTPUT_MODE = 1 << 10;
+const EXTENSION_EFFECTS = 1 << 11;
 
 /** The topology changed under a paged read; the whole read restarts. */
 class TopologyDrift extends Error {
@@ -236,6 +240,9 @@ export class WebHidSession implements RynkSession {
         }),
       readOverlay: () => this.run(() => readLightingOverlay(client)),
       setState: (state) => this.run(() => this.setLightingState(state)),
+      extension: () => this.run(() => this.readExtension()),
+      extensionNames: (kind) => this.run(() => this.readExtensionNames(kind)),
+      setExtensionState: (state) => this.run(() => this.setExtensionSelection(state)),
       scenes: {
         sceneStatus: () => this.run(() => this.readSceneStatus()),
         readScenes: () => this.run(() => this.readAllScenes()),
@@ -658,6 +665,58 @@ export class WebHidSession implements RynkSession {
       throw new Error("this firmware does not support lighting output-mode readback");
     }
     return this.client.get_lighting_output_mode();
+  }
+
+  private async readExtension(): Promise<LightingExtension> {
+    // Feature-gate before touching the endpoint, like readOutputMode: older
+    // firmware would reject the unknown request with an opaque protocol error.
+    const caps = await this.client.get_lighting_capabilities();
+    if ((caps.features & EXTENSION_EFFECTS) === 0) {
+      throw new Error("this firmware does not support extension effects");
+    }
+    return this.client.get_lighting_extension();
+  }
+
+  private async readExtensionNames(kind: LightingExtensionNameKind): Promise<string[]> {
+    // Names are static for a firmware build, so pages carry no revision pin;
+    // just walk offsets until the advertised total is collected.
+    const extension = await this.readExtension();
+    const total = kind === "Effects" ? extension.effect_count : extension.palette_count;
+    const names: string[] = [];
+    while (names.length < total) {
+      const page = await this.client.get_lighting_extension_names({
+        kind,
+        offset: names.length,
+      });
+      if (page.total !== total) {
+        throw new Error(
+          `extension name list disagrees with discovery (${page.total} vs ${total})`,
+        );
+      }
+      if (page.items.length === 0) {
+        throw new Error(`extension name read stalled at ${names.length} of ${total}`);
+      }
+      names.push(...page.items.slice(0, total - names.length));
+    }
+    return names;
+  }
+
+  private async setExtensionSelection(state: LightingExtensionState): Promise<LightingState> {
+    // Same one-retry revision handshake as setLightingState.
+    const current = await this.readExtension();
+    try {
+      return await this.client.set_lighting_extension_state({
+        expected_revision: current.revision,
+        state,
+      });
+    } catch (error) {
+      if (!String(error).includes("RevisionConflict")) throw error;
+      const fresh = await this.client.get_lighting_extension();
+      return this.client.set_lighting_extension_state({
+        expected_revision: fresh.revision,
+        state,
+      });
+    }
   }
 
   private async readAllConditionalScenes(): Promise<LightingConditionalSceneCell[]> {

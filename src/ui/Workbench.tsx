@@ -88,8 +88,9 @@ export function Workbench({
         bundle.caps.num_cols,
         onClose,
         bundle.sceneStatus !== null,
+        bundle.lightingExtension !== null,
       ),
-    [bundle.session, bundle.caps.num_cols, onClose, bundle.sceneStatus],
+    [bundle.session, bundle.caps.num_cols, onClose, bundle.sceneStatus, bundle.lightingExtension],
   );
 
   // Server-push topics.

@@ -364,6 +364,30 @@ export const glove80Board: BoardSpec = {
   compiledScenePolicy: "EffectiveOnly",
   conditionalScenes,
   lightingControls: { output_toggle_user_action: undefined, wake_layer: 2 },
+  // The real firmware's extension band: PaletteFX effects with its palette
+  // pack (display names from rmk-palettefx/palettes/*.toml).
+  extensionEffects: {
+    effects: ["Gradient", "Flow", "Vortex", "Sparkle", "Ripple", "Reactive"],
+    palettes: [
+      "Afterburn",
+      "Amber",
+      "Bad Wolf",
+      "Carnival",
+      "Classic",
+      "Dracula",
+      "Groovy",
+      "Not Pink",
+      "Phosphor",
+      "Polarized",
+      "Rose Gold",
+      "Sport",
+      "Synthwave",
+      "Thermal",
+      "Viridis",
+      "Watermelon",
+    ],
+    initial: { effect: 0, palette: 4, value: 180, speed: 128 },
+  },
   lightingOutputMode: {
     mode: "PoweredOnly",
     powered: false,

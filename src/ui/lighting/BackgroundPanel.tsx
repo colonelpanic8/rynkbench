@@ -15,7 +15,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
 const MODES: LightingBackgroundMode[] = ["Solid", "Breathe"];
 
-function Slider({
+export function Slider({
   label,
   value,
   onChange,

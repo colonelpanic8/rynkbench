@@ -33,6 +33,9 @@ import type {
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
   LightingConditionalSceneStatus,
+  LightingExtension,
+  LightingExtensionNameKind,
+  LightingExtensionState,
   LightingLed,
   LightingMatrixPosition,
   LightingMutableState,
@@ -107,6 +110,14 @@ export interface LightingOps {
   readOverlay(): Promise<LightingOverlayCell[]>;
   /** Mutate background/output state; revision handshake is the backend's job. */
   setState(state: LightingMutableState): Promise<LightingState>;
+  /** Extension-effects discovery: name-list sizes plus the live selection.
+   *  Supported iff the firmware advertises EXTENSION_EFFECTS; unsupported
+   *  firmware rejects with a descriptive error. */
+  extension(): Promise<LightingExtension>;
+  /** Read one whole extension name list (paging is the backend's job). */
+  extensionNames(kind: LightingExtensionNameKind): Promise<string[]>;
+  /** Replace the extension selection; revision handshake is the backend's job. */
+  setExtensionState(state: LightingExtensionState): Promise<LightingState>;
   /** Durable per-layer scenes (firmware feature; localStorage presets are the
    *  fallback). Supported iff the firmware advertises LAYER_SCENES and
    *  sceneStatus() reports capacity > 0; on unsupported firmware

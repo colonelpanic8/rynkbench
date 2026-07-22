@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Combo, Morse, TopicEvent } from "../../vendor/rynk-wasm/rynk_wasm";
 import type { RynkSession } from "../types";
 import { buildKeyboardModel } from "../../model/keyboard";
@@ -326,6 +326,113 @@ describe("compiled firmware lighting", () => {
         wake_layer: 2,
       });
       expect((await session.lighting.capabilities()).features & (1 << 10)).not.toBe(0);
+    });
+  });
+});
+
+describe("lighting extension effects", () => {
+  it("advertises EXTENSION_EFFECTS and serves discovery plus both name lists", async () => {
+    await withSession(glove80Board, async (session) => {
+      expect((await session.lighting.capabilities()).features & (1 << 11)).not.toBe(0);
+      const extension = await session.lighting.extension();
+      const pack = glove80Board.extensionEffects!;
+      expect(extension.effect_count).toBe(pack.effects.length);
+      expect(extension.palette_count).toBe(pack.palettes.length);
+      expect(extension.state).toEqual(pack.initial);
+      expect(extension.revision).toBe((await session.lighting.state()).revision);
+      expect(await session.lighting.extensionNames("Effects")).toEqual([
+        "Gradient",
+        "Flow",
+        "Vortex",
+        "Sparkle",
+        "Ripple",
+        "Reactive",
+      ]);
+      const palettes = await session.lighting.extensionNames("Palettes");
+      expect(palettes).toHaveLength(16);
+      expect(palettes).toContain("Bad Wolf");
+      expect(palettes).toContain("Rose Gold");
+      expect(palettes).toContain("Viridis");
+    });
+  });
+
+  it("round-trips setExtensionState with a revision bump and a LightingChange push", async () => {
+    await withSession(glove80Board, async (session) => {
+      const events: TopicEvent[] = [];
+      session.onTopic((event) => events.push(event));
+      const before = await session.lighting.extension();
+      const next = { effect: 2, palette: 5, value: 200, speed: 64 };
+      const state = await session.lighting.setExtensionState(next);
+      expect(state.revision).toBeGreaterThan(before.revision);
+      const after = await session.lighting.extension();
+      expect(after.state).toEqual(next);
+      expect(after.revision).toBe(state.revision);
+      expect(events.filter((event) => "LightingChange" in event).length).toBe(1);
+    });
+  });
+
+  it("rejects out-of-range effect and palette selections untouched", async () => {
+    await withSession(glove80Board, async (session) => {
+      const pack = glove80Board.extensionEffects!;
+      await expect(
+        session.lighting.setExtensionState({
+          effect: pack.effects.length,
+          palette: 0,
+          value: 0,
+          speed: 0,
+        }),
+      ).rejects.toThrow(/effect .* out of range/);
+      await expect(
+        session.lighting.setExtensionState({
+          effect: 0,
+          palette: pack.palettes.length,
+          value: 0,
+          speed: 0,
+        }),
+      ).rejects.toThrow(/palette .* out of range/);
+      expect((await session.lighting.extension()).state).toEqual(pack.initial);
+    });
+  });
+
+  it("rejects a set whose pinned revision went stale mid-flight", async () => {
+    await withSession(glove80Board, async (session) => {
+      const random = vi.spyOn(Math, "random");
+      try {
+        // The guarded set pins the revision it read, then lands late (~15 ms);
+        // a faster mutation (~5 ms) moves the revision underneath it.
+        random.mockReturnValue(0.999);
+        const stale = session.lighting.setExtensionState({
+          effect: 1,
+          palette: 1,
+          value: 10,
+          speed: 10,
+        });
+        random.mockReturnValue(0);
+        await session.lighting.setState({
+          output_enabled: true,
+          output_brightness: 99,
+          background: glove80Board.background,
+        });
+        await expect(stale).rejects.toThrow(/StateRevisionConflict/);
+      } finally {
+        random.mockRestore();
+      }
+      // The stale write left the selection untouched.
+      expect((await session.lighting.extension()).state).toEqual(
+        glove80Board.extensionEffects!.initial,
+      );
+    });
+  });
+
+  it("rejects every extension op on the extension-less Ortho 60", async () => {
+    await withSession(ortho60Board, async (session) => {
+      expect((await session.lighting.capabilities()).features & (1 << 11)).toBe(0);
+      await expect(session.lighting.extension()).rejects.toThrow(/does not support/);
+      await expect(session.lighting.extensionNames("Effects")).rejects.toThrow(/does not support/);
+      await expect(session.lighting.extensionNames("Palettes")).rejects.toThrow(/does not support/);
+      await expect(
+        session.lighting.setExtensionState({ effect: 0, palette: 0, value: 0, speed: 0 }),
+      ).rejects.toThrow(/does not support/);
     });
   });
 });
