@@ -563,6 +563,17 @@ class StubSession implements RynkSession {
       this.lightingRevision += 1;
       return this.lightingStateNow();
     },
+    // The stub predates extension effects; the panel stays hidden.
+    extension: async (): Promise<never> => {
+      await lag();
+      throw new Error("this firmware does not support extension effects");
+    },
+    extensionNames: async (): Promise<never> => {
+      throw new Error("this firmware does not support extension effects");
+    },
+    setExtensionState: async (): Promise<never> => {
+      throw new Error("this firmware does not support extension effects");
+    },
     // The stub predates layer scenes; every scene op reports unsupported, so
     // the UI exercises the localStorage fallback path.
     scenes: {

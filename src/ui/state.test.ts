@@ -54,6 +54,7 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     compiledScenes: [],
     conditionalScenes: [],
     lightingControls: { output_toggle_user_action: undefined, wake_layer: undefined },
+    lightingExtension: null,
     scenePolicy: "EffectiveOnly",
     compiledScenePolicy: "EffectiveOnly",
     selection: null,

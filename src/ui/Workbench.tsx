@@ -88,8 +88,9 @@ export function Workbench({
         bundle.caps.num_cols,
         onClose,
         bundle.sceneStatus !== null,
+        bundle.lightingExtension !== null,
       ),
-    [bundle.session, bundle.caps.num_cols, onClose, bundle.sceneStatus],
+    [bundle.session, bundle.caps.num_cols, onClose, bundle.sceneStatus, bundle.lightingExtension],
   );
 
   // Server-push topics.
@@ -109,14 +110,19 @@ export function Workbench({
         dispatch({ type: "topicModifier", modifiers: event.ModifierChange });
       }
     });
-    // Subscribe first, then resample to close the connect-to-mount race. Old
-    // firmware rejects this additive endpoint and keeps the matrix fallback.
+    // Subscribe first, then resample state whose topic updates could have
+    // landed between the connect snapshot and this handler registration.
+    if (bundle.caps.lighting_enabled) {
+      io.refreshLighting();
+    }
+    // Old firmware rejects this additive endpoint and keeps the matrix
+    // fallback.
     bundle.session.device.modifierState().then(
       (modifiers) => dispatch({ type: "topicModifier", modifiers }),
       () => {},
     );
     bundle.session.onDisconnect(onUnexpectedDisconnect);
-  }, [bundle.session, io, onUnexpectedDisconnect]);
+  }, [bundle.session, bundle.caps.lighting_enabled, io, onUnexpectedDisconnect]);
 
   const ctx = useMemo(
     () => ({ bundle, state, dispatch, io }),

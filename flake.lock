@@ -58,16 +58,16 @@
     "rmk": {
       "flake": false,
       "locked": {
-        "lastModified": 1784673872,
-        "narHash": "sha256-zO5Mu5i9s3P/08ANT37v3JCYk7ddI+Q+EaB0/+zwPco=",
+        "lastModified": 1784685122,
+        "narHash": "sha256-4EE70i6Ej4a+4lNaT83c9nv1XmsH9c0z/+DyNpPZjOk=",
         "owner": "colonelpanic8",
         "repo": "rmk",
-        "rev": "e5c1aed8fe4277bfac05e9c0a338eb641d18e8e3",
+        "rev": "af4a151580e65d8e719f7429e1bcda315559ce7e",
         "type": "github"
       },
       "original": {
         "owner": "colonelpanic8",
-        "ref": "master",
+        "ref": "lighting-extension-introspection",
         "repo": "rmk",
         "type": "github"
       }

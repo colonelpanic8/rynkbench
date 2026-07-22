@@ -25,6 +25,8 @@ import type {
   LightingConditionalSceneCell,
   LightingConditionalSceneStatus,
   LightingControls,
+  LightingExtension,
+  LightingExtensionState,
   LightingLayerPolicy,
   LightingLed,
   LightingLedId,
@@ -100,6 +102,13 @@ export interface BoardSpec {
   lightingControls?: LightingControls;
   /** Three-state output policy readback. Omit for older simulated firmware. */
   lightingOutputMode?: LightingOutputModeState;
+  /** Host-selectable extension effect pack (static name lists plus the boot
+   *  selection). Omit to simulate firmware without EXTENSION_EFFECTS. */
+  extensionEffects?: {
+    effects: string[];
+    palettes: string[];
+    initial: LightingExtensionState;
+  };
 }
 
 export function hid(code: HidKeyCode): KeyAction {
@@ -254,6 +263,7 @@ export const LAYER_SCENES = 1 << 6;
 export const COMPILED_LAYER_SCENES = 1 << 8;
 export const COMPILED_CONDITIONAL_SCENES = 1 << 9;
 export const OUTPUT_MODE = 1 << 10;
+export const EXTENSION_EFFECTS = 1 << 11;
 const SCENE_CHUNK_CAPACITY = 16;
 
 const sceneKey = (cell: { layer: number; led_id: LightingLedId }): string =>
@@ -303,6 +313,7 @@ class MockSession implements RynkSession {
   private brightness: number;
   private background: LightingBackgroundState;
   private overlay = new Map<LightingLedId, OverlayEntry>();
+  private extensionState: LightingExtensionState | null = null;
   /** Durable scene table keyed `${layer}:${led_id}`, insertion-ordered. */
   private readonly sceneTable = new Map<string, LightingSceneCell>();
   private layerPolicy: LightingLayerPolicy = "EffectiveOnly";
@@ -341,6 +352,7 @@ class MockSession implements RynkSession {
     this.battery = spec.battery;
     this.brightness = spec.brightness;
     this.background = { ...spec.background };
+    this.extensionState = spec.extensionEffects ? { ...spec.extensionEffects.initial } : null;
     const caps = spec.capabilities;
     this.comboTable = buildSlots(caps.max_combos, emptyCombo, cloneCombo, spec.seedCombos);
     this.morseTable = buildSlots(caps.max_morse, emptyMorse, cloneMorse, spec.seedMorse);
@@ -470,6 +482,13 @@ class MockSession implements RynkSession {
         this.background = { ...state.background };
         return this.touchLighting();
       }),
+    extension: () => latency(() => this.readExtension()),
+    extensionNames: (kind) =>
+      latency(() => {
+        const pack = this.requireExtensionEffects();
+        return [...(kind === "Effects" ? pack.effects : pack.palettes)];
+      }),
+    setExtensionState: (state) => this.setExtensionSelection(state),
     scenes: {
       sceneStatus: () => latency(() => this.sceneStatus()),
       readScenes: () =>
@@ -649,9 +668,78 @@ class MockSession implements RynkSession {
         (this.spec.conditionalScenes !== undefined || this.spec.lightingControls !== undefined
           ? COMPILED_CONDITIONAL_SCENES
           : 0) |
-        (this.spec.lightingOutputMode !== undefined ? OUTPUT_MODE : 0),
+        (this.spec.lightingOutputMode !== undefined ? OUTPUT_MODE : 0) |
+        (this.spec.extensionEffects !== undefined ? EXTENSION_EFFECTS : 0),
       effects: 0b111, // solid | blink | breathe
     };
+  }
+
+  private requireExtensionEffects(): NonNullable<BoardSpec["extensionEffects"]> {
+    const pack = this.spec.extensionEffects;
+    if (pack === undefined) {
+      throw new Error("this firmware does not support extension effects");
+    }
+    return pack;
+  }
+
+  private readExtension(): LightingExtension {
+    const pack = this.requireExtensionEffects();
+    return {
+      revision: this.revision,
+      effect_count: pack.effects.length,
+      palette_count: pack.palettes.length,
+      state: { ...this.extensionState! },
+    };
+  }
+
+  private async setExtensionSelection(state: LightingExtensionState): Promise<LightingState> {
+    // Match the live backend: discover the current revision, perform a
+    // guarded write, and retry that handshake once if another lighting
+    // mutation wins the race.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const current = await latency(() => this.readExtension());
+      try {
+        return await latency(() => {
+          const pack = this.requireExtensionEffects();
+          this.checkExtensionState(pack, state);
+          if (this.revision !== current.revision) {
+            throw new Error(
+              `StateRevisionConflict: lighting revision moved ` +
+                `(expected ${current.revision}, now ${this.revision})`,
+            );
+          }
+          this.extensionState = { ...state };
+          return this.touchLighting();
+        });
+      } catch (error) {
+        if (attempt !== 0 || !String(error).includes("RevisionConflict")) throw error;
+      }
+    }
+    throw new Error("extension revision retry exhausted");
+  }
+
+  private checkExtensionState(
+    pack: NonNullable<BoardSpec["extensionEffects"]>,
+    state: LightingExtensionState,
+  ): void {
+    if (!Number.isInteger(state.effect) || state.effect < 0 || state.effect >= pack.effects.length) {
+      throw new Error(`extension effect ${state.effect} out of range`);
+    }
+    if (
+      !Number.isInteger(state.palette) ||
+      state.palette < 0 ||
+      state.palette >= pack.palettes.length
+    ) {
+      throw new Error(`extension palette ${state.palette} out of range`);
+    }
+    for (const [name, value] of [
+      ["value", state.value],
+      ["speed", state.speed],
+    ] as const) {
+      if (!Number.isInteger(value) || value < 0 || value > 255) {
+        throw new Error(`extension ${name} ${value} is not a u8`);
+      }
+    }
   }
 
   private requireScenes(): void {

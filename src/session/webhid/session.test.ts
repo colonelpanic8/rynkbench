@@ -5,7 +5,7 @@ import type {
   LightingOverlayPageRequest,
   LightingState,
 } from "../../vendor/rynk-wasm/rynk_wasm";
-import { decodeLayerState, readLightingOverlay } from "./session";
+import { decodeLayerState, readLightingExtensionNames, readLightingOverlay } from "./session";
 
 const effect: LightingEffect = { Solid: { color: { r: 1, g: 2, b: 3 } } };
 
@@ -99,6 +99,46 @@ describe("WebHID overlay readback", () => {
         },
       }),
     ).rejects.toThrow("UnknownCmd");
+  });
+});
+
+describe("WebHID extension-name readback", () => {
+  const extension = {
+    revision: 4,
+    effect_count: 5,
+    palette_count: 0,
+    state: { effect: 0, palette: 0, value: 128, speed: 128 },
+  };
+
+  it("assembles exact pages", async () => {
+    const all = ["A", "B", "C", "D", "E"];
+    await expect(
+      readLightingExtensionNames(
+        {
+          get_lighting_extension: async () => extension,
+          get_lighting_extension_names: async ({ offset }) => ({
+            total: all.length,
+            items: all.slice(offset, offset + 3),
+          }),
+        },
+        "Effects",
+      ),
+    ).resolves.toEqual(all);
+  });
+
+  it("rejects a page that exceeds the advertised total", async () => {
+    await expect(
+      readLightingExtensionNames(
+        {
+          get_lighting_extension: async () => extension,
+          get_lighting_extension_names: async ({ offset }) => ({
+            total: 5,
+            items: offset === 0 ? ["A", "B", "C", "D"] : ["E", "unexpected"],
+          }),
+        },
+        "Effects",
+      ),
+    ).rejects.toThrow("extension name page exceeded advertised total 5");
   });
 });
 

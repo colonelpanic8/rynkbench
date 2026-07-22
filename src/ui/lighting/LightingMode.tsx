@@ -19,6 +19,7 @@ import {
 } from "../state";
 import { ColorPicker } from "./ColorPicker";
 import { BackgroundPanel } from "./BackgroundPanel";
+import { EffectsPanel } from "./EffectsPanel";
 import { LayerPresets } from "./LayerPresets";
 import type { Hsv } from "../color";
 import { cssEmissiveRgb, cssRgb, hsvToRgb } from "../color";
@@ -752,6 +753,12 @@ export function LightingMode() {
           <div className="border-t border-line-soft pt-4">
             <BackgroundPanel />
           </div>
+
+          {state.lightingExtension && (
+            <div className="border-t border-line-soft pt-4">
+              <EffectsPanel />
+            </div>
+          )}
 
           <div className="border-t border-line-soft pt-4">
             <LayerPresets />

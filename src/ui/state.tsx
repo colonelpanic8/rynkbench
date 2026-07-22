@@ -18,6 +18,8 @@ import type {
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
   LightingControls,
+  LightingExtension,
+  LightingExtensionState,
   LightingLayerPolicy,
   LightingMutableState,
   LightingOverlayCell,
@@ -71,6 +73,11 @@ export interface ConnectedBundle {
   compiledScenes: LightingSceneCell[];
   conditionalScenes: LightingConditionalSceneCell[];
   lightingControls: LightingControls;
+  /** null when the firmware has no extension-effects support. */
+  lightingExtension: LightingExtension | null;
+  /** Static extension name lists; empty when lightingExtension is null. */
+  extensionEffectNames: string[];
+  extensionPaletteNames: string[];
   /** Advanced tables; empty arrays when the device reports zero capacity. */
   combos: Combo[];
   morse: Morse[];
@@ -135,6 +142,8 @@ export interface WorkbenchState {
   /** Conditional firmware rules compiled from keyboard.toml. */
   conditionalScenes: LightingConditionalSceneCell[];
   lightingControls: LightingControls;
+  /** Extension-effects discovery + live selection; null when unsupported. */
+  lightingExtension: LightingExtension | null;
   /** Layer-composition policy; null when scenes are unsupported. */
   scenePolicy: LightingLayerPolicy | null;
   compiledScenePolicy: LightingLayerPolicy | null;
@@ -250,6 +259,7 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     compiledScenes: bundle.compiledScenes,
     conditionalScenes: bundle.conditionalScenes,
     lightingControls: bundle.lightingControls,
+    lightingExtension: bundle.lightingExtension,
     scenePolicy: bundle.sceneStatus?.policy ?? null,
     compiledScenePolicy: bundle.compiledSceneStatus?.policy ?? null,
     selection: null,
@@ -311,6 +321,8 @@ export type WorkbenchAction =
       overlay: LightingOverlayCell[];
       /** Present only when the device supports on-device scenes. */
       scenes?: LightingSceneCell[];
+      /** Present only when the device supports extension effects. */
+      extension?: LightingExtension | null;
     }
   | { type: "lightingTarget"; target: LightingTarget }
   | { type: "paint"; cells: LightingOverlayCell[] }
@@ -320,6 +332,7 @@ export type WorkbenchAction =
   | { type: "overlayApplied"; state: LightingState; cells: LightingOverlayCell[] }
   | { type: "scenesApplied"; state: LightingState; cells: LightingSceneCell[] }
   | { type: "scenePolicySet"; state: LightingState; policy: LightingLayerPolicy }
+  | { type: "extensionStateSet"; state: LightingState; extension: LightingExtensionState }
   | { type: "hoverLeds"; leds: number[] | null }
   | { type: "lightingSelect"; leds: number[] }
   | { type: "lightingStateSet"; state: LightingState }
@@ -446,6 +459,7 @@ export function makeWorkbenchReducer(cols: number) {
           ...state,
           lightingState: act.state,
           lightingOutputMode: act.outputMode ?? state.lightingOutputMode,
+          lightingExtension: act.extension ?? state.lightingExtension,
           applied,
           draft: draftWasClean ? { ...applied } : state.draft,
           scenes: act.scenes ?? state.scenes,
@@ -535,6 +549,16 @@ export function makeWorkbenchReducer(cols: number) {
           ...state,
           lightingState: act.state,
           scenePolicy: act.policy,
+          lightingBusy: false,
+          lightingError: null,
+        };
+      case "extensionStateSet":
+        return {
+          ...state,
+          lightingState: act.state,
+          lightingExtension: state.lightingExtension
+            ? { ...state.lightingExtension, revision: act.state.revision, state: act.extension }
+            : state.lightingExtension,
           lightingBusy: false,
           lightingError: null,
         };
@@ -688,6 +712,8 @@ export interface WorkbenchIo {
   /** Replace the on-device scene table (only when scenes are supported). */
   applyScenes(cells: LightingSceneCell[]): void;
   setScenePolicy(policy: LightingLayerPolicy): void;
+  /** Select an extension effect/palette (only when the firmware supports it). */
+  setExtensionState(state: LightingExtensionState): void;
   setSlot<K extends SlotKind>(kind: K, index: number, value: SlotValueOf<K>): void;
   writeMacros(bytes: Uint8Array): void;
   setBehavior(config: BehaviorConfig): void;
@@ -716,6 +742,7 @@ export function makeIo(
   cols: number,
   onDisconnect: () => void,
   scenesSupported = false,
+  extensionSupported = false,
 ): WorkbenchIo {
   return {
     setKey(layer, row, col, action) {
@@ -792,9 +819,19 @@ export function makeIo(
         scenesSupported
           ? session.lighting.scenes.readScenes().catch(() => getState().scenes)
           : Promise.resolve(undefined),
+        extensionSupported
+          ? session.lighting.extension().catch(() => getState().lightingExtension)
+          : Promise.resolve(undefined),
       ]).then(
-        ([lightingState, outputMode, overlay, scenes]) =>
-          dispatch({ type: "lightingRefresh", state: lightingState, outputMode, overlay, scenes }),
+        ([lightingState, outputMode, overlay, scenes, extension]) =>
+          dispatch({
+            type: "lightingRefresh",
+            state: lightingState,
+            outputMode,
+            overlay,
+            scenes,
+            extension,
+          }),
         () => {},
       );
     },
@@ -816,6 +853,13 @@ export function makeIo(
       dispatch({ type: "lightingBusy", busy: true, error: null });
       session.lighting.scenes.setLayerPolicy(policy).then(
         (lightingState) => dispatch({ type: "scenePolicySet", state: lightingState, policy }),
+        (err) => dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
+      );
+    },
+    setExtensionState(extension) {
+      dispatch({ type: "lightingBusy", busy: true, error: null });
+      session.lighting.setExtensionState(extension).then(
+        (lightingState) => dispatch({ type: "extensionStateSet", state: lightingState, extension }),
         (err) => dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
       );
     },
