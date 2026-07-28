@@ -220,7 +220,7 @@ const CAPS: DeviceCapabilities = {
   num_ble_profiles: 3,
   max_payload_size: 64,
   max_bulk_keys: 16,
-  max_bulk_configs: 4,
+  max_bulk_items: 4,
   macro_chunk_size: 32,
   bulk_transfer_supported: true,
 };

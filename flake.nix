@@ -8,11 +8,10 @@
       url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    # Follow the fork's lighting-extension-introspection branch; flake.lock pins
-    # the exact protocol revision used by firmware and the generated browser
-    # client.
+    # Follow the fork's fork-fold assembled branch; flake.lock pins the exact
+    # protocol revision used by firmware and the generated browser client.
     rmk = {
-      url = "github:colonelpanic8/rmk/lighting-extension-introspection";
+      url = "github:colonelpanic8/rmk/assembled";
       flake = false;
     };
   };

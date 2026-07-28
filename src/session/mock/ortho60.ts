@@ -92,7 +92,7 @@ const capabilities: DeviceCapabilities = {
   num_ble_profiles: 0,
   max_payload_size: 256,
   max_bulk_keys: 28,
-  max_bulk_configs: 4,
+  max_bulk_items: 4,
   macro_chunk_size: 28,
   bulk_transfer_supported: true,
 };
