@@ -14,7 +14,10 @@ vi.mock("../../vendor/rynk-wasm/rynk_wasm", () => ({
 vi.mock("../wasm", () => ({ initWasm: () => Promise.resolve() }));
 vi.mock("../link-session", () => ({
   LinkSession: class {
-    constructor(readonly client: { label: string }) {}
+    client: { label: string };
+    constructor(client: { label: string }) {
+      this.client = client;
+    }
   },
 }));
 
