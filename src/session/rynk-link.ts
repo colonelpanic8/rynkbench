@@ -1,13 +1,15 @@
 // The Rynk raw-HID byte link shared by every USB transport (WebHID in the
 // browser, the native hidapi backend in the Tauri desktop app): 32-byte
-// reports each way, no report IDs. Inbound reports are trimmed to the frame
-// length announced by the 5-byte Rynk header (payload length little-endian at
-// bytes 3..4) so report padding never reaches the wasm driver.
+// reports each way, no report IDs.
+//
+// This layer is a byte pipe and nothing more. Framing belongs to the wasm
+// driver, which COBS-encodes what it sends and runs a deframer over what it
+// receives, so reports must reach it whole — including the zero padding,
+// which the deframer reads as the inter-frame delimiter it resyncs on.
 
 export const RYNK_USAGE_PAGE = 0xff60;
 export const RYNK_USAGE = 0x61;
 export const RYNK_HID_REPORT_SIZE = 32;
-const RYNK_HEADER_LEN = 5;
 
 /**
  * The byte link handed to the wasm `connect()` — the web transport's
@@ -24,11 +26,10 @@ export interface RynkByteLink {
   end(): void;
 }
 
-/** Reassembles Rynk frames from padded HID input reports and hands the
- * trimmed bytes to an async `recv()` consumer. */
+/** Accumulates raw HID input reports and hands the bytes to an async
+ * `recv()` consumer for the wasm driver to deframe. */
 export class RynkFrameBuffer {
   private rx = new Uint8Array();
-  private remaining = 0;
   private closed = false;
   private wake: (() => void) | null = null;
 
@@ -38,17 +39,12 @@ export class RynkFrameBuffer {
     pending?.();
   }
 
-  /** Feed one raw input report (padding included). */
+  /** Feed one raw input report, padding included. */
   push(data: Uint8Array): void {
-    if (this.remaining === 0 && data.length >= RYNK_HEADER_LEN) {
-      this.remaining = RYNK_HEADER_LEN + data[3] + (data[4] << 8);
-    }
-    const take = Math.min(this.remaining, data.length);
-    if (take === 0) return;
-    this.remaining -= take;
-    const grown = new Uint8Array(this.rx.length + take);
+    if (data.length === 0) return;
+    const grown = new Uint8Array(this.rx.length + data.length);
     grown.set(this.rx);
-    grown.set(data.subarray(0, take), this.rx.length);
+    grown.set(data, this.rx.length);
     this.rx = grown;
     this.signal();
   }
