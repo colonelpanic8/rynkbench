@@ -40,3 +40,12 @@ preview port=random_port: build
 # Build all flake checks.
 nix-check:
     nix flake check
+
+# Build the Tauri desktop app via Nix.
+tauri:
+    nix build .#rynkbench-tauri
+
+# Build the frontend, then run the desktop shell from source (needs the
+# devshell for the Rust toolchain and GTK/WebKit libraries).
+tauri-run: build
+    cd src-tauri && cargo run
