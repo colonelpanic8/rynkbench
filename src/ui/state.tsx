@@ -19,6 +19,7 @@ import type {
   LightingConditionalSceneCell,
   LightingControls,
   LightingExtension,
+  LightingExtensionParam,
   LightingExtensionState,
   LightingLayerPolicy,
   LightingMutableState,
@@ -144,6 +145,11 @@ export interface WorkbenchState {
   lightingControls: LightingControls;
   /** Extension-effects discovery + live selection; null when unsupported. */
   lightingExtension: LightingExtension | null;
+  /** The generic parameter list last read, and which effect it describes.
+   *  null before the first read; an empty `items` means "this effect has no
+   *  parameters", which is also how firmware without the parameter surface
+   *  at all is recorded (the read simply failed). */
+  extensionParams: ExtensionParamSet | null;
   /** Layer-composition policy; null when scenes are unsupported. */
   scenePolicy: LightingLayerPolicy | null;
   compiledScenePolicy: LightingLayerPolicy | null;
@@ -167,6 +173,18 @@ export interface WorkbenchState {
   ledIndicator: LedIndicator | null;
   /** Authoritative resolved HID modifiers; null enables the legacy matrix fallback. */
   modifierState: ModifierCombination | null;
+}
+
+/** One effect's parameter list as last read from the device. */
+export interface ExtensionParamSet {
+  effect: number;
+  items: LightingExtensionParam[];
+}
+
+/** One staged parameter write: an ordinal within an effect's list. */
+export interface ExtensionParamWrite {
+  index: number;
+  value: number;
 }
 
 export function keyPendingId(layer: number, row: number, col: number): string {
@@ -260,6 +278,7 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     conditionalScenes: bundle.conditionalScenes,
     lightingControls: bundle.lightingControls,
     lightingExtension: bundle.lightingExtension,
+    extensionParams: null,
     scenePolicy: bundle.sceneStatus?.policy ?? null,
     compiledScenePolicy: bundle.compiledSceneStatus?.policy ?? null,
     selection: null,
@@ -333,6 +352,7 @@ export type WorkbenchAction =
   | { type: "scenesApplied"; state: LightingState; cells: LightingSceneCell[] }
   | { type: "scenePolicySet"; state: LightingState; policy: LightingLayerPolicy }
   | { type: "extensionStateSet"; state: LightingState; extension: LightingExtensionState }
+  | { type: "extensionParamsLoaded"; effect: number; items: LightingExtensionParam[] }
   | { type: "hoverLeds"; leds: number[] | null }
   | { type: "lightingSelect"; leds: number[] }
   | { type: "lightingStateSet"; state: LightingState }
@@ -562,6 +582,8 @@ export function makeWorkbenchReducer(cols: number) {
           lightingBusy: false,
           lightingError: null,
         };
+      case "extensionParamsLoaded":
+        return { ...state, extensionParams: { effect: act.effect, items: act.items } };
       case "hoverLeds":
         return { ...state, hoverLeds: act.leds };
       case "lightingSelect":
@@ -712,8 +734,12 @@ export interface WorkbenchIo {
   /** Replace the on-device scene table (only when scenes are supported). */
   applyScenes(cells: LightingSceneCell[]): void;
   setScenePolicy(policy: LightingLayerPolicy): void;
-  /** Select an extension effect/palette (only when the firmware supports it). */
-  setExtensionState(state: LightingExtensionState): void;
+  /** Select an extension effect/palette, then write any staged parameter
+   *  values for the selected effect (only when the firmware supports it). */
+  setExtensionState(state: LightingExtensionState, params?: ExtensionParamWrite[]): void;
+  /** Read one effect's generic parameter list. Firmware without the parameter
+   *  surface records an empty list, which renders as no parameter controls. */
+  loadExtensionParams(effect: number): void;
   setSlot<K extends SlotKind>(kind: K, index: number, value: SlotValueOf<K>): void;
   writeMacros(bytes: Uint8Array): void;
   setBehavior(config: BehaviorConfig): void;
@@ -744,6 +770,16 @@ export function makeIo(
   scenesSupported = false,
   extensionSupported = false,
 ): WorkbenchIo {
+  // Feature detection lives here: firmware predating per-effect parameters
+  // rejects the request outright, which is recorded as "no parameters" and
+  // renders as no extra controls rather than an error.
+  const loadParams = (effect: number) => {
+    session.lighting.extensionParams(effect).then(
+      (items) => dispatch({ type: "extensionParamsLoaded", effect, items }),
+      () => dispatch({ type: "extensionParamsLoaded", effect, items: [] }),
+    );
+  };
+
   return {
     setKey(layer, row, col, action) {
       const prev = getState().layers[layer][row * cols + col];
@@ -856,13 +892,29 @@ export function makeIo(
         (err) => dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
       );
     },
-    setExtensionState(extension) {
+    setExtensionState(extension, params = []) {
       dispatch({ type: "lightingBusy", busy: true, error: null });
-      session.lighting.setExtensionState(extension).then(
-        (lightingState) => dispatch({ type: "extensionStateSet", state: lightingState, extension }),
-        (err) => dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
+      // One serialized chain: the selection first, then each staged parameter
+      // of the now-selected effect. The device's last reply is the state of
+      // record, and the re-read afterwards makes its values authoritative.
+      (async () => {
+        let lightingState = await session.lighting.setExtensionState(extension);
+        for (const write of params) {
+          lightingState = await session.lighting.setExtensionParam(
+            extension.effect,
+            write.index,
+            write.value,
+          );
+        }
+        dispatch({ type: "extensionStateSet", state: lightingState, extension });
+        // Re-read after every apply: the device's values, not the staged ones,
+        // are the record, and a write may clamp or reject silently.
+        loadParams(extension.effect);
+      })().catch((err) =>
+        dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
       );
     },
+    loadExtensionParams: loadParams,
     setSlot(kind, index, value) {
       const prev = getState()[kind][index];
       dispatch({ type: "slotWriteStart", kind, index, value });

@@ -1,11 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
   LightingEffect,
+  LightingExtensionParam,
   LightingOverlayCell,
   LightingOverlayPageRequest,
   LightingState,
 } from "../../vendor/rynk-wasm/rynk_wasm";
-import { decodeLayerState, readLightingExtensionNames, readLightingOverlay } from "./session";
+import {
+  decodeLayerState,
+  readLightingExtensionNames,
+  readLightingExtensionParams,
+  readLightingOverlay,
+} from "./session";
 
 const effect: LightingEffect = { Solid: { color: { r: 1, g: 2, b: 3 } } };
 
@@ -139,6 +145,103 @@ describe("WebHID extension-name readback", () => {
         "Effects",
       ),
     ).rejects.toThrow("extension name page exceeded advertised total 5");
+  });
+});
+
+describe("WebHID extension-parameter readback", () => {
+  const param = (name: string, value: number): LightingExtensionParam => ({
+    name,
+    min: 0,
+    max: 32,
+    default: 8,
+    value,
+  });
+
+  it("assembles chunked pages for one effect", async () => {
+    const all = [param("Density", 8), param("Interval", 60), param("Trail", 2)];
+    const get_lighting_extension_params = vi.fn(async ({ offset }: { offset: number }) => ({
+      revision: 6,
+      total: all.length,
+      items: all.slice(offset, offset + 2),
+    }));
+
+    await expect(
+      readLightingExtensionParams({ get_lighting_extension_params }, 3),
+    ).resolves.toEqual(all);
+    expect(get_lighting_extension_params).toHaveBeenNthCalledWith(1, { effect: 3, offset: 0 });
+    expect(get_lighting_extension_params).toHaveBeenNthCalledWith(2, { effect: 3, offset: 2 });
+  });
+
+  it("returns an empty list for an effect with no parameters", async () => {
+    const get_lighting_extension_params = vi.fn(async () => ({
+      revision: 2,
+      total: 0,
+      items: [],
+    }));
+    await expect(
+      readLightingExtensionParams({ get_lighting_extension_params }, 0),
+    ).resolves.toEqual([]);
+    expect(get_lighting_extension_params).toHaveBeenCalledTimes(1);
+  });
+
+  it("restarts the read when the revision moves mid-read", async () => {
+    const all = [param("Density", 8), param("Interval", 60), param("Trail", 2)];
+    let revision = 4;
+    const get_lighting_extension_params = vi.fn(async ({ offset }: { offset: number }) => {
+      // The second page of the first attempt lands under a new revision.
+      if (offset > 0 && revision === 4) revision = 5;
+      return { revision, total: all.length, items: all.slice(offset, offset + 2) };
+    });
+
+    await expect(
+      readLightingExtensionParams({ get_lighting_extension_params }, 1),
+    ).resolves.toEqual(all);
+    // Two pages for the aborted attempt, two more for the clean one.
+    expect(get_lighting_extension_params).toHaveBeenCalledTimes(4);
+  });
+
+  it("gives up after repeated revision churn", async () => {
+    let revision = 0;
+    await expect(
+      readLightingExtensionParams(
+        {
+          get_lighting_extension_params: async ({ offset }) => ({
+            revision: offset === 0 ? revision : ++revision,
+            total: 4,
+            items: [param("a", 1), param("b", 2)],
+          }),
+        },
+        0,
+      ),
+    ).rejects.toThrow("extension parameters kept changing across 3 read attempts");
+  });
+
+  it("rejects a page that exceeds the advertised total", async () => {
+    await expect(
+      readLightingExtensionParams(
+        {
+          get_lighting_extension_params: async () => ({
+            revision: 1,
+            total: 1,
+            items: [param("a", 1), param("b", 2)],
+          }),
+        },
+        0,
+      ),
+    ).rejects.toThrow("extension parameter page exceeded advertised total 1");
+  });
+
+  it("surfaces an unsupported command so callers can feature-detect", async () => {
+    await expect(
+      readLightingExtensionParams(
+        {
+          get_lighting_extension_params: async () => {
+            throw new Error("UnknownCmd: GetLightingExtensionParams");
+          },
+        },
+        0,
+      ),
+    ).rejects.toThrow("UnknownCmd");
   });
 });
 

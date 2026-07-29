@@ -21,6 +21,8 @@ export function Slider({
   onChange,
   disabled,
   track,
+  min = 0,
+  max = 255,
 }: {
   label: string;
   value: number;
@@ -28,6 +30,9 @@ export function Slider({
   disabled?: boolean;
   /** Optional CSS gradient for the track. */
   track?: string;
+  /** Range bounds; wire values are 0–255 unless the device says otherwise. */
+  min?: number;
+  max?: number;
 }) {
   return (
     <label
@@ -47,8 +52,8 @@ export function Slider({
         )}
         <input
           type="range"
-          min={0}
-          max={255}
+          min={min}
+          max={max}
           value={value}
           disabled={disabled}
           onChange={(e) => onChange(Number(e.target.value))}

@@ -18,6 +18,7 @@ import type {
   LightingConditionalSceneStatus,
   LightingExtension,
   LightingExtensionNameKind,
+  LightingExtensionParam,
   LightingExtensionState,
   LightingOutputModeState,
   LightingLayerPolicy,
@@ -63,9 +64,17 @@ interface ExtensionNamesClient {
   }): Promise<{ total: number; items: string[] }>;
 }
 
+interface ExtensionParamsClient {
+  get_lighting_extension_params(request: {
+    effect: number;
+    offset: number;
+  }): Promise<{ revision: number; total: number; items: LightingExtensionParam[] }>;
+}
+
 const TOPOLOGY_READ_ATTEMPTS = 3;
 const OVERLAY_READ_ATTEMPTS = 3;
 const SCENE_READ_ATTEMPTS = 3;
+const EXTENSION_PARAM_READ_ATTEMPTS = 3;
 
 // LightingFeatureFlags::LAYER_SCENES (rmk-types); the generated .d.ts erases
 // the bitflag constants to a plain number, so the value is mirrored here.
@@ -194,6 +203,53 @@ export async function readLightingExtensionNames(
   return names;
 }
 
+/** Read one effect's whole parameter list. Unlike name pages these carry live
+ * values pinned to the lighting-state revision, so a revision moving under the
+ * read restarts it — the same rule the overlay read follows. */
+export async function readLightingExtensionParams(
+  client: ExtensionParamsClient,
+  effect: number,
+  attempts = EXTENSION_PARAM_READ_ATTEMPTS,
+): Promise<LightingExtensionParam[]> {
+  let lastDrift: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const params: LightingExtensionParam[] = [];
+    let revision: number | null = null;
+    let total: number | null = null;
+    let drifted = false;
+    while (total === null || params.length < total) {
+      const page = await client.get_lighting_extension_params({
+        effect,
+        offset: params.length,
+      });
+      if (revision === null) {
+        revision = page.revision;
+        total = page.total;
+      } else if (page.revision !== revision) {
+        lastDrift = new Error(
+          `extension parameters changed mid-read (${revision} -> ${page.revision})`,
+        );
+        drifted = true;
+        break;
+      } else if (page.total !== total) {
+        throw new Error(`extension parameter list disagrees with itself (${page.total} vs ${total})`);
+      }
+      if (total === 0) break;
+      if (page.items.length === 0) {
+        throw new Error(`extension parameter read stalled at ${params.length} of ${total}`);
+      }
+      if (params.length + page.items.length > total) {
+        throw new Error(`extension parameter page exceeded advertised total ${total}`);
+      }
+      params.push(...page.items);
+    }
+    if (!drifted) return params;
+  }
+  throw new Error(`extension parameters kept changing across ${attempts} read attempts`, {
+    cause: lastDrift,
+  });
+}
+
 export class WebHidSession implements RynkSession {
   readonly kind = "webhid" as const;
   readonly label: string;
@@ -275,6 +331,9 @@ export class WebHidSession implements RynkSession {
       extension: () => this.run(() => this.readExtension()),
       extensionNames: (kind) => this.run(() => this.readExtensionNames(kind)),
       setExtensionState: (state) => this.run(() => this.setExtensionSelection(state)),
+      extensionParams: (effect) => this.run(() => this.readExtensionParams(effect)),
+      setExtensionParam: (effect, index, value) =>
+        this.run(() => this.setExtensionParamValue(effect, index, value)),
       scenes: {
         sceneStatus: () => this.run(() => this.readSceneStatus()),
         readScenes: () => this.run(() => this.readAllScenes()),
@@ -713,6 +772,40 @@ export class WebHidSession implements RynkSession {
     // Feature-gate before touching the names endpoint on older firmware.
     const extension = await this.readExtension();
     return readLightingExtensionNames(this.client, kind, extension);
+  }
+
+  private async readExtensionParams(effect: number): Promise<LightingExtensionParam[]> {
+    // Feature-gate the effect pack itself; firmware that has the pack but
+    // predates per-effect parameters rejects the request below, which callers
+    // treat as "no parameter surface" rather than an error to surface.
+    await this.readExtension();
+    return readLightingExtensionParams(this.client, effect);
+  }
+
+  private async setExtensionParamValue(
+    effect: number,
+    index: number,
+    value: number,
+  ): Promise<LightingState> {
+    // Same one-retry revision handshake as setExtensionSelection.
+    const current = await this.client.get_lighting_state();
+    try {
+      return await this.client.set_lighting_extension_param({
+        expected_revision: current.revision,
+        effect,
+        index,
+        value,
+      });
+    } catch (error) {
+      if (!String(error).includes("RevisionConflict")) throw error;
+      const fresh = await this.client.get_lighting_state();
+      return this.client.set_lighting_extension_param({
+        expected_revision: fresh.revision,
+        effect,
+        index,
+        value,
+      });
+    }
   }
 
   private async setExtensionSelection(state: LightingExtensionState): Promise<LightingState> {

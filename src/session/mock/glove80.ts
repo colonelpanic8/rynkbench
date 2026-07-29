@@ -367,7 +367,7 @@ export const glove80Board: BoardSpec = {
   // The real firmware's extension band: PaletteFX effects with its palette
   // pack (display names from rmk-palettefx/palettes/*.toml).
   extensionEffects: {
-    effects: ["Gradient", "Flow", "Vortex", "Sparkle", "Ripple", "Reactive"],
+    effects: ["Gradient", "Flow", "Vortex", "Sparkle", "Ripple", "Reactive", "Rain", "Storm"],
     palettes: [
       "Afterburn",
       "Amber",
@@ -387,6 +387,21 @@ export const glove80Board: BoardSpec = {
       "Watermelon",
     ],
     initial: { effect: 1, palette: 0, value: 128, speed: 128 },
+    // Only some effects declare parameters, and the names/bounds are the
+    // firmware's to choose — the UI renders whatever is advertised here.
+    params: {
+      6: [
+        { name: "Density", min: 1, max: 32, default: 8 },
+        { name: "Interval", min: 10, max: 250, default: 60 },
+        { name: "Trail", min: 0, max: 255, default: 160 },
+        { name: "Width", min: 1, max: 5, default: 1 },
+      ],
+      7: [
+        { name: "Density", min: 1, max: 64, default: 24 },
+        { name: "Gust", min: 0, max: 255, default: 96 },
+        { name: "Flash", min: 0, max: 100, default: 12 },
+      ],
+    },
   },
   lightingOutputMode: {
     mode: "PoweredOnly",

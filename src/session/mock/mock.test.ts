@@ -347,6 +347,8 @@ describe("lighting extension effects", () => {
         "Sparkle",
         "Ripple",
         "Reactive",
+        "Rain",
+        "Storm",
       ]);
       const palettes = await session.lighting.extensionNames("Palettes");
       expect(palettes).toHaveLength(16);
@@ -450,6 +452,95 @@ describe("lighting extension effects", () => {
       await expect(
         session.lighting.setExtensionState({ effect: 0, palette: 0, value: 0, speed: 0 }),
       ).rejects.toThrow(/does not support/);
+      await expect(session.lighting.extensionParams(0)).rejects.toThrow(/does not support/);
+      await expect(session.lighting.setExtensionParam(0, 0, 1)).rejects.toThrow(/does not support/);
+    });
+  });
+});
+
+describe("lighting extension parameters", () => {
+  const pack = glove80Board.extensionEffects!;
+  /** The first effect the board declares parameters for, and its descriptors. */
+  const withParams = Number(Object.keys(pack.params!)[0]);
+  const specs = pack.params![withParams];
+
+  it("serves an effect's declared parameters seeded at their defaults", async () => {
+    await withSession(glove80Board, async (session) => {
+      const params = await session.lighting.extensionParams(withParams);
+      expect(params).toEqual(
+        specs.map((spec) => ({
+          name: spec.name,
+          min: spec.min,
+          max: spec.max,
+          default: spec.default,
+          value: spec.default,
+        })),
+      );
+    });
+  });
+
+  it("reports an empty list for effects that declare no parameters", async () => {
+    await withSession(glove80Board, async (session) => {
+      const bare = pack.effects.findIndex((_name, index) => pack.params![index] === undefined);
+      expect(bare).toBeGreaterThanOrEqual(0);
+      expect(await session.lighting.extensionParams(bare)).toEqual([]);
+    });
+  });
+
+  it("serves parameters of an effect that is not the active one", async () => {
+    await withSession(glove80Board, async (session) => {
+      expect((await session.lighting.extension()).state.effect).not.toBe(withParams);
+      expect(await session.lighting.extensionParams(withParams)).toHaveLength(specs.length);
+    });
+  });
+
+  it("round-trips setExtensionParam with a revision bump and a LightingChange push", async () => {
+    await withSession(glove80Board, async (session) => {
+      const events: TopicEvent[] = [];
+      session.onTopic((event) => events.push(event));
+      const before = await session.lighting.state();
+      const state = await session.lighting.setExtensionParam(withParams, 1, specs[1].max);
+      expect(state.revision).toBeGreaterThan(before.revision);
+      const params = await session.lighting.extensionParams(withParams);
+      expect(params[1].value).toBe(specs[1].max);
+      expect(params[1].default).toBe(specs[1].default);
+      // Other ordinals and other effects keep their own values.
+      expect(params[0].value).toBe(specs[0].default);
+      expect(events.filter((event) => "LightingChange" in event).length).toBe(1);
+    });
+  });
+
+  it("rejects out-of-bounds and non-integer parameter values untouched", async () => {
+    await withSession(glove80Board, async (session) => {
+      for (const invalid of [specs[0].min - 1, specs[0].max + 1, specs[0].min + 0.5]) {
+        await expect(session.lighting.setExtensionParam(withParams, 0, invalid)).rejects.toThrow(
+          /outside/,
+        );
+      }
+      await expect(
+        session.lighting.setExtensionParam(withParams, specs.length, specs[0].min),
+      ).rejects.toThrow(/has no parameter/);
+      await expect(
+        session.lighting.setExtensionParam(pack.effects.length, 0, 0),
+      ).rejects.toThrow(/out of range/);
+      expect((await session.lighting.extensionParams(withParams))[0].value).toBe(specs[0].default);
+    });
+  });
+
+  it("rejects parameter reads on an effect pack that predates the surface", async () => {
+    const legacy: BoardSpec = {
+      ...glove80Board,
+      extensionEffects: { ...pack, params: undefined },
+    };
+    await withSession(legacy, async (session) => {
+      // The pack itself still works; only the parameter surface is missing,
+      // which is exactly the feature-detect case the UI must tolerate.
+      expect((await session.lighting.capabilities()).features & (1 << 11)).not.toBe(0);
+      expect(await session.lighting.extensionNames("Effects")).toEqual(pack.effects);
+      await expect(session.lighting.extensionParams(0)).rejects.toThrow(
+        /does not support extension effect parameters/,
+      );
+      await expect(session.lighting.setExtensionParam(0, 0, 1)).rejects.toThrow(/does not support/);
     });
   });
 });

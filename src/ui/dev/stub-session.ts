@@ -574,6 +574,12 @@ class StubSession implements RynkSession {
     setExtensionState: async (): Promise<never> => {
       throw new Error("this firmware does not support extension effects");
     },
+    extensionParams: async (): Promise<never> => {
+      throw new Error("this firmware does not support extension effects");
+    },
+    setExtensionParam: async (): Promise<never> => {
+      throw new Error("this firmware does not support extension effects");
+    },
     // The stub predates layer scenes; every scene op reports unsupported, so
     // the UI exercises the localStorage fallback path.
     scenes: {

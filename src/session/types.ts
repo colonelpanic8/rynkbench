@@ -35,6 +35,7 @@ import type {
   LightingConditionalSceneStatus,
   LightingExtension,
   LightingExtensionNameKind,
+  LightingExtensionParam,
   LightingExtensionState,
   LightingLed,
   LightingMatrixPosition,
@@ -118,6 +119,15 @@ export interface LightingOps {
   extensionNames(kind: LightingExtensionNameKind): Promise<string[]>;
   /** Replace the extension selection; revision handshake is the backend's job. */
   setExtensionState(state: LightingExtensionState): Promise<LightingState>;
+  /** Read one effect's whole generic parameter list (paging is the backend's
+   *  job). Parameters are per-(effect, ordinal) and the firmware names and
+   *  bounds them; nothing here ascribes meaning to any name. Effects with no
+   *  parameters resolve to []. Firmware predating per-effect parameters
+   *  rejects with a descriptive error — callers feature-detect by catching. */
+  extensionParams(effect: number): Promise<LightingExtensionParam[]>;
+  /** Set one parameter of one effect (the effect need not be the active one);
+   *  revision handshake is the backend's job. */
+  setExtensionParam(effect: number, index: number, value: number): Promise<LightingState>;
   /** Durable per-layer scenes (firmware feature; localStorage presets are the
    *  fallback). Supported iff the firmware advertises LAYER_SCENES and
    *  sceneStatus() reports capacity > 0; on unsupported firmware

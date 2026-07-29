@@ -26,6 +26,7 @@ import type {
   LightingConditionalSceneStatus,
   LightingControls,
   LightingExtension,
+  LightingExtensionParam,
   LightingExtensionState,
   LightingLayerPolicy,
   LightingLed,
@@ -108,7 +109,20 @@ export interface BoardSpec {
     effects: string[];
     palettes: string[];
     initial: LightingExtensionState;
+    /** Generic per-effect parameters, keyed by effect index. Effects absent
+     *  from the map advertise none. Omit the whole map to simulate firmware
+     *  with an effect pack but no parameter surface. */
+    params?: Record<number, ExtensionParamSpec[]>;
   };
+}
+
+/** A firmware-declared parameter: a name, its bounds, and its reset value.
+ *  The live value lives on the board, seeded from `default`. */
+export interface ExtensionParamSpec {
+  name: string;
+  min: number;
+  max: number;
+  default: number;
 }
 
 export function hid(code: HidKeyCode): KeyAction {
@@ -314,6 +328,8 @@ class MockSession implements RynkSession {
   private background: LightingBackgroundState;
   private overlay = new Map<LightingLedId, OverlayEntry>();
   private extensionState: LightingExtensionState | null = null;
+  /** Live parameter values keyed `${effect}:${index}`, seeded from defaults. */
+  private readonly extensionParamValues = new Map<string, number>();
   /** Durable scene table keyed `${layer}:${led_id}`, insertion-ordered. */
   private readonly sceneTable = new Map<string, LightingSceneCell>();
   private layerPolicy: LightingLayerPolicy = "EffectiveOnly";
@@ -353,6 +369,11 @@ class MockSession implements RynkSession {
     this.brightness = spec.brightness;
     this.background = { ...spec.background };
     this.extensionState = spec.extensionEffects ? { ...spec.extensionEffects.initial } : null;
+    for (const [effect, params] of Object.entries(spec.extensionEffects?.params ?? {})) {
+      params.forEach((param, index) =>
+        this.extensionParamValues.set(`${effect}:${index}`, param.default),
+      );
+    }
     const caps = spec.capabilities;
     this.comboTable = buildSlots(caps.max_combos, emptyCombo, cloneCombo, spec.seedCombos);
     this.morseTable = buildSlots(caps.max_morse, emptyMorse, cloneMorse, spec.seedMorse);
@@ -489,6 +510,8 @@ class MockSession implements RynkSession {
         return [...(kind === "Effects" ? pack.effects : pack.palettes)];
       }),
     setExtensionState: (state) => this.setExtensionSelection(state),
+    extensionParams: (effect) => latency(() => this.readExtensionParams(effect)),
+    setExtensionParam: (effect, index, value) => this.setExtensionParamValue(effect, index, value),
     scenes: {
       sceneStatus: () => latency(() => this.sceneStatus()),
       readScenes: () =>
@@ -690,6 +713,65 @@ class MockSession implements RynkSession {
       palette_count: pack.palettes.length,
       state: { ...this.extensionState! },
     };
+  }
+
+  /** The declared parameters of one effect, or [] when it declares none.
+   *  Rejects when this simulated firmware has no parameter surface at all. */
+  private effectParamSpecs(effect: number): ExtensionParamSpec[] {
+    const pack = this.requireExtensionEffects();
+    if (pack.params === undefined) {
+      throw new Error("this firmware does not support extension effect parameters");
+    }
+    if (!Number.isInteger(effect) || effect < 0 || effect >= pack.effects.length) {
+      throw new Error(`extension effect ${effect} out of range`);
+    }
+    return pack.params[effect] ?? [];
+  }
+
+  private readExtensionParams(effect: number): LightingExtensionParam[] {
+    return this.effectParamSpecs(effect).map((spec, index) => ({
+      name: spec.name,
+      min: spec.min,
+      max: spec.max,
+      default: spec.default,
+      value: this.extensionParamValues.get(`${effect}:${index}`) ?? spec.default,
+    }));
+  }
+
+  private async setExtensionParamValue(
+    effect: number,
+    index: number,
+    value: number,
+  ): Promise<LightingState> {
+    // Same guarded-write-then-one-retry handshake as setExtensionSelection.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const current = await latency(() => this.revision);
+      try {
+        return await latency(() => {
+          const specs = this.effectParamSpecs(effect);
+          const spec = specs[index];
+          if (spec === undefined) {
+            throw new Error(`extension effect ${effect} has no parameter ${index}`);
+          }
+          if (!Number.isInteger(value) || value < spec.min || value > spec.max) {
+            throw new Error(
+              `extension parameter ${spec.name} ${value} is outside ${spec.min}..=${spec.max}`,
+            );
+          }
+          if (this.revision !== current) {
+            throw new Error(
+              `StateRevisionConflict: lighting revision moved ` +
+                `(expected ${current}, now ${this.revision})`,
+            );
+          }
+          this.extensionParamValues.set(`${effect}:${index}`, value);
+          return this.touchLighting();
+        });
+      } catch (error) {
+        if (attempt !== 0 || !String(error).includes("RevisionConflict")) throw error;
+      }
+    }
+    throw new Error("extension parameter revision retry exhausted");
   }
 
   private async setExtensionSelection(state: LightingExtensionState): Promise<LightingState> {

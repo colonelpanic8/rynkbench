@@ -2,18 +2,22 @@
 // layer's scene draft are staged independently and stage against different
 // baselines (applied overlay vs. that layer's stored scene cells).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   LightingEffect,
+  LightingExtensionParam,
   LightingSceneCell,
   LightingState,
   ModifierCombination,
 } from "../vendor/rynk-wasm/rynk_wasm";
+import type { RynkSession } from "../session/types";
 import {
   activeLightingBase,
   activeLightingDraft,
+  makeIo,
   makeWorkbenchReducer,
   stagedBetween,
+  type WorkbenchAction,
   type WorkbenchState,
 } from "./state";
 
@@ -55,6 +59,7 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     conditionalScenes: [],
     lightingControls: { output_toggle_user_action: undefined, wake_layer: undefined },
     lightingExtension: null,
+    extensionParams: null,
     scenePolicy: "EffectiveOnly",
     compiledScenePolicy: "EffectiveOnly",
     selection: null,
@@ -170,6 +175,92 @@ describe("layer-state snapshots", () => {
     expect(next.activeLayers).toEqual([1, 2, 4]);
     expect(next.currentLayer).toBe(4);
     expect(next.layerStateComplete).toBe(true);
+  });
+});
+
+describe("extension parameters", () => {
+  const params: LightingExtensionParam[] = [
+    { name: "Density", min: 1, max: 32, default: 8, value: 12 },
+  ];
+
+  it("records a loaded list against the effect it describes", () => {
+    const next = reducer(baseState(), { type: "extensionParamsLoaded", effect: 6, items: params });
+    expect(next.extensionParams).toEqual({ effect: 6, items: params });
+  });
+
+  /** A session stub with just the extension surface the io facade touches. */
+  function ioWith(lighting: Partial<RynkSession["lighting"]>) {
+    const actions: WorkbenchAction[] = [];
+    const session = { lighting } as unknown as RynkSession;
+    const io = makeIo(session, () => baseState(), (act) => actions.push(act), 2, () => {});
+    return { io, actions };
+  }
+
+  it("loads a parameter list into state", async () => {
+    const { io, actions } = ioWith({ extensionParams: async () => params });
+    io.loadExtensionParams(6);
+    await vi.waitFor(() => expect(actions).toHaveLength(1));
+    expect(actions[0]).toEqual({ type: "extensionParamsLoaded", effect: 6, items: params });
+  });
+
+  it("records an empty list when the firmware lacks the parameter surface", async () => {
+    const { io, actions } = ioWith({
+      extensionParams: async () => {
+        throw new Error("UnknownCmd: GetLightingExtensionParams");
+      },
+    });
+    io.loadExtensionParams(6);
+    await vi.waitFor(() => expect(actions).toHaveLength(1));
+    // Feature detection is silent: no lightingError, just "no parameters".
+    expect(actions[0]).toEqual({ type: "extensionParamsLoaded", effect: 6, items: [] });
+  });
+
+  it("applies the selection first, then each staged parameter, then re-reads", async () => {
+    const calls: string[] = [];
+    const selection = { effect: 6, palette: 2, value: 200, speed: 40 };
+    const { io, actions } = ioWith({
+      setExtensionState: async () => {
+        calls.push("selection");
+        return LIGHTING;
+      },
+      setExtensionParam: async (effect, index, value) => {
+        calls.push(`param ${effect}:${index}=${value}`);
+        return { ...LIGHTING, revision: LIGHTING.revision + 1 + index };
+      },
+      extensionParams: async () => {
+        calls.push("reload");
+        return params;
+      },
+    });
+
+    io.setExtensionState(selection, [
+      { index: 0, value: 20 },
+      { index: 2, value: 3 },
+    ]);
+    await vi.waitFor(() => expect(calls).toHaveLength(4));
+    expect(calls).toEqual(["selection", "param 6:0=20", "param 6:2=3", "reload"]);
+    // The device's last reply is the state of record.
+    expect(actions).toContainEqual({
+      type: "extensionStateSet",
+      state: { ...LIGHTING, revision: LIGHTING.revision + 3 },
+      extension: selection,
+    });
+  });
+
+  it("reports a failed parameter write as a lighting error", async () => {
+    const { io, actions } = ioWith({
+      setExtensionState: async () => LIGHTING,
+      setExtensionParam: async () => {
+        throw new Error("parameter 99 is outside 1..=32");
+      },
+    });
+    io.setExtensionState({ effect: 6, palette: 0, value: 0, speed: 0 }, [{ index: 0, value: 99 }]);
+    await vi.waitFor(() => expect(actions).toHaveLength(2));
+    expect(actions[1]).toEqual({
+      type: "lightingBusy",
+      busy: false,
+      error: "parameter 99 is outside 1..=32",
+    });
   });
 });
 
