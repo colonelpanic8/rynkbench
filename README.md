@@ -16,7 +16,9 @@ per-key lighting live — no install, nothing leaves your machine.
 
 WebHID needs a Chromium-based browser (Chrome or Edge); Firefox and Safari don't
 implement it. The page must be served from a secure context — `localhost`
-counts, so local dev works out of the box.
+counts, so local dev works out of the box. Alternatively, the [Tauri desktop
+app](#desktop-app-tauri) bundles the same UI with a native HID transport, so no
+browser is needed at all.
 
 ## Quick start
 
@@ -39,13 +41,32 @@ pinned Rynk WASM package first; Node 22+ is still used for the web build itself.
 - **Vite + React + TypeScript + Tailwind v4.** UI under `src/ui`, keyboard/board
   models under `src/model`.
 - **The session seam** (`src/session/types.ts`) is the one interface the UI talks
-  to. Two implementations back it: a `mock` backend with demo boards, and a
-  `webhid` backend that drives real hardware. The UI never imports a transport
-  or WASM directly — only *types* from the generated client and the seam.
+  to. Three implementations back it: a `mock` backend with demo boards, a
+  `webhid` backend that drives real hardware in the browser, and a `native`
+  backend that drives the Tauri app's hidapi transport. The UI never imports a
+  transport or WASM directly — only *types* from the generated client and the
+  seam. The two USB backends share one protocol core (`src/session/link-session.ts`
+  over the byte-link framing in `src/session/rynk-link.ts`); only the report
+  plumbing differs.
 - **`src/vendor/rynk-wasm`** is an ignored build output containing the Rynk
   protocol client compiled to WASM with `wasm-pack`. The browser owns transports
   (WebHID chooser, stream locks, hot-plug); the WASM owns request/response typing
   and protocol validation.
+
+## Desktop app (Tauri)
+
+The same UI ships as a native desktop app: a Tauri shell (`src-tauri/`) serves
+the built site in a system webview and exposes the Rynk raw-HID interface
+through [hidapi](https://crates.io/crates/hidapi), since WebKit-based webviews
+have no WebHID. Build and run it from the flake:
+
+```bash
+nix build .#rynkbench-tauri   # result/bin/rynkbench
+just tauri-run                # dev loop: rebuild the frontend, cargo run
+```
+
+On Linux the app opens `/dev/hidraw*` directly, so the usual udev rules for
+your keyboard's raw-HID interface apply (the same access WebHID needs).
 
 ## The Rynk WASM build artifact
 
