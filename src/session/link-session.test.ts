@@ -5,13 +5,13 @@ import type {
   LightingOverlayCell,
   LightingOverlayPageRequest,
   LightingState,
-} from "../../vendor/rynk-wasm/rynk_wasm";
+} from "../vendor/rynk-wasm/rynk_wasm";
 import {
   decodeLayerState,
   readLightingExtensionNames,
   readLightingExtensionParams,
   readLightingOverlay,
-} from "./session";
+} from "./link-session";
 
 const effect: LightingEffect = { Solid: { color: { r: 1, g: 2, b: 3 } } };
 

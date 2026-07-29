@@ -1,20 +1,11 @@
 // WebHID backend: the vendored rynk-wasm client over a raw-HID byte link.
 // Chromium-only — WebHID has not shipped in Firefox or Safari.
 
-import wasmInit, { connect } from "../../vendor/rynk-wasm/rynk_wasm";
+import { connect } from "../../vendor/rynk-wasm/rynk_wasm";
+import { LinkSession } from "../link-session";
 import type { SessionProvider } from "../types";
+import { initWasm } from "../wasm";
 import { hidByteLink, openRynkHidDevice } from "./link";
-import { WebHidSession } from "./session";
-
-let wasmReady: Promise<unknown> | null = null;
-
-function initWasm(): Promise<unknown> {
-  wasmReady ??= wasmInit().catch((error: unknown) => {
-    wasmReady = null; // failed init is retryable on the next connect
-    throw error;
-  });
-  return wasmReady;
-}
 
 export const webHidProvider: SessionProvider = {
   kind: "webhid",
@@ -30,7 +21,16 @@ export const webHidProvider: SessionProvider = {
     try {
       await initWasm();
       const client = await connect(link);
-      return new WebHidSession(client, link, device);
+      return new LinkSession(client, link, {
+        kind: "webhid",
+        watchDisconnect(onUnplug) {
+          const handler = (ev: { device: HIDDevice }) => {
+            if (ev.device === device) onUnplug();
+          };
+          navigator.hid.addEventListener("disconnect", handler);
+          return () => navigator.hid.removeEventListener("disconnect", handler);
+        },
+      });
     } catch (error) {
       await link.close().catch(() => undefined);
       throw error;
