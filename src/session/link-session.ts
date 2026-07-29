@@ -1,4 +1,6 @@
-// RynkSession over a live wasm RynkClient.
+// RynkSession over a live wasm RynkClient and a RynkByteLink — the shared
+// core of every USB transport (WebHID, native Tauri). Transports supply the
+// link plus a disconnect watcher; everything protocol-shaped lives here.
 //
 // The protocol allows one request in flight (next_topic is the sanctioned
 // exception: one parked pull runs alongside one request), so every op goes
@@ -32,7 +34,7 @@ import type {
   Morse,
   RynkClient,
   TopicEvent,
-} from "../../vendor/rynk-wasm/rynk_wasm";
+} from "../vendor/rynk-wasm/rynk_wasm";
 import type {
   BehaviorOps,
   ComboOps,
@@ -46,8 +48,20 @@ import type {
   MacroOps,
   MorseOps,
   RynkSession,
-} from "../types";
-import type { RynkByteLink } from "./link";
+  SessionKind,
+} from "./types";
+import type { RynkByteLink } from "./rynk-link";
+
+/** Transport-specific pieces a LinkSession cannot know itself. */
+export interface LinkSessionHooks {
+  kind: SessionKind;
+  /**
+   * Start watching the transport for surprise device loss. `onUnplug` must be
+   * called when the device disappears out from under the session; the
+   * returned function stops watching (called from `close()`).
+   */
+  watchDisconnect(onUnplug: () => void): () => void;
+}
 
 interface LightingPage<T> {
   topology_revision: number;
@@ -194,8 +208,8 @@ export async function readLightingExtensionNames(
   return names;
 }
 
-export class WebHidSession implements RynkSession {
-  readonly kind = "webhid" as const;
+export class LinkSession implements RynkSession {
+  readonly kind: SessionKind;
   readonly label: string;
   readonly device: DeviceOps;
   readonly keymap: KeymapOps;
@@ -208,8 +222,7 @@ export class WebHidSession implements RynkSession {
 
   private readonly client: RynkClient;
   private readonly link: RynkByteLink;
-  private readonly hidDevice: HIDDevice;
-  private readonly onHidDisconnect: (ev: { device: HIDDevice }) => void;
+  private readonly unwatchDisconnect: () => void;
   private readonly pumpDone: Promise<void>;
   private queue: Promise<unknown> = Promise.resolve();
   private closed = false;
@@ -217,18 +230,16 @@ export class WebHidSession implements RynkSession {
   private topicHandler: ((event: TopicEvent) => void) | null = null;
   private disconnectHandler: (() => void) | null = null;
 
-  constructor(client: RynkClient, link: RynkByteLink, hidDevice: HIDDevice) {
+  constructor(client: RynkClient, link: RynkByteLink, hooks: LinkSessionHooks) {
     this.client = client;
     this.link = link;
-    this.hidDevice = hidDevice;
+    this.kind = hooks.kind;
     this.label = link.label;
 
-    this.onHidDisconnect = ({ device }) => {
-      if (device !== this.hidDevice) return;
+    this.unwatchDisconnect = hooks.watchDisconnect(() => {
       this.link.end();
       if (!this.closed) this.disconnectHandler?.();
-    };
-    navigator.hid.addEventListener("disconnect", this.onHidDisconnect);
+    });
     this.pumpDone = this.pumpTopics();
 
     this.device = {
@@ -324,7 +335,7 @@ export class WebHidSession implements RynkSession {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    navigator.hid.removeEventListener("disconnect", this.onHidDisconnect);
+    this.unwatchDisconnect();
     // Ending the link rejects the parked next_topic and any in-flight
     // request; only free the wasm handle once both have settled.
     await this.link.close();
