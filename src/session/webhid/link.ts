@@ -16,20 +16,30 @@ function isRynkInterface(device: HIDDevice): boolean {
   return device.collections.some((c) => c.usagePage === RYNK_USAGE_PAGE && c.usage === RYNK_USAGE);
 }
 
-/** Show the browser device picker and open the Rynk raw-HID interface. */
-export async function openRynkHidDevice(): Promise<HIDDevice> {
-  // Previously-granted devices open without a picker, so reloads reconnect
-  // with one click. A stale grant (unplugged, claimed elsewhere) falls
-  // through to the chooser.
+/// Grants that failed to speak Rynk this page session. WebHID hands out
+/// grants in its own order and exposes no serial number, so two keyboards of
+/// the same model are indistinguishable before the handshake; without this,
+/// a bad grant that sorts first would be retried forever and the picker
+/// would never reappear.
+const rejected = new WeakSet<HIDDevice>();
+
+/** Every previously-granted Rynk interface worth trying, in browser order. */
+export async function grantedRynkDevices(): Promise<HIDDevice[]> {
   try {
-    const granted = (await navigator.hid.getDevices()).find(isRynkInterface);
-    if (granted) {
-      if (!granted.opened) await granted.open();
-      return granted;
-    }
+    return (await navigator.hid.getDevices()).filter((d) => isRynkInterface(d) && !rejected.has(d));
   } catch {
-    // fall through to the picker
+    return [];
   }
+}
+
+/// Record that `device` did not complete the Rynk handshake, so the next
+/// connect skips it and falls through to the picker once nothing is left.
+export function rejectRynkDevice(device: HIDDevice): void {
+  rejected.add(device);
+}
+
+/** Show the browser device picker and return the chosen Rynk interface. */
+export async function requestRynkDevice(): Promise<HIDDevice> {
   const devices = await navigator.hid.requestDevice({
     filters: [{ usagePage: RYNK_USAGE_PAGE, usage: RYNK_USAGE }],
   });
@@ -37,6 +47,10 @@ export async function openRynkHidDevice(): Promise<HIDDevice> {
   // the Rynk collection, not a look-alike raw interface.
   const device = devices.find(isRynkInterface) ?? devices[0];
   if (!device) throw new Error("No Rynk device chosen");
+  return device;
+}
+
+export async function openRynkHidDevice(device: HIDDevice): Promise<HIDDevice> {
   if (!device.opened) await device.open();
   return device;
 }

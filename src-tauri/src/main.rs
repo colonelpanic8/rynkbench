@@ -97,8 +97,49 @@ fn run_io(
     }
 }
 
+/// One candidate raw-HID interface. `path` is hidapi's stable handle for the
+/// exact interface, so the caller can reopen a specific one instead of
+/// whichever the enumeration happens to yield first.
+#[derive(Clone, serde::Serialize)]
+struct Candidate {
+    path: String,
+    label: String,
+    serial: Option<String>,
+}
+
+fn candidates(api: &HidApi) -> Vec<Candidate> {
+    api.device_list()
+        .filter(|d| d.usage_page() == RYNK_USAGE_PAGE && d.usage() == RYNK_USAGE)
+        .map(|d| Candidate {
+            path: d.path().to_string_lossy().into_owned(),
+            label: d
+                .product_string()
+                .filter(|s| !s.is_empty())
+                .unwrap_or("Rynk (native)")
+                .to_string(),
+            serial: d
+                .serial_number()
+                .filter(|s| !s.is_empty())
+                .map(str::to_string),
+        })
+        .collect()
+}
+
+/// Enumerate every Rynk interface. Two keyboards of the same model are
+/// indistinguishable by label alone, so the serial number rides along and
+/// only the handshake proves which one is usable.
 #[tauri::command]
-fn rynk_open(app: AppHandle, state: State<'_, LinkState>) -> Result<OpenResult, String> {
+fn rynk_list() -> Result<Vec<Candidate>, String> {
+    let api = HidApi::new().map_err(|e| format!("HID subsystem unavailable: {e}"))?;
+    Ok(candidates(&api))
+}
+
+#[tauri::command]
+fn rynk_open(
+    app: AppHandle,
+    state: State<'_, LinkState>,
+    path: Option<String>,
+) -> Result<OpenResult, String> {
     let mut slot = state.0.lock().unwrap();
     if let Some(previous) = slot.take() {
         previous.stop();
@@ -107,8 +148,15 @@ fn rynk_open(app: AppHandle, state: State<'_, LinkState>) -> Result<OpenResult, 
     let api = HidApi::new().map_err(|e| format!("HID subsystem unavailable: {e}"))?;
     let info = api
         .device_list()
-        .find(|d| d.usage_page() == RYNK_USAGE_PAGE && d.usage() == RYNK_USAGE)
-        .ok_or_else(|| "No Rynk keyboard found (raw-HID usage 0xFF60/0x61)".to_string())?;
+        .filter(|d| d.usage_page() == RYNK_USAGE_PAGE && d.usage() == RYNK_USAGE)
+        .find(|d| match &path {
+            Some(wanted) => d.path().to_string_lossy() == wanted.as_str(),
+            None => true,
+        })
+        .ok_or_else(|| match &path {
+            Some(wanted) => format!("Rynk interface {wanted} is no longer present"),
+            None => "No Rynk keyboard found (raw-HID usage 0xFF60/0x61)".to_string(),
+        })?;
     let label = info
         .product_string()
         .filter(|s| !s.is_empty())
@@ -157,7 +205,7 @@ fn rynk_close(state: State<'_, LinkState>) {
 fn main() {
     tauri::Builder::default()
         .manage(LinkState::default())
-        .invoke_handler(tauri::generate_handler![rynk_open, rynk_send, rynk_close])
+        .invoke_handler(tauri::generate_handler![rynk_list, rynk_open, rynk_send, rynk_close])
         .run(tauri::generate_context!())
         .expect("error while running Rynkbench");
 }
