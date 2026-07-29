@@ -1,0 +1,7 @@
+{
+  "$schema": "gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Main-window access to core APIs (event listen for HID reports).",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

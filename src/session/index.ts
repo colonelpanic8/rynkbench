@@ -3,12 +3,16 @@
 // a specific backend directory.
 
 import { mockProviders } from "./mock";
+import { nativeProvider } from "./native";
 import { webHidProvider } from "./webhid";
 import type { SessionProvider } from "./types";
 
 export type { RynkSession, SessionKind, SessionProvider } from "./types";
 
-/** All providers, in display order. Availability is checked at render time. */
+/** All providers, in display order. Availability is checked at render time.
+ * Inside the Tauri desktop app the native HID backend is available and
+ * WebHID is not (WebKit never shipped it); in a browser it is the reverse —
+ * so exactly one USB provider lights up in any environment. */
 export function sessionProviders(): SessionProvider[] {
-  return [webHidProvider, ...mockProviders];
+  return [nativeProvider, webHidProvider, ...mockProviders];
 }
