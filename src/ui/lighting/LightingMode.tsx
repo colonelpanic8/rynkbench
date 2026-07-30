@@ -23,11 +23,13 @@ import { EffectsPanel } from "./EffectsPanel";
 import { LayerPresets } from "./LayerPresets";
 import type { Hsv } from "../color";
 import { cssEmissiveRgb, cssRgb, hsvToRgb } from "../color";
-import { Button, InspectorShell, SectionLabel, TextInput, cx } from "../kit";
+import { Button, InspectorShell, SectionLabel, cx } from "../kit";
 import { EraserIcon, SpinnerIcon, WarningIcon } from "../icons";
 import { effectiveAction } from "../live/compositor";
 import { targetPreviewEffects } from "./preview";
 import { describeConditions, firmwarePreviewCells } from "./firmwareRules";
+import { effectRgb } from "./effect";
+import { NumberField } from "./EffectEditor";
 
 type EffectKind = "Solid" | "Blink" | "Breathe";
 
@@ -104,9 +106,7 @@ function brushCell(brush: Brush, ledId: number, allowTtl: boolean): LightingOver
 }
 
 function effectColor(effect: LightingEffect): string {
-  if ("Solid" in effect) return cssEmissiveRgb(effect.Solid.color);
-  if ("Blink" in effect) return cssEmissiveRgb(effect.Blink.color);
-  return cssEmissiveRgb(effect.Breathe.color);
+  return cssEmissiveRgb(effectRgb(effect));
 }
 
 function effectAnim(effect: LightingEffect): KeyDecor["fillAnim"] {
@@ -119,41 +119,6 @@ function effectAnim(effect: LightingEffect): KeyDecor["fillAnim"] {
       delayMs: effect.Breathe.phase_ms,
     };
   return undefined;
-}
-
-function NumberField({
-  label,
-  value,
-  onChange,
-  unit,
-  min,
-  max,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  unit?: string;
-  min?: number;
-  max?: number;
-}) {
-  return (
-    <label className="flex items-center justify-between gap-2 text-[12px] text-mute">
-      {label}
-      <span className="flex items-center gap-1">
-        <TextInput
-          type="number"
-          value={value}
-          min={min}
-          max={max}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="w-[74px] py-1 text-right"
-        />
-        {unit && (
-          <span className="min-w-5 shrink-0 whitespace-nowrap text-[11px] text-faint">{unit}</span>
-        )}
-      </span>
-    </label>
-  );
 }
 
 /** Overlay + per-layer edit targets, styled like Keymap mode's layer tabs.
