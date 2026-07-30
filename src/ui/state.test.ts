@@ -59,7 +59,7 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     scenes: [],
     compiledScenes: [],
     conditionalScenes: [],
-    lightingControls: { output_toggle_user_action: undefined, wake_layer: undefined },
+    lightingControls: { output_toggle_user_action: undefined, wake_layers: 0 },
     runtimeConditionalScenes: [],
     runtimeConditionalDraft: [],
     lightingExtension: null,
@@ -170,7 +170,7 @@ describe("per-target lighting drafts", () => {
 describe("conditional rule tables", () => {
   function rule(ledId: number, r: number): LightingConditionalSceneCell {
     return {
-      conditions: { layer: undefined, battery: undefined },
+      conditions: { layer: undefined, battery: undefined, output_mode: undefined },
       led_id: ledId,
       effect: solid(r),
     };

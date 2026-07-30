@@ -86,7 +86,7 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
   let conditionalScenes: LightingConditionalSceneCell[] = [];
   let lightingControls: LightingControls = {
     output_toggle_user_action: undefined,
-    wake_layer: undefined,
+    wake_layers: 0,
   };
   let runtimeConditionalStatus: LightingRuntimeConditionalSceneStatus | null = null;
   let runtimeConditionalScenes: LightingConditionalSceneCell[] = [];

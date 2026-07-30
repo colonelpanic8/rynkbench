@@ -2,6 +2,7 @@ import type {
   BatteryStatus,
   LightingConditionalSceneCell,
   LightingOverlayCell,
+  LightingOutputMode,
   LightingRuntimeConditionalSceneStatus,
   LightingSceneCell,
 } from "../../vendor/rynk-wasm/rynk_wasm";
@@ -20,13 +21,15 @@ export function runtimeConditionalSupported(
 export interface FirmwareLightingPreview {
   activeLayers: ReadonlySet<number>;
   batteries: ReadonlyMap<number, BatteryStatus>;
+  outputMode: LightingOutputMode | undefined;
 }
 
 export function conditionalRuleMatches(
   cell: LightingConditionalSceneCell,
   preview: FirmwareLightingPreview,
 ): boolean {
-  const { layer, battery } = cell.conditions;
+  const { layer, battery, output_mode } = cell.conditions;
+  if (output_mode !== undefined && preview.outputMode !== output_mode) return false;
   if (layer && preview.activeLayers.has(layer.layer) !== layer.active) return false;
   if (!battery) return true;
   const status = preview.batteries.get(battery.node);
@@ -63,7 +66,7 @@ export function firmwarePreviewCells(
 
 export function describeConditions(cell: LightingConditionalSceneCell): string {
   const parts: string[] = [];
-  const { layer, battery } = cell.conditions;
+  const { layer, battery, output_mode } = cell.conditions;
   if (layer) parts.push(`L${layer.layer} ${layer.active ? "active" : "inactive"}`);
   if (battery) {
     let range = "level known";
@@ -76,6 +79,15 @@ export function describeConditions(cell: LightingConditionalSceneCell): string {
     }
     const charge = battery.charge === "Any" ? "" : `, ${battery.charge.toLowerCase()}`;
     parts.push(`battery ${battery.node} ${range}${charge}`);
+  }
+  if (output_mode !== undefined) {
+    parts.push(
+      output_mode === "AlwaysOn"
+        ? "output always on"
+        : output_mode === "AlwaysOff"
+          ? "output always off"
+          : "output plugged-in only",
+    );
   }
   return parts.length > 0 ? parts.join(" + ") : "always";
 }

@@ -918,7 +918,7 @@ class MockSession implements RynkSession {
       controls: structuredClone(
         this.spec.lightingControls ?? {
           output_toggle_user_action: undefined,
-          wake_layer: undefined,
+          wake_layers: 0,
         },
       ),
     };

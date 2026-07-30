@@ -269,12 +269,20 @@ for (let layer = 0; layer < 5; layer++) {
   const led_id = ledForLabel(`F${layer + 1}`);
   conditionalScenes.push(
     {
-      conditions: { layer: { layer, active: false }, battery: undefined },
+      conditions: {
+        layer: { layer, active: false },
+        battery: undefined,
+        output_mode: undefined,
+      },
       led_id,
       effect: solid(180, 20, 20),
     },
     {
-      conditions: { layer: { layer, active: true }, battery: undefined },
+      conditions: {
+        layer: { layer, active: true },
+        battery: undefined,
+        output_mode: undefined,
+      },
       led_id,
       effect: solid(20, 180, 70),
     },
@@ -282,13 +290,21 @@ for (let layer = 0; layer < 5; layer++) {
 }
 for (const label of ["W", "A", "S", "D"]) {
   conditionalScenes.push({
-    conditions: { layer: { layer: 3, active: true }, battery: undefined },
+    conditions: {
+      layer: { layer: 3, active: true },
+      battery: undefined,
+      output_mode: undefined,
+    },
     led_id: ledForLabel(label),
     effect: solid(220, 35, 35),
   });
 }
 conditionalScenes.push({
-  conditions: { layer: { layer: 3, active: true }, battery: undefined },
+  conditions: {
+    layer: { layer: 3, active: true },
+    battery: undefined,
+    output_mode: undefined,
+  },
   led_id: ledForLabel("⌫"),
   effect: solid(255, 155, 25),
 });
@@ -301,6 +317,7 @@ for (const [node, leds] of [
       conditions: {
         layer: { layer: 2, active: true },
         battery: { node, min_level: 1 + index * 20, max_level: undefined, charge: "Any" },
+        output_mode: undefined,
       },
       led_id,
       effect: solid(30, 190, 70),
@@ -308,7 +325,11 @@ for (const [node, leds] of [
   });
 }
 conditionalScenes.push({
-  conditions: { layer: { layer: 2, active: true }, battery: undefined },
+  conditions: {
+    layer: { layer: 2, active: true },
+    battery: undefined,
+    output_mode: undefined,
+  },
   led_id: ledForLabel("S"),
   effect: solid(160, 160, 160),
 });
@@ -322,6 +343,7 @@ const seedRuntimeConditionalScenes: LightingConditionalSceneCell[] = [
     conditions: {
       layer: undefined,
       battery: { node: 0, min_level: undefined, max_level: 20, charge: "Discharging" },
+      output_mode: undefined,
     },
     led_id: ledForLabel("Esc"),
     effect: solid(200, 40, 0),
@@ -330,6 +352,7 @@ const seedRuntimeConditionalScenes: LightingConditionalSceneCell[] = [
     conditions: {
       layer: undefined,
       battery: { node: 0, min_level: undefined, max_level: 10, charge: "Discharging" },
+      output_mode: undefined,
     },
     led_id: ledForLabel("Esc"),
     effect: { Blink: { color: { r: 255, g: 0, b: 0 }, period_ms: 600, phase_ms: 0, duty: 128 } },
@@ -338,20 +361,47 @@ const seedRuntimeConditionalScenes: LightingConditionalSceneCell[] = [
     conditions: {
       layer: undefined,
       battery: { node: 1, min_level: undefined, max_level: 20, charge: "Discharging" },
+      output_mode: undefined,
     },
     led_id: ledForLabel("Del"),
     effect: solid(200, 40, 0),
   },
   {
-    conditions: { layer: { layer: 0, active: true }, battery: { node: 0, min_level: undefined, max_level: undefined, charge: "Charging" } },
+    conditions: {
+      layer: { layer: 0, active: true },
+      battery: {
+        node: 0,
+        min_level: undefined,
+        max_level: undefined,
+        charge: "Charging",
+      },
+      output_mode: undefined,
+    },
     led_id: ledForLabel("Esc"),
     effect: { Breathe: { color: { r: 0, g: 200, b: 90 }, period_ms: 2400, phase_ms: 0, step_ms: 16 } },
   },
   {
-    conditions: { layer: { layer: 3, active: true }, battery: undefined },
+    conditions: {
+      layer: { layer: 3, active: true },
+      battery: undefined,
+      output_mode: undefined,
+    },
     led_id: ledForLabel("W"),
     effect: { Blink: { color: { r: 40, g: 120, b: 255 }, period_ms: 800, phase_ms: 0, duty: 160 } },
   },
+  ...([
+    ["AlwaysOn", solid(0, 128, 0)],
+    ["AlwaysOff", solid(128, 0, 0)],
+    ["PoweredOnly", solid(0, 64, 160)],
+  ] as const).map(([output_mode, effect]) => ({
+    conditions: {
+      layer: { layer: 2, active: true },
+      battery: undefined,
+      output_mode,
+    },
+    led_id: ledForLabel("A"),
+    effect,
+  })),
 ];
 
 const info: DeviceInfo = {
@@ -404,7 +454,7 @@ export const glove80Board: BoardSpec = {
   compiledScenes,
   compiledScenePolicy: "EffectiveOnly",
   conditionalScenes,
-  lightingControls: { output_toggle_user_action: undefined, wake_layer: 2 },
+  lightingControls: { output_toggle_user_action: undefined, wake_layers: 1 << 2 },
   runtimeConditionalCapacity: 32,
   seedRuntimeConditionalScenes,
   // The real firmware's extension band: PaletteFX effects with its palette
@@ -453,12 +503,7 @@ export const glove80Board: BoardSpec = {
     effective_enabled: true,
     powered_only_scope: "Local",
     cycle_user_action: 13,
-    wake_layer: 2,
-    indicator: {
-      led_id: ledForLabel("D"),
-      always_on: { Solid: { color: { r: 0, g: 128, b: 0 } } },
-      always_off: { Solid: { color: { r: 128, g: 0, b: 0 } } },
-      powered_only: { Solid: { color: { r: 0, g: 64, b: 160 } } },
-    },
+    wake_layers: 1 << 2,
+    indicator: undefined,
   },
 };

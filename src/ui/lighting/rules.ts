@@ -17,7 +17,11 @@ export type Rules = LightingConditionalSceneCell[];
 /** A fresh, unconditional rule — "always, on this LED". Conditions are added
  *  afterwards, so a new rule is immediately meaningful and previewable. */
 export function newRule(ledId: LightingLedId, effect: LightingEffect): LightingConditionalSceneCell {
-  return { conditions: { layer: undefined, battery: undefined }, led_id: ledId, effect };
+  return {
+    conditions: { layer: undefined, battery: undefined, output_mode: undefined },
+    led_id: ledId,
+    effect,
+  };
 }
 
 export function appendRule(rules: Rules, rule: LightingConditionalSceneCell): Rules {

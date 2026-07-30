@@ -60,6 +60,16 @@ const DEFAULT_BRUSH: Brush = {
 
 const BLACK_EFFECT: LightingEffect = { Solid: { color: { r: 0, g: 0, b: 0 } } };
 
+function maskHasLayer(mask: number, layer: number): boolean {
+  return Math.floor(mask / 2 ** layer) % 2 === 1;
+}
+
+function layersInMask(mask: number, count: number): number[] {
+  return Array.from({ length: count }, (_, layer) => layer).filter((layer) =>
+    maskHasLayer(mask, layer),
+  );
+}
+
 function sceneLayerMap(
   scenes: LightingSceneCell[],
   layer: number,
@@ -232,19 +242,23 @@ function FirmwareRulesPanel({ activeCount }: { activeCount: number }) {
 
   const outputMode = state.lightingOutputMode;
   if (total === 0 && outputMode === null) return null;
-  const { output_toggle_user_action: toggleAction, wake_layer: wakeLayer } =
+  const { output_toggle_user_action: toggleAction, wake_layers: wakeLayers } =
     state.lightingControls;
+  const wakeLayerList = layersInMask(wakeLayers, bundle.caps.num_layers);
   return (
     <div>
       <SectionLabel>Configured firmware rules</SectionLabel>
       <p className="mt-1 text-[11.5px] leading-relaxed text-faint">
         Read-only from keyboard.toml · {total} cells · {activeCount} active in this preview
       </p>
-      {(toggleAction !== undefined || wakeLayer !== undefined) && (
+      {(toggleAction !== undefined || wakeLayerList.length > 0) && (
         <p className="mt-1 text-[11.5px] leading-relaxed text-mute">
           {toggleAction !== undefined && `User${toggleAction} toggles all lighting`}
-          {toggleAction !== undefined && wakeLayer !== undefined && " · "}
-          {wakeLayer !== undefined && `L${wakeLayer} wakes lighting and presents status`}
+          {toggleAction !== undefined && wakeLayerList.length > 0 && " · "}
+          {wakeLayerList.length > 0 &&
+            `${wakeLayerList.map((layer) => `L${layer}`).join(", ")} ${
+              wakeLayerList.length === 1 ? "wakes" : "wake"
+            } lighting and presents status`}
         </p>
       )}
       {outputMode !== null && (
@@ -337,6 +351,7 @@ export function LightingMode() {
           [0, state.battery],
           [1, state.peripheralBattery],
         ]),
+        outputMode: state.lightingOutputMode?.mode,
       },
     );
   }, [
@@ -346,6 +361,7 @@ export function LightingMode() {
     state.defaultLayer,
     state.peripheralBattery,
     state.runtimeConditionalDraft,
+    state.lightingOutputMode,
     target,
   ]);
   const previewEffects = useMemo(() => {
@@ -358,8 +374,7 @@ export function LightingMode() {
         : new Set([state.defaultLayer, target]);
     if (
       outputMode?.indicator !== undefined &&
-      outputMode.wake_layer !== undefined &&
-      activeLayers.has(outputMode.wake_layer)
+      [...activeLayers].some((layer) => maskHasLayer(outputMode.wake_layers, layer))
     ) {
       const effect =
         outputMode.mode === "AlwaysOn"

@@ -256,7 +256,7 @@ interface ReturnTypeShape {
 
 describe("WebHID runtime conditional readback", () => {
   const rule = (led_id: number, layer: number): LightingConditionalSceneCell => ({
-    conditions: { layer: { layer, active: true }, battery: undefined },
+    conditions: { layer: { layer, active: true }, battery: undefined, output_mode: undefined },
     led_id,
     effect,
   });

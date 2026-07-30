@@ -13,6 +13,7 @@ import { useMemo, useState } from "react";
 import type {
   LightingChargeCondition,
   LightingConditionalSceneCell,
+  LightingOutputMode,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import { conditionalTablesEqual, useWorkbench } from "../state";
 import { Button, SectionLabel, TextInput, cx } from "../kit";
@@ -24,6 +25,7 @@ import { EffectEditor } from "./EffectEditor";
 import { appendRule, moveRule, newRule, removeRule, replaceRule } from "./rules";
 
 const CHARGE_STATES: LightingChargeCondition[] = ["Any", "Charging", "Discharging", "Unknown"];
+const OUTPUT_MODES: LightingOutputMode[] = ["AlwaysOn", "AlwaysOff", "PoweredOnly"];
 
 const DEFAULT_EFFECT = { Solid: { color: { r: 40, g: 160, b: 255 } } } as const;
 
@@ -313,6 +315,52 @@ export function ConditionalRulesPanel() {
                   ))}
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* Output-mode condition */}
+          <div className="flex flex-col gap-1.5 border-t border-line-soft pt-2">
+            <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+              <span>Output-mode condition</span>
+              <input
+                type="checkbox"
+                checked={conditions.output_mode !== undefined}
+                onChange={(e) =>
+                  edit(selected, {
+                    ...rule,
+                    conditions: {
+                      ...conditions,
+                      output_mode: e.target.checked ? "AlwaysOn" : undefined,
+                    },
+                  })
+                }
+                className="accent-(--color-accent)"
+              />
+            </label>
+            {conditions.output_mode !== undefined && (
+              <select
+                value={conditions.output_mode}
+                onChange={(e) =>
+                  edit(selected, {
+                    ...rule,
+                    conditions: {
+                      ...conditions,
+                      output_mode: e.target.value as LightingOutputMode,
+                    },
+                  })
+                }
+                className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+              >
+                {OUTPUT_MODES.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode === "AlwaysOn"
+                      ? "always on"
+                      : mode === "AlwaysOff"
+                        ? "always off"
+                        : "plugged-in only"}
+                  </option>
+                ))}
+              </select>
             )}
           </div>
 
