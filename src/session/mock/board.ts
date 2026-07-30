@@ -35,6 +35,7 @@ import type {
   LightingOutputModeState,
   LightingPhysicalKey,
   LightingRoute,
+  LightingRuntimeConditionalSceneStatus,
   LightingSceneCell,
   LightingSceneStatus,
   LightingState,
@@ -101,6 +102,12 @@ export interface BoardSpec {
   /** Immutable conditional rules and controls compiled from keyboard.toml. */
   conditionalScenes?: LightingConditionalSceneCell[];
   lightingControls?: LightingControls;
+  /** Max cells in the mutable ordered conditional table; 0/absent simulates
+   *  firmware without RUNTIME_CONDITIONAL_SCENES. */
+  runtimeConditionalCapacity?: number;
+  /** Runtime conditional cells stored "in flash" when the session opens, in
+   *  composition order. */
+  seedRuntimeConditionalScenes?: LightingConditionalSceneCell[];
   /** Three-state output policy readback. Omit for older simulated firmware. */
   lightingOutputMode?: LightingOutputModeState;
   /** Host-selectable extension effect pack (static name lists plus the boot
@@ -278,7 +285,11 @@ export const COMPILED_LAYER_SCENES = 1 << 8;
 export const COMPILED_CONDITIONAL_SCENES = 1 << 9;
 export const OUTPUT_MODE = 1 << 10;
 export const EXTENSION_EFFECTS = 1 << 11;
+export const RUNTIME_CONDITIONAL_SCENES = 1 << 12;
 const SCENE_CHUNK_CAPACITY = 16;
+// Conditional cells are much wider on the wire than scene cells, so the
+// firmware pages them far more coarsely (LIGHTING_CONDITIONAL_SCENE_CHUNK_SIZE).
+const CONDITIONAL_CHUNK_CAPACITY = 8;
 
 const sceneKey = (cell: { layer: number; led_id: LightingLedId }): string =>
   `${cell.layer}:${cell.led_id}`;
@@ -332,6 +343,9 @@ class MockSession implements RynkSession {
   private readonly extensionParamValues = new Map<string, number>();
   /** Durable scene table keyed `${layer}:${led_id}`, insertion-ordered. */
   private readonly sceneTable = new Map<string, LightingSceneCell>();
+  /** Mutable conditional table. A list, not a map: rules compose in table
+   *  order, later rules win shared slots, and duplicates are legitimate. */
+  private runtimeConditional: LightingConditionalSceneCell[] = [];
   private layerPolicy: LightingLayerPolicy = "EffectiveOnly";
   private readonly comboTable: Combo[];
   private readonly morseTable: Morse[];
@@ -365,6 +379,10 @@ class MockSession implements RynkSession {
       this.sceneTable.set(sceneKey(cell), cloneScene(cell));
     }
     for (const cell of spec.compiledScenes ?? []) this.checkSceneCell(cell);
+    this.runtimeConditional = (spec.seedRuntimeConditionalScenes ?? []).map((cell) => {
+      this.checkConditionalCell(cell);
+      return structuredClone(cell);
+    });
     this.battery = spec.battery;
     this.brightness = spec.brightness;
     this.background = { ...spec.background };
@@ -556,6 +574,33 @@ class MockSession implements RynkSession {
           return structuredClone(this.spec.conditionalScenes ?? []);
         }),
     },
+    conditionalScenes: {
+      status: () => latency(() => this.runtimeConditionalStatus()),
+      read: () =>
+        latency(() => {
+          this.requireRuntimeConditional();
+          return structuredClone(this.runtimeConditional);
+        }),
+      replace: (cells) =>
+        latency(() => {
+          this.requireRuntimeConditional();
+          const capacity = this.spec.runtimeConditionalCapacity!;
+          if (cells.length > capacity) {
+            throw new Error(
+              `ConditionalSceneFull: ${cells.length} cells, capacity ${capacity}`,
+            );
+          }
+          // Validate the whole batch before mutating, like the transactional
+          // commit on real firmware: a bad cell leaves the table untouched.
+          const next = cells.map((cell) => {
+            this.checkConditionalCell(cell);
+            return structuredClone(cell);
+          });
+          // Order is the meaning — the batch is stored exactly as given.
+          this.runtimeConditional = next;
+          return this.touchLighting();
+        }),
+    },
   };
 
   readonly combos: ComboOps = {
@@ -692,7 +737,8 @@ class MockSession implements RynkSession {
           ? COMPILED_CONDITIONAL_SCENES
           : 0) |
         (this.spec.lightingOutputMode !== undefined ? OUTPUT_MODE : 0) |
-        (this.spec.extensionEffects !== undefined ? EXTENSION_EFFECTS : 0),
+        (this.spec.extensionEffects !== undefined ? EXTENSION_EFFECTS : 0) |
+        ((this.spec.runtimeConditionalCapacity ?? 0) > 0 ? RUNTIME_CONDITIONAL_SCENES : 0),
       effects: 0b111, // solid | blink | breathe
     };
   }
@@ -876,6 +922,56 @@ class MockSession implements RynkSession {
         },
       ),
     };
+  }
+
+  private requireRuntimeConditional(): void {
+    if ((this.spec.runtimeConditionalCapacity ?? 0) === 0) {
+      throw new Error("this firmware does not support runtime conditional scenes");
+    }
+  }
+
+  private runtimeConditionalStatus(): LightingRuntimeConditionalSceneStatus {
+    this.requireRuntimeConditional();
+    return {
+      // Unlike the compiled table, this one participates in the lighting
+      // state revision — it is mutable.
+      revision: this.revision,
+      capacity: this.spec.runtimeConditionalCapacity!,
+      cell_len: this.runtimeConditional.length,
+      chunk_capacity: CONDITIONAL_CHUNK_CAPACITY,
+    };
+  }
+
+  /** The firmware's per-cell bounds (handlers/lighting.rs): a real LED, a layer
+   *  inside the keymap, a battery node that some output actually reports for,
+   *  and sane percentage bounds. */
+  private checkConditionalCell(cell: LightingConditionalSceneCell): void {
+    if (!this.knownLeds.has(cell.led_id)) throw new Error(`unknown LED ${cell.led_id}`);
+    const { layer, battery } = cell.conditions;
+    if (layer !== undefined) {
+      const { num_layers } = this.spec.capabilities;
+      if (!Number.isInteger(layer.layer) || layer.layer < 0 || layer.layer >= num_layers) {
+        throw new Error(`layer ${layer.layer} out of range`);
+      }
+    }
+    if (battery !== undefined) {
+      const nodes = new Set(this.spec.topology.routes.map((route) => route.node));
+      if (!nodes.has(battery.node)) throw new Error(`unknown lighting node ${battery.node}`);
+      for (const level of [battery.min_level, battery.max_level]) {
+        if (level !== undefined && (!Number.isInteger(level) || level < 0 || level > 100)) {
+          throw new Error(`battery level ${level} is not a percentage`);
+        }
+      }
+      if (
+        battery.min_level !== undefined &&
+        battery.max_level !== undefined &&
+        battery.min_level > battery.max_level
+      ) {
+        throw new Error(
+          `battery range ${battery.min_level}..${battery.max_level} is inverted`,
+        );
+      }
+    }
   }
 
   private checkSceneCell(cell: LightingSceneCell): void {

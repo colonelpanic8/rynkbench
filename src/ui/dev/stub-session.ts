@@ -609,6 +609,19 @@ class StubSession implements RynkSession {
         throw new Error("this firmware does not support conditional-scene readback");
       },
     },
+    // No mutable conditional table either, so that surface stays hidden.
+    conditionalScenes: {
+      status: async (): Promise<never> => {
+        await lag();
+        throw new Error("this firmware does not support runtime conditional scenes");
+      },
+      read: async (): Promise<never> => {
+        throw new Error("this firmware does not support runtime conditional scenes");
+      },
+      replace: async (): Promise<never> => {
+        throw new Error("this firmware does not support runtime conditional scenes");
+      },
+    },
   };
 
   private lightingStateNow(): LightingState {

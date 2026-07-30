@@ -29,6 +29,9 @@ import type {
   LightingOverlayPage,
   LightingOverlayPageRequest,
   LightingPageRequest,
+  LightingRuntimeConditionalScenePageRequest,
+  LightingRuntimeConditionalScenesPage,
+  LightingRuntimeConditionalSceneStatus,
   LightingSceneCell,
   LightingSceneStatus,
   LightingState,
@@ -85,10 +88,18 @@ interface ExtensionParamsClient {
   }): Promise<{ revision: number; total: number; items: LightingExtensionParam[] }>;
 }
 
+interface RuntimeConditionalClient {
+  get_lighting_runtime_conditional_scene_status(): Promise<LightingRuntimeConditionalSceneStatus>;
+  get_lighting_runtime_conditional_scenes(
+    request: LightingRuntimeConditionalScenePageRequest,
+  ): Promise<LightingRuntimeConditionalScenesPage>;
+}
+
 const TOPOLOGY_READ_ATTEMPTS = 3;
 const OVERLAY_READ_ATTEMPTS = 3;
 const SCENE_READ_ATTEMPTS = 3;
 const EXTENSION_PARAM_READ_ATTEMPTS = 3;
+const RUNTIME_CONDITIONAL_READ_ATTEMPTS = 3;
 
 // LightingFeatureFlags::LAYER_SCENES (rmk-types); the generated .d.ts erases
 // the bitflag constants to a plain number, so the value is mirrored here.
@@ -97,6 +108,7 @@ const COMPILED_LAYER_SCENES = 1 << 8;
 const COMPILED_CONDITIONAL_SCENES = 1 << 9;
 const OUTPUT_MODE = 1 << 10;
 const EXTENSION_EFFECTS = 1 << 11;
+const RUNTIME_CONDITIONAL_SCENES = 1 << 12;
 
 /** The topology changed under a paged read; the whole read restarts. */
 class TopologyDrift extends Error {
@@ -264,6 +276,57 @@ export async function readLightingExtensionParams(
   });
 }
 
+/** Read the whole mutable conditional table in one coherent snapshot: page
+ * under the revision the status reported, and restart from a fresh status if a
+ * lighting mutation moves that revision mid-read. Order is preserved exactly —
+ * these rules compose in table order, so reordering them would change what the
+ * keyboard renders. */
+export async function readLightingRuntimeConditionalScenes(
+  client: RuntimeConditionalClient,
+  attempts = RUNTIME_CONDITIONAL_READ_ATTEMPTS,
+): Promise<LightingConditionalSceneCell[]> {
+  let lastConflict: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    // Request the status even for an empty table: besides pinning the
+    // revision, it probes endpoint support on firmware without the surface.
+    const status = await client.get_lighting_runtime_conditional_scene_status();
+    try {
+      const cells: LightingConditionalSceneCell[] = [];
+      while (cells.length < status.cell_len) {
+        const page = await client.get_lighting_runtime_conditional_scenes({
+          revision: status.revision,
+          offset: cells.length,
+        });
+        if (page.revision !== status.revision || page.total_count !== status.cell_len) {
+          throw new Error(
+            `StateRevisionConflict: runtime conditional table changed mid-read ` +
+              `(${status.revision} -> ${page.revision})`,
+          );
+        }
+        if (page.items.length === 0) {
+          throw new Error(
+            `runtime conditional read stalled at cell ${cells.length} of ${status.cell_len}`,
+          );
+        }
+        if (cells.length + page.items.length > status.cell_len) {
+          throw new Error(
+            `runtime conditional page exceeded advertised total ${status.cell_len}`,
+          );
+        }
+        cells.push(...page.items);
+      }
+      return cells;
+    } catch (error) {
+      if (!isStateRevisionConflict(error)) throw error;
+      lastConflict = error;
+    }
+  }
+  throw new Error(
+    `runtime conditional table kept changing across ${attempts} read attempts`,
+    { cause: lastConflict },
+  );
+}
+
 export class LinkSession implements RynkSession {
   readonly kind: SessionKind;
   readonly label: string;
@@ -354,6 +417,11 @@ export class LinkSession implements RynkSession {
         readCompiledScenes: () => this.run(() => this.readAllCompiledScenes()),
         conditionalStatus: () => this.run(() => this.readConditionalSceneStatus()),
         readConditionalScenes: () => this.run(() => this.readAllConditionalScenes()),
+      },
+      conditionalScenes: {
+        status: () => this.run(() => this.readRuntimeConditionalStatus()),
+        read: () => this.run(() => this.readAllRuntimeConditionalScenes()),
+        replace: (cells) => this.run(() => this.replaceRuntimeConditionalCells(cells)),
       },
     };
 
@@ -856,6 +924,53 @@ export class LinkSession implements RynkSession {
       `conditional scene topology kept changing across ${TOPOLOGY_READ_ATTEMPTS} read attempts`,
       { cause: lastConflict },
     );
+  }
+
+  private async readRuntimeConditionalStatus(): Promise<LightingRuntimeConditionalSceneStatus> {
+    // Feature-gate before touching the endpoint, like every other additive
+    // lighting surface: firmware without the table would reject the unknown
+    // request with an opaque protocol error.
+    const caps = await this.client.get_lighting_capabilities();
+    if ((caps.features & RUNTIME_CONDITIONAL_SCENES) === 0) {
+      throw new Error("this firmware does not support runtime conditional scenes");
+    }
+    return this.client.get_lighting_runtime_conditional_scene_status();
+  }
+
+  private async readAllRuntimeConditionalScenes(): Promise<LightingConditionalSceneCell[]> {
+    await this.readRuntimeConditionalStatus();
+    return readLightingRuntimeConditionalScenes(this.client);
+  }
+
+  private async replaceRuntimeConditionalCells(
+    cells: LightingConditionalSceneCell[],
+  ): Promise<LightingState> {
+    // Same shape as replaceSceneCells: one atomic replacement, staged in
+    // chunk-sized pages under the revision the status pinned, with a
+    // best-effort abort so a failed stage never leaves a dangling transaction.
+    const status = await this.readRuntimeConditionalStatus();
+    const chunkCapacity = Math.max(1, status.chunk_capacity);
+    const transaction = await this.client.begin_lighting_runtime_conditional_scene_replace({
+      expected_revision: status.revision,
+      cell_count: cells.length,
+    });
+    try {
+      for (let offset = 0; offset < cells.length; offset += chunkCapacity) {
+        await this.client.put_lighting_runtime_conditional_scene_chunk({
+          transaction_id: transaction.id,
+          offset,
+          cells: cells.slice(offset, offset + chunkCapacity),
+        });
+      }
+      return await this.client.commit_lighting_runtime_conditional_scene_replace({
+        transaction_id: transaction.id,
+      });
+    } catch (error) {
+      await this.client
+        .abort_lighting_runtime_conditional_scene_replace({ transaction_id: transaction.id })
+        .catch(() => undefined);
+      throw error;
+    }
   }
 
   private async replaceSceneCells(cells: LightingSceneCell[]): Promise<LightingState> {

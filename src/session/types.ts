@@ -45,6 +45,7 @@ import type {
   LightingLayerPolicy,
   LightingPhysicalKey,
   LightingRoute,
+  LightingRuntimeConditionalSceneStatus,
   LightingSceneCell,
   LightingSceneStatus,
   LightingState,
@@ -133,6 +134,28 @@ export interface LightingOps {
    *  sceneStatus() reports capacity > 0; on unsupported firmware
    *  sceneStatus() rejects with a descriptive error. */
   scenes: LightingSceneOps;
+  /** The mutable, host-owned conditional table. Distinct from
+   *  `scenes.readConditionalScenes()`, which serves the board's immutable
+   *  compiled rules. Supported iff the firmware advertises
+   *  RUNTIME_CONDITIONAL_SCENES; unsupported firmware rejects every op with a
+   *  descriptive error, which callers treat as "no such surface". */
+  conditionalScenes: LightingRuntimeConditionalOps;
+}
+
+/** Ordered, mutable conditional rules — the runtime counterpart of the board's
+ *  compiled conditional source. Rules compose in TABLE ORDER and a later rule
+ *  wins a slot a earlier one also claims, so the order *is* the meaning: never
+ *  reorder a table on the way through this seam. Runtime cells override the
+ *  compiled rules on slots they share. */
+export interface LightingRuntimeConditionalOps {
+  /** Occupancy and capacity, pinned to the lighting state revision. */
+  status(): Promise<LightingRuntimeConditionalSceneStatus>;
+  /** Read the whole ordered table (paging under one pinned revision, with a
+   *  restart when the revision drifts, is the backend's job). */
+  read(): Promise<LightingConditionalSceneCell[]>;
+  /** Atomically replace the whole table, in the order given (wraps the
+   *  begin/put-chunks/commit transaction and its revision handshake). */
+  replace(cells: LightingConditionalSceneCell[]): Promise<LightingState>;
 }
 
 export interface LightingSceneOps {

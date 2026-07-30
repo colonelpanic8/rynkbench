@@ -313,6 +313,47 @@ conditionalScenes.push({
   effect: solid(160, 160, 160),
 });
 
+// The mutable ordered table, as a host would have written it: a battery
+// warning that outranks the compiled gauge on the same LED, and a layer-3
+// override that recolors one of the compiled gaming keys. Order is meaning —
+// the blink lands after the solid warning and wins the slot they share.
+const seedRuntimeConditionalScenes: LightingConditionalSceneCell[] = [
+  {
+    conditions: {
+      layer: undefined,
+      battery: { node: 0, min_level: undefined, max_level: 20, charge: "Discharging" },
+    },
+    led_id: ledForLabel("Esc"),
+    effect: solid(200, 40, 0),
+  },
+  {
+    conditions: {
+      layer: undefined,
+      battery: { node: 0, min_level: undefined, max_level: 10, charge: "Discharging" },
+    },
+    led_id: ledForLabel("Esc"),
+    effect: { Blink: { color: { r: 255, g: 0, b: 0 }, period_ms: 600, phase_ms: 0, duty: 128 } },
+  },
+  {
+    conditions: {
+      layer: undefined,
+      battery: { node: 1, min_level: undefined, max_level: 20, charge: "Discharging" },
+    },
+    led_id: ledForLabel("Del"),
+    effect: solid(200, 40, 0),
+  },
+  {
+    conditions: { layer: { layer: 0, active: true }, battery: { node: 0, min_level: undefined, max_level: undefined, charge: "Charging" } },
+    led_id: ledForLabel("Esc"),
+    effect: { Breathe: { color: { r: 0, g: 200, b: 90 }, period_ms: 2400, phase_ms: 0, step_ms: 16 } },
+  },
+  {
+    conditions: { layer: { layer: 3, active: true }, battery: undefined },
+    led_id: ledForLabel("W"),
+    effect: { Blink: { color: { r: 40, g: 120, b: 255 }, period_ms: 800, phase_ms: 0, duty: 160 } },
+  },
+];
+
 const info: DeviceInfo = {
   rmk_version: { major: 0, minor: 7, patch: 0 },
   vendor_id: 0x16c0,
@@ -364,6 +405,8 @@ export const glove80Board: BoardSpec = {
   compiledScenePolicy: "EffectiveOnly",
   conditionalScenes,
   lightingControls: { output_toggle_user_action: undefined, wake_layer: 2 },
+  runtimeConditionalCapacity: 32,
+  seedRuntimeConditionalScenes,
   // The real firmware's extension band: PaletteFX effects with its palette
   // pack (display names from rmk-palettefx/palettes/*.toml).
   extensionEffects: {

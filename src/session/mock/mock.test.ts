@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Combo, Morse, TopicEvent } from "../../vendor/rynk-wasm/rynk_wasm";
+import type {
+  Combo,
+  LightingConditionalSceneCell,
+  Morse,
+  TopicEvent,
+} from "../../vendor/rynk-wasm/rynk_wasm";
 import type { RynkSession } from "../types";
 import { buildKeyboardModel } from "../../model/keyboard";
 import { enrichmentFor } from "../../model/boards";
@@ -326,6 +331,110 @@ describe("compiled firmware lighting", () => {
         wake_layer: 2,
       });
       expect((await session.lighting.capabilities()).features & (1 << 10)).not.toBe(0);
+    });
+  });
+});
+
+describe("runtime conditional scenes", () => {
+  const rule = (
+    led_id: number,
+    over: Partial<LightingConditionalSceneCell["conditions"]> = {},
+  ): LightingConditionalSceneCell => ({
+    conditions: { layer: undefined, battery: undefined, ...over },
+    led_id,
+    effect: { Solid: { color: { r: 1, g: 2, b: 3 } } },
+  });
+
+  it("advertises RUNTIME_CONDITIONAL_SCENES and serves the seeded ordered table", async () => {
+    await withSession(glove80Board, async (session) => {
+      expect((await session.lighting.capabilities()).features & (1 << 12)).not.toBe(0);
+      const status = await session.lighting.conditionalScenes.status();
+      const cells = await session.lighting.conditionalScenes.read();
+      expect(status.capacity).toBe(glove80Board.runtimeConditionalCapacity);
+      expect(status.cell_len).toBe(cells.length);
+      // The mutable table tracks the lighting state revision.
+      expect(status.revision).toBe((await session.lighting.state()).revision);
+      expect(cells).toEqual(glove80Board.seedRuntimeConditionalScenes);
+      // Two rules deliberately claim the same LED; the later one wins, so
+      // duplicates must survive the round trip in order.
+      const shared = cells.filter((cell) => cell.led_id === cells[0].led_id);
+      expect(shared.length).toBeGreaterThan(1);
+    });
+  });
+
+  it("round-trips replace with the exact order given, bumping the revision", async () => {
+    await withSession(glove80Board, async (session) => {
+      const pushes: TopicEvent[] = [];
+      session.onTopic((event) => pushes.push(event));
+      const before = await session.lighting.state();
+      const table = [rule(0), rule(1, { layer: { layer: 2, active: false } }), rule(0)];
+      const state = await session.lighting.conditionalScenes.replace(table);
+      expect(state.revision).toBeGreaterThan(before.revision);
+      expect(await session.lighting.conditionalScenes.read()).toEqual(table);
+      // A permutation is a different table, and replacing installs it verbatim.
+      const reordered = [table[2], table[0], table[1]];
+      await session.lighting.conditionalScenes.replace(reordered);
+      expect(await session.lighting.conditionalScenes.read()).toEqual(reordered);
+      expect(pushes).toContainEqual({ LightingChange: undefined });
+    });
+  });
+
+  it("replaces with an empty table without losing support", async () => {
+    await withSession(glove80Board, async (session) => {
+      await session.lighting.conditionalScenes.replace([]);
+      expect(await session.lighting.conditionalScenes.read()).toEqual([]);
+      expect((await session.lighting.conditionalScenes.status()).cell_len).toBe(0);
+      expect((await session.lighting.capabilities()).features & (1 << 12)).not.toBe(0);
+    });
+  });
+
+  it("rejects bad cells and over-capacity tables, leaving the table untouched", async () => {
+    await withSession(glove80Board, async (session) => {
+      const caps = await session.device.capabilities();
+      const seeded = await session.lighting.conditionalScenes.read();
+      await expect(session.lighting.conditionalScenes.replace([rule(999)])).rejects.toThrow(
+        /unknown LED/,
+      );
+      await expect(
+        session.lighting.conditionalScenes.replace([
+          rule(0, { layer: { layer: caps.num_layers, active: true } }),
+        ]),
+      ).rejects.toThrow(/layer .* out of range/);
+      await expect(
+        session.lighting.conditionalScenes.replace([
+          rule(0, { battery: { node: 9, min_level: undefined, max_level: undefined, charge: "Any" } }),
+        ]),
+      ).rejects.toThrow(/unknown lighting node/);
+      await expect(
+        session.lighting.conditionalScenes.replace([
+          rule(0, { battery: { node: 0, min_level: undefined, max_level: 101, charge: "Any" } }),
+        ]),
+      ).rejects.toThrow(/not a percentage/);
+      await expect(
+        session.lighting.conditionalScenes.replace([
+          rule(0, { battery: { node: 0, min_level: 80, max_level: 20, charge: "Any" } }),
+        ]),
+      ).rejects.toThrow(/inverted/);
+      const status = await session.lighting.conditionalScenes.status();
+      await expect(
+        session.lighting.conditionalScenes.replace(
+          Array.from({ length: status.capacity + 1 }, () => rule(0)),
+        ),
+      ).rejects.toThrow(/capacity/);
+      expect(await session.lighting.conditionalScenes.read()).toEqual(seeded);
+    });
+  });
+
+  it("reports no table at all on the Ortho 60", async () => {
+    await withSession(ortho60Board, async (session) => {
+      expect((await session.lighting.capabilities()).features & (1 << 12)).toBe(0);
+      await expect(session.lighting.conditionalScenes.status()).rejects.toThrow(
+        /does not support/,
+      );
+      await expect(session.lighting.conditionalScenes.read()).rejects.toThrow(/does not support/);
+      await expect(session.lighting.conditionalScenes.replace([])).rejects.toThrow(
+        /does not support/,
+      );
     });
   });
 });

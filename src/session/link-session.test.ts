@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
+  LightingConditionalSceneCell,
   LightingEffect,
   LightingExtensionParam,
   LightingOverlayCell,
   LightingOverlayPageRequest,
+  LightingRuntimeConditionalSceneStatus,
   LightingState,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import {
@@ -11,6 +13,7 @@ import {
   readLightingExtensionNames,
   readLightingExtensionParams,
   readLightingOverlay,
+  readLightingRuntimeConditionalScenes,
 } from "./link-session";
 
 const effect: LightingEffect = { Solid: { color: { r: 1, g: 2, b: 3 } } };
@@ -250,6 +253,145 @@ interface ReturnTypeShape {
   total_count: number;
   items: LightingOverlayCell[];
 }
+
+describe("WebHID runtime conditional readback", () => {
+  const rule = (led_id: number, layer: number): LightingConditionalSceneCell => ({
+    conditions: { layer: { layer, active: true }, battery: undefined },
+    led_id,
+    effect,
+  });
+
+  const status = (
+    revision: number,
+    cell_len: number,
+  ): LightingRuntimeConditionalSceneStatus => ({
+    revision,
+    capacity: 32,
+    cell_len,
+    chunk_capacity: 8,
+  });
+
+  it("returns an empty table without paging", async () => {
+    const get_lighting_runtime_conditional_scenes = vi.fn();
+    await expect(
+      readLightingRuntimeConditionalScenes({
+        get_lighting_runtime_conditional_scene_status: async () => status(3, 0),
+        get_lighting_runtime_conditional_scenes,
+      }),
+    ).resolves.toEqual([]);
+    expect(get_lighting_runtime_conditional_scenes).not.toHaveBeenCalled();
+  });
+
+  it("assembles revision-pinned pages in table order", async () => {
+    // Order carries meaning: later rules win shared LEDs, so the assembled
+    // table must come back exactly as the device pages it.
+    const cells = [rule(1, 0), rule(1, 1), rule(2, 2)];
+    const get_lighting_runtime_conditional_scenes = vi.fn(
+      async ({ revision, offset }: { revision: number; offset: number }) => ({
+        revision,
+        total_count: cells.length,
+        items: cells.slice(offset, offset + 2),
+      }),
+    );
+
+    await expect(
+      readLightingRuntimeConditionalScenes({
+        get_lighting_runtime_conditional_scene_status: async () => status(9, cells.length),
+        get_lighting_runtime_conditional_scenes,
+      }),
+    ).resolves.toEqual(cells);
+    expect(get_lighting_runtime_conditional_scenes).toHaveBeenNthCalledWith(1, {
+      revision: 9,
+      offset: 0,
+    });
+    expect(get_lighting_runtime_conditional_scenes).toHaveBeenNthCalledWith(2, {
+      revision: 9,
+      offset: 2,
+    });
+  });
+
+  it("restarts from a fresh status when the revision drifts mid-read", async () => {
+    const cells = [rule(4, 1), rule(5, 1), rule(6, 1)];
+    const get_lighting_runtime_conditional_scene_status = vi
+      .fn<() => Promise<LightingRuntimeConditionalSceneStatus>>()
+      .mockResolvedValueOnce(status(10, cells.length))
+      .mockResolvedValueOnce(status(11, cells.length));
+    let served = 0;
+    const get_lighting_runtime_conditional_scenes = vi.fn(
+      async ({ revision, offset }: { revision: number; offset: number }) => {
+        // The second page of the first attempt lands under a new revision.
+        served += 1;
+        const drifted = served === 2;
+        return {
+          revision: drifted ? revision + 1 : revision,
+          total_count: cells.length,
+          items: cells.slice(offset, offset + 2),
+        };
+      },
+    );
+
+    await expect(
+      readLightingRuntimeConditionalScenes({
+        get_lighting_runtime_conditional_scene_status,
+        get_lighting_runtime_conditional_scenes,
+      }),
+    ).resolves.toEqual(cells);
+    expect(get_lighting_runtime_conditional_scene_status).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up after repeated revision churn", async () => {
+    let revision = 0;
+    await expect(
+      readLightingRuntimeConditionalScenes({
+        get_lighting_runtime_conditional_scene_status: async () => status(++revision, 4),
+        get_lighting_runtime_conditional_scenes: async ({ offset }) => ({
+          revision: offset === 0 ? revision : revision + 1,
+          total_count: 4,
+          items: [rule(1, 0), rule(2, 0)],
+        }),
+      }),
+    ).rejects.toThrow("runtime conditional table kept changing across 3 read attempts");
+  });
+
+  it("rejects a page that exceeds the advertised total", async () => {
+    await expect(
+      readLightingRuntimeConditionalScenes({
+        get_lighting_runtime_conditional_scene_status: async () => status(1, 1),
+        get_lighting_runtime_conditional_scenes: async ({ revision }) => ({
+          revision,
+          total_count: 1,
+          items: [rule(1, 0), rule(2, 0)],
+        }),
+      }),
+    ).rejects.toThrow("runtime conditional page exceeded advertised total 1");
+  });
+
+  it("rejects a stalled page", async () => {
+    await expect(
+      readLightingRuntimeConditionalScenes({
+        get_lighting_runtime_conditional_scene_status: async () => status(1, 2),
+        get_lighting_runtime_conditional_scenes: async ({ revision }) => ({
+          revision,
+          total_count: 2,
+          items: [],
+        }),
+      }),
+    ).rejects.toThrow("runtime conditional read stalled at cell 0 of 2");
+  });
+
+  it("surfaces an unsupported status read so callers can feature-detect", async () => {
+    await expect(
+      readLightingRuntimeConditionalScenes({
+        get_lighting_runtime_conditional_scene_status: async () => {
+          throw new Error("UnknownCmd: GetLightingRuntimeConditionalSceneStatus");
+        },
+        get_lighting_runtime_conditional_scenes: async () => {
+          throw new Error("unreachable");
+        },
+      }),
+    ).rejects.toThrow("UnknownCmd");
+  });
+});
 
 describe("WebHID layer-state readback", () => {
   it("decodes every active bit across bitmap bytes", () => {
