@@ -14,6 +14,7 @@ import type {
   LightingExtension,
   LightingOverlayCell,
   LightingOutputModeState,
+  LightingRuntimeConditionalSceneStatus,
   LightingSceneCell,
   LightingSceneStatus,
   LightingState,
@@ -87,6 +88,8 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     output_toggle_user_action: undefined,
     wake_layer: undefined,
   };
+  let runtimeConditionalStatus: LightingRuntimeConditionalSceneStatus | null = null;
+  let runtimeConditionalScenes: LightingConditionalSceneCell[] = [];
   let lightingExtension: LightingExtension | null = null;
   let extensionEffectNames: string[] = [];
   let extensionPaletteNames: string[] = [];
@@ -137,6 +140,19 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
       conditionalScenes = await session.lighting.scenes.readConditionalScenes();
     } catch {
       conditionalScenes = [];
+    }
+    // The mutable ordered conditional table is a newer, additive surface.
+    // Firmware without it reports no table at all, and the editor is hidden
+    // entirely — "unsupported" (status null) is distinct from "empty table".
+    try {
+      const status = await session.lighting.conditionalScenes.status();
+      if (status.capacity > 0) {
+        runtimeConditionalStatus = status;
+        runtimeConditionalScenes = await session.lighting.conditionalScenes.read();
+      }
+    } catch {
+      runtimeConditionalStatus = null;
+      runtimeConditionalScenes = [];
     }
     // Extension effects (animated effect packs with selectable palettes) are
     // feature-gated newer firmware; absence just hides the panel.
@@ -219,6 +235,8 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     compiledScenes,
     conditionalScenes,
     lightingControls,
+    runtimeConditionalStatus,
+    runtimeConditionalScenes,
     lightingExtension,
     extensionEffectNames,
     extensionPaletteNames,

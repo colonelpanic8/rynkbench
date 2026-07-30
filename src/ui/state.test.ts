@@ -4,6 +4,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type {
+  LightingConditionalSceneCell,
   LightingEffect,
   LightingExtensionParam,
   LightingSceneCell,
@@ -14,6 +15,7 @@ import type { RynkSession } from "../session/types";
 import {
   activeLightingBase,
   activeLightingDraft,
+  conditionalTablesEqual,
   makeIo,
   makeWorkbenchReducer,
   stagedBetween,
@@ -58,6 +60,8 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     compiledScenes: [],
     conditionalScenes: [],
     lightingControls: { output_toggle_user_action: undefined, wake_layer: undefined },
+    runtimeConditionalScenes: [],
+    runtimeConditionalDraft: [],
     lightingExtension: null,
     extensionParams: null,
     scenePolicy: "EffectiveOnly",
@@ -160,6 +164,64 @@ describe("per-target lighting drafts", () => {
     expect(stagedBetween(activeLightingDraft(painted), activeLightingBase(painted))).toEqual(
       new Set([2]),
     );
+  });
+});
+
+describe("conditional rule tables", () => {
+  function rule(ledId: number, r: number): LightingConditionalSceneCell {
+    return {
+      conditions: { layer: undefined, battery: undefined },
+      led_id: ledId,
+      effect: solid(r),
+    };
+  }
+
+  it("treats a reordered table as a difference", () => {
+    const a = rule(1, 1);
+    const b = rule(2, 2);
+    // Rules compose in table order and a later one wins a shared slot, so a
+    // permutation changes what the board renders and must count as dirty.
+    expect(conditionalTablesEqual([a, b], [a, b])).toBe(true);
+    expect(conditionalTablesEqual([a, b], [b, a])).toBe(false);
+    expect(conditionalTablesEqual([a, b], [a])).toBe(false);
+    expect(conditionalTablesEqual([], [])).toBe(true);
+  });
+
+  it("compares cells by value, not identity", () => {
+    expect(conditionalTablesEqual([rule(1, 1)], [rule(1, 1)])).toBe(true);
+    expect(conditionalTablesEqual([rule(1, 1)], [rule(1, 2)])).toBe(false);
+  });
+
+  it("lightingRefresh re-syncs a clean rule draft but keeps a dirty one", () => {
+    const stored = [rule(1, 1)];
+    const pushed = [rule(4, 4)];
+
+    // Clean draft (matches what is on the device) follows the push.
+    const clean = reducer(
+      baseState({ runtimeConditionalScenes: stored, runtimeConditionalDraft: stored }),
+      { type: "lightingRefresh", state: LIGHTING, overlay: [], runtimeConditional: pushed },
+    );
+    expect(clean.runtimeConditionalScenes).toEqual(pushed);
+    expect(clean.runtimeConditionalDraft).toEqual(pushed);
+
+    // Staged edits survive: the device's table advances, the draft does not.
+    const staged = [rule(1, 1), rule(9, 9)];
+    const dirty = reducer(
+      baseState({ runtimeConditionalScenes: stored, runtimeConditionalDraft: staged }),
+      { type: "lightingRefresh", state: LIGHTING, overlay: [], runtimeConditional: pushed },
+    );
+    expect(dirty.runtimeConditionalScenes).toEqual(pushed);
+    expect(dirty.runtimeConditionalDraft).toEqual(staged);
+  });
+
+  it("leaves both tables alone when the push carries no conditional data", () => {
+    const stored = [rule(1, 1)];
+    const next = reducer(
+      baseState({ runtimeConditionalScenes: stored, runtimeConditionalDraft: stored }),
+      { type: "lightingRefresh", state: LIGHTING, overlay: [] },
+    );
+    expect(next.runtimeConditionalScenes).toEqual(stored);
+    expect(next.runtimeConditionalDraft).toEqual(stored);
   });
 });
 

@@ -25,6 +25,7 @@ import type {
   LightingMutableState,
   LightingOverlayCell,
   LightingOutputModeState,
+  LightingRuntimeConditionalSceneStatus,
   LightingSceneCell,
   LightingSceneStatus,
   LightingState,
@@ -74,6 +75,10 @@ export interface ConnectedBundle {
   compiledScenes: LightingSceneCell[];
   conditionalScenes: LightingConditionalSceneCell[];
   lightingControls: LightingControls;
+  /** Mutable ordered conditional table. null when the firmware has no such
+   *  table at all — distinct from a supported-but-empty table ([] cells). */
+  runtimeConditionalStatus: LightingRuntimeConditionalSceneStatus | null;
+  runtimeConditionalScenes: LightingConditionalSceneCell[];
   /** null when the firmware has no extension-effects support. */
   lightingExtension: LightingExtension | null;
   /** Static extension name lists; empty when lightingExtension is null. */
@@ -143,6 +148,13 @@ export interface WorkbenchState {
   /** Conditional firmware rules compiled from keyboard.toml. */
   conditionalScenes: LightingConditionalSceneCell[];
   lightingControls: LightingControls;
+  /** The mutable ordered conditional table as last known on-device. Always
+   *  empty when the firmware has no such table. */
+  runtimeConditionalScenes: LightingConditionalSceneCell[];
+  /** The same table as the user wants it (staged). Order carries meaning, so
+   *  this is a list, and a reorder is a real, applicable difference. Follows
+   *  device pushes while it matches `runtimeConditionalScenes`. */
+  runtimeConditionalDraft: LightingConditionalSceneCell[];
   /** Extension-effects discovery + live selection; null when unsupported. */
   lightingExtension: LightingExtension | null;
   /** The generic parameter list last read, and which effect it describes.
@@ -277,6 +289,8 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     compiledScenes: bundle.compiledScenes,
     conditionalScenes: bundle.conditionalScenes,
     lightingControls: bundle.lightingControls,
+    runtimeConditionalScenes: bundle.runtimeConditionalScenes,
+    runtimeConditionalDraft: bundle.runtimeConditionalScenes,
     lightingExtension: bundle.lightingExtension,
     extensionParams: null,
     scenePolicy: bundle.sceneStatus?.policy ?? null,
@@ -342,6 +356,8 @@ export type WorkbenchAction =
       scenes?: LightingSceneCell[];
       /** Present only when the device supports extension effects. */
       extension?: LightingExtension | null;
+      /** Present only when the device has a mutable conditional table. */
+      runtimeConditional?: LightingConditionalSceneCell[];
     }
   | { type: "lightingTarget"; target: LightingTarget }
   | { type: "paint"; cells: LightingOverlayCell[] }
@@ -350,6 +366,13 @@ export type WorkbenchAction =
   | { type: "lightingBusy"; busy: boolean; error?: string | null }
   | { type: "overlayApplied"; state: LightingState; cells: LightingOverlayCell[] }
   | { type: "scenesApplied"; state: LightingState; cells: LightingSceneCell[] }
+  | { type: "conditionalDraft"; cells: LightingConditionalSceneCell[] }
+  | { type: "conditionalDraftReset" }
+  | {
+      type: "conditionalApplied";
+      state: LightingState;
+      cells: LightingConditionalSceneCell[];
+    }
   | { type: "scenePolicySet"; state: LightingState; policy: LightingLayerPolicy }
   | { type: "extensionStateSet"; state: LightingState; extension: LightingExtensionState }
   | { type: "extensionParamsLoaded"; effect: number; items: LightingExtensionParam[] }
@@ -475,6 +498,12 @@ export function makeWorkbenchReducer(cols: number) {
       case "lightingRefresh": {
         const applied = cellsToRecord(act.overlay);
         const draftWasClean = overlaysEqual(state.draft, state.applied);
+        // Same follow-when-clean rule as the overlay: a device push replaces
+        // an untouched rule draft, but never discards staged edits.
+        const conditionalWasClean = conditionalTablesEqual(
+          state.runtimeConditionalDraft,
+          state.runtimeConditionalScenes,
+        );
         return {
           ...state,
           lightingState: act.state,
@@ -486,6 +515,11 @@ export function makeWorkbenchReducer(cols: number) {
           layerDrafts: act.scenes
             ? reseedLayerDrafts(state.layerDrafts, state.scenes, act.scenes)
             : state.layerDrafts,
+          runtimeConditionalScenes: act.runtimeConditional ?? state.runtimeConditionalScenes,
+          runtimeConditionalDraft:
+            act.runtimeConditional !== undefined && conditionalWasClean
+              ? act.runtimeConditional
+              : state.runtimeConditionalDraft,
         };
       }
       case "lightingTarget":
@@ -561,6 +595,23 @@ export function makeWorkbenchReducer(cols: number) {
           lightingState: act.state,
           scenes: act.cells,
           layerDrafts: reseedLayerDrafts(state.layerDrafts, state.scenes, act.cells),
+          lightingBusy: false,
+          lightingError: null,
+        };
+      case "conditionalDraft":
+        return { ...state, runtimeConditionalDraft: act.cells, lightingError: null };
+      case "conditionalDraftReset":
+        return {
+          ...state,
+          runtimeConditionalDraft: state.runtimeConditionalScenes,
+          lightingError: null,
+        };
+      case "conditionalApplied":
+        return {
+          ...state,
+          lightingState: act.state,
+          runtimeConditionalScenes: act.cells,
+          runtimeConditionalDraft: act.cells,
           lightingBusy: false,
           lightingError: null,
         };
@@ -682,6 +733,17 @@ export function overlaysEqual(
   return true;
 }
 
+/** Whether two conditional tables are the same *table*. Order-sensitive by
+ *  design: these rules compose in table order and a later rule wins a shared
+ *  slot, so permuting them is a real change the device must be told about. */
+export function conditionalTablesEqual(
+  a: LightingConditionalSceneCell[],
+  b: LightingConditionalSceneCell[],
+): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((cell, index) => JSON.stringify(cell) === JSON.stringify(b[index]));
+}
+
 /** LED ids where `draft` diverges from its `base` (staged, unapplied edits). */
 export function stagedBetween(
   draft: Record<number, LightingOverlayCell>,
@@ -734,6 +796,9 @@ export interface WorkbenchIo {
   /** Replace the on-device scene table (only when scenes are supported). */
   applyScenes(cells: LightingSceneCell[]): void;
   setScenePolicy(policy: LightingLayerPolicy): void;
+  /** Atomically replace the mutable conditional table with this exact order
+   *  (only when the firmware has such a table). */
+  applyConditionalScenes(cells: LightingConditionalSceneCell[]): void;
   /** Select an extension effect/palette, then write any staged parameter
    *  values for the selected effect (only when the firmware supports it). */
   setExtensionState(state: LightingExtensionState, params?: ExtensionParamWrite[]): void;
@@ -769,6 +834,7 @@ export function makeIo(
   onDisconnect: () => void,
   scenesSupported = false,
   extensionSupported = false,
+  conditionalScenesSupported = false,
 ): WorkbenchIo {
   // Feature detection lives here: firmware predating per-effect parameters
   // rejects the request outright, which is recorded as "no parameters" and
@@ -858,8 +924,13 @@ export function makeIo(
         extensionSupported
           ? session.lighting.extension().catch(() => getState().lightingExtension)
           : Promise.resolve(undefined),
+        conditionalScenesSupported
+          ? session.lighting.conditionalScenes
+              .read()
+              .catch(() => getState().runtimeConditionalScenes)
+          : Promise.resolve(undefined),
       ]).then(
-        ([lightingState, outputMode, overlay, scenes, extension]) =>
+        ([lightingState, outputMode, overlay, scenes, extension, runtimeConditional]) =>
           dispatch({
             type: "lightingRefresh",
             state: lightingState,
@@ -867,6 +938,7 @@ export function makeIo(
             overlay,
             scenes,
             extension,
+            runtimeConditional,
           }),
         () => {},
       );
@@ -882,6 +954,14 @@ export function makeIo(
       dispatch({ type: "lightingBusy", busy: true, error: null });
       session.lighting.scenes.replaceScenes(cells).then(
         (lightingState) => dispatch({ type: "scenesApplied", state: lightingState, cells }),
+        (err) => dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
+      );
+    },
+    applyConditionalScenes(cells) {
+      dispatch({ type: "lightingBusy", busy: true, error: null });
+      session.lighting.conditionalScenes.replace(cells).then(
+        (lightingState) =>
+          dispatch({ type: "conditionalApplied", state: lightingState, cells }),
         (err) => dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
       );
     },

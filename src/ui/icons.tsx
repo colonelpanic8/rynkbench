@@ -155,6 +155,23 @@ export function ChevronRightIcon(props: IconProps) {
   );
 }
 
+/** Reorder controls: move an ordered-list entry one place up or down. */
+export function ArrowUpIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8 12.5v-9M4 7.5L8 3.5l4 4" />
+    </svg>
+  );
+}
+
+export function ArrowDownIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8 3.5v9M4 8.5L8 12.5l4-4" />
+    </svg>
+  );
+}
+
 export function CloseIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

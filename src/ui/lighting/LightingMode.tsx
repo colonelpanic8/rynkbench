@@ -19,6 +19,7 @@ import {
 } from "../state";
 import { ColorPicker } from "./ColorPicker";
 import { BackgroundPanel } from "./BackgroundPanel";
+import { ConditionalRulesPanel } from "./ConditionalRulesPanel";
 import { EffectsPanel } from "./EffectsPanel";
 import { LayerPresets } from "./LayerPresets";
 import type { Hsv } from "../color";
@@ -318,24 +319,33 @@ export function LightingMode() {
     () => targetPreviewEffects(target, draftMap, state.compiledScenes),
     [draftMap, state.compiledScenes, target],
   );
+  // Compiled rules first, then the staged runtime table: composition follows
+  // table order and later cells win, which is exactly how the firmware lets
+  // runtime cells override the compiled ones on slots they share. Previewing
+  // the *draft* makes the rules editor WYSIWYG before Apply.
   const conditionalPreview = useMemo(() => {
     const activeLayers =
       target === "overlay"
         ? new Set(state.activeLayers)
         : new Set([state.defaultLayer, target]);
-    return firmwarePreviewCells([], state.conditionalScenes, {
-      activeLayers,
-      batteries: new Map([
-        [0, state.battery],
-        [1, state.peripheralBattery],
-      ]),
-    });
+    return firmwarePreviewCells(
+      [],
+      [...state.conditionalScenes, ...state.runtimeConditionalDraft],
+      {
+        activeLayers,
+        batteries: new Map([
+          [0, state.battery],
+          [1, state.peripheralBattery],
+        ]),
+      },
+    );
   }, [
     state.activeLayers,
     state.battery,
     state.conditionalScenes,
     state.defaultLayer,
     state.peripheralBattery,
+    state.runtimeConditionalDraft,
     target,
   ]);
   const previewEffects = useMemo(() => {
@@ -714,6 +724,12 @@ export function LightingMode() {
           <div className="border-t border-line-soft pt-4">
             <FirmwareRulesPanel activeCount={conditionalPreview.size + compiledCount} />
           </div>
+
+          {bundle.runtimeConditionalStatus && (
+            <div className="border-t border-line-soft pt-4">
+              <ConditionalRulesPanel />
+            </div>
+          )}
 
           <div className="border-t border-line-soft pt-4">
             <BackgroundPanel />

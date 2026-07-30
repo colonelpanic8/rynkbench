@@ -2,8 +2,20 @@ import type {
   BatteryStatus,
   LightingConditionalSceneCell,
   LightingOverlayCell,
+  LightingRuntimeConditionalSceneStatus,
   LightingSceneCell,
 } from "../../vendor/rynk-wasm/rynk_wasm";
+
+/** Whether this firmware has a mutable ordered conditional table at all.
+ *  Firmware without one reports no table (the status read is rejected, which
+ *  the connect flow records as null), and the rules editor is hidden
+ *  entirely — that is distinct from a supported table that happens to be
+ *  empty, which shows an editor with no rules yet. */
+export function runtimeConditionalSupported(
+  status: LightingRuntimeConditionalSceneStatus | null,
+): boolean {
+  return status !== null && status.capacity > 0;
+}
 
 export interface FirmwareLightingPreview {
   activeLayers: ReadonlySet<number>;
