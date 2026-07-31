@@ -41,7 +41,7 @@
           cargoLock = {
             lockFile = ./nix/rynk-wasm-Cargo.lock;
             outputHashes = {
-              "trouble-host-0.7.0" = "sha256-mRfw+4VeTppvIL9KOwFOPm3h3ru4E4/7kKPsA/kz5YA=";
+              "trouble-host-0.7.0" = "sha256-QBaTrDmBCLNN+lbJBBcvJbD2hq0Bx1fuFC4p7onSiRw=";
             };
           };
           nativeBuildInputs = [
