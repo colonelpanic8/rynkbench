@@ -87,10 +87,9 @@ artifact:
 nix build                     # result/ contains the deployable site
 ```
 
-The flake input names the RMK integration branch used by `glove80-rmk`, while
-`flake.lock` pins an exact commit for reproducible builds. Update with
-`nix flake update rmk`; switch the branch in `flake.nix` when `glove80-rmk`
-promotes its RMK pin to another branch.
+The flake follows the fork's `assembled` branch, while `flake.lock` pins the exact
+commit used by `glove80-rmk` for reproducible builds. Update it with
+`nix flake update rmk`.
 
 ## License
 

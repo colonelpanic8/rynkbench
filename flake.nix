@@ -57,6 +57,7 @@
           buildPhase = ''
             runHook preBuild
             export HOME="$TMPDIR/home"
+            export RUST_MIN_STACK=16777216
             mkdir -p "$HOME"
             pushd rynk
             wasm-pack build --release --target web --mode no-install \
