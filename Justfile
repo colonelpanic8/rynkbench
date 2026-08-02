@@ -20,6 +20,10 @@ wasm:
 dev port=random_port:
     NODE_ENV=development CHOKIDAR_USEPOLLING="${CHOKIDAR_USEPOLLING:-1}" npm run dev -- --host 0.0.0.0 --port {{port}} --strictPort
 
+# Start Vite with simulated boards explicitly enabled.
+dev-mocks port=random_port:
+    NODE_ENV=development VITE_ENABLE_MOCKS=1 CHOKIDAR_USEPOLLING="${CHOKIDAR_USEPOLLING:-1}" npm run dev -- --host 0.0.0.0 --port {{port}} --strictPort
+
 # Run lint, tests, and the production build.
 check: lint test build
 
@@ -37,6 +41,11 @@ build:
 
 # Build and serve the production bundle on all interfaces.
 preview port=random_port: build
+    npm run preview -- --host 0.0.0.0 --port {{port}} --strictPort
+
+# Build and serve a production bundle containing the simulated boards.
+preview-mocks port=random_port:
+    VITE_ENABLE_MOCKS=1 npm run build
     npm run preview -- --host 0.0.0.0 --port {{port}} --strictPort
 
 # Build all flake checks.

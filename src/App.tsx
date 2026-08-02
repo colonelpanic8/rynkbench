@@ -1,5 +1,5 @@
-// App root: connect flow → workbench. Providers come from the session
-// registry (src/session/index.ts); a dev stub is appended in DEV builds.
+// App root: connect flow → workbench. Hardware providers come from the session
+// registry; simulated providers are loaded only in an explicitly opted-in build.
 
 import { useCallback, useEffect, useState } from "react";
 import type { BoardEnrichment } from "./model/keyboard";
@@ -27,20 +27,26 @@ import { Workbench } from "./ui/Workbench";
 import type { ConnectedBundle } from "./ui/state";
 import { errorMessage } from "./ui/state";
 
+const MOCKS_ENABLED = import.meta.env.VITE_ENABLE_MOCKS === "1";
+
 async function loadProviders(): Promise<SessionProvider[]> {
   let providers: SessionProvider[] = [];
   try {
     const registry = await import("./session");
     providers = registry.sessionProviders();
   } catch (err) {
-    // Backend modules may not exist yet in a partial dev checkout; the dev
-    // stub below keeps the UI workable. In production this is a real error.
+    // Backend modules may not exist yet in a partial dev checkout. In
+    // production this is a real error; an opted-in dev build may use mocks.
     if (!import.meta.env.DEV) throw err;
-    console.warn("session registry unavailable, continuing with dev stub only", err);
+    console.warn("session registry unavailable", err);
   }
-  if (import.meta.env.DEV) {
-    const { devStubProvider } = await import("./ui/dev/stub-session");
-    providers = [...providers, devStubProvider];
+  if (MOCKS_ENABLED) {
+    const { mockProviders } = await import("./session/mock");
+    providers = [...providers, ...mockProviders];
+    if (import.meta.env.DEV) {
+      const { devStubProvider } = await import("./ui/dev/stub-session");
+      providers = [...providers, devStubProvider];
+    }
   }
   return providers;
 }

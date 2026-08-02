@@ -2,7 +2,6 @@
 // The UI imports ONLY from this module (and types.ts / model/) — never from
 // a specific backend directory.
 
-import { mockProviders } from "./mock";
 import { nativeProvider } from "./native";
 import { webHidProvider } from "./webhid";
 import type { SessionProvider } from "./types";
@@ -14,5 +13,5 @@ export type { RynkSession, SessionKind, SessionProvider } from "./types";
  * WebHID is not (WebKit never shipped it); in a browser it is the reverse —
  * so exactly one USB provider lights up in any environment. */
 export function sessionProviders(): SessionProvider[] {
-  return [nativeProvider, webHidProvider, ...mockProviders];
+  return [nativeProvider, webHidProvider];
 }

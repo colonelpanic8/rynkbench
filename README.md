@@ -28,6 +28,7 @@ With [Nix](https://nixos.org) (flakes enabled):
 nix develop            # drops you into a shell with Node 22 and just
 just setup
 just dev                # builds Rynk WASM, then starts Vite on a fresh port
+just dev-mocks          # explicitly include simulated boards for UI development
 ```
 
 Run `just` to list all project commands. `just check` runs lint, tests, and the
@@ -35,6 +36,10 @@ production build; `just preview` builds and serves that production bundle.
 Both `just dev` and `just preview` accept an optional explicit port, for example
 `just dev 50000`. The dev, build, and test commands use Nix to materialize the
 pinned Rynk WASM package first; Node 22+ is still used for the web build itself.
+
+Simulated boards are excluded by default from both the connect screen and the
+production bundle. Enable them only for a particular build/startup with
+`VITE_ENABLE_MOCKS=1`, or use `just dev-mocks` / `just preview-mocks`.
 
 ## Architecture
 

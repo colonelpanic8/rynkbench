@@ -1,6 +1,7 @@
 // DEV-ONLY stub backend: a simulated 4x12 ortho board with two encoders,
 // full lighting topology, and fake latency. Appended to the provider list
-// only when import.meta.env.DEV — never part of a production build's registry.
+// only in an explicitly mock-enabled dev build — never part of the default
+// development or production provider registry.
 // The real registry lives in src/session/index.ts.
 
 import type {
