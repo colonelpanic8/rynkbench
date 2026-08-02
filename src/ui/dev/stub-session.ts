@@ -400,6 +400,14 @@ class StubSession implements RynkSession {
       await lag();
       return { num_lock: false, caps_lock: false, scroll_lock: false, compose: false, kana: false };
     },
+    splitCentralLatency: async (): Promise<never> => {
+      await lag();
+      throw new Error("this firmware has no split central latency policy");
+    },
+    setSplitCentralLatency: async (): Promise<never> => {
+      await lag();
+      throw new Error("this firmware has no split central latency policy");
+    },
   };
 
   combos = {

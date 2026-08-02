@@ -45,6 +45,8 @@ import type {
   Morse,
   MouseButtons,
   ProtocolVersion,
+  SplitCentralLatencyPolicy,
+  SplitCentralLatencyState,
   StateBits,
   TopicEvent,
 } from "../../vendor/rynk-wasm/rynk_wasm";
@@ -121,6 +123,8 @@ export interface BoardSpec {
      *  with an effect pack but no parameter surface. */
     params?: Record<number, ExtensionParamSpec[]>;
   };
+  /** Runtime split-link policy; defaults to 0/1/automatic on split BLE boards. */
+  splitCentralLatency?: SplitCentralLatencyState;
 }
 
 /** A firmware-declared parameter: a name, its bounds, and its reset value.
@@ -356,6 +360,7 @@ class MockSession implements RynkSession {
   private readonly ble: BleStatus;
   private readonly matrixBitmap: Uint8Array;
   private readonly modifiers = noModifiers();
+  private splitLatency: SplitCentralLatencyState | null;
   private matrixTimer: ReturnType<typeof setInterval> | null = null;
   private lastMatrixPoll = 0;
   private topicHandler: ((event: TopicEvent) => void) | null = null;
@@ -401,6 +406,16 @@ class MockSession implements RynkSession {
     this.indicator = { ...spec.ledIndicator };
     this.ble = { ...spec.connection.ble };
     this.matrixBitmap = new Uint8Array(caps.num_rows * Math.ceil(caps.num_cols / 8));
+    const powered = spec.connection.usb === "Configured";
+    this.splitLatency =
+      spec.splitCentralLatency ??
+      (caps.is_split && caps.ble_enabled
+        ? {
+            policy: { powered: 0, battery: 1, override_latency: undefined },
+            powered,
+            effective: powered ? 0 : 1,
+          }
+        : null);
     this.batteryTimer = setInterval(() => this.pushBattery(), BATTERY_PUSH_MS);
   }
 
@@ -442,6 +457,8 @@ class MockSession implements RynkSession {
       }),
     modifierState: () => latency(() => ({ ...this.modifiers })),
     ledIndicator: () => latency(() => ({ ...this.indicator })),
+    splitCentralLatency: () => latency(() => this.readSplitLatency()),
+    setSplitCentralLatency: (policy) => latency(() => this.writeSplitLatency(policy)),
   };
 
   readonly keymap: KeymapOps = {
@@ -972,6 +989,28 @@ class MockSession implements RynkSession {
         );
       }
     }
+  }
+
+  private readSplitLatency(): SplitCentralLatencyState {
+    if (!this.splitLatency) throw new Error("this firmware has no split central latency policy");
+    return structuredClone(this.splitLatency);
+  }
+
+  private writeSplitLatency(policy: SplitCentralLatencyPolicy): SplitCentralLatencyState {
+    if (!this.splitLatency) throw new Error("this firmware has no split central latency policy");
+    for (const value of [policy.powered, policy.battery, policy.override_latency]) {
+      if (value !== undefined && (!Number.isInteger(value) || value < 0 || value > 499)) {
+        throw new Error("split central latency values must be integers from 0 to 499");
+      }
+    }
+    this.splitLatency = {
+      ...this.splitLatency,
+      policy: { ...policy },
+      effective:
+        policy.override_latency ??
+        (this.splitLatency.powered ? policy.powered : policy.battery),
+    };
+    return this.readSplitLatency();
   }
 
   private checkSceneCell(cell: LightingSceneCell): void {

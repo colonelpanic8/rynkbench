@@ -375,6 +375,9 @@ export class LinkSession implements RynkSession {
       matrixState: () => this.run(() => client.get_matrix_state()),
       modifierState: () => this.run(() => client.get_modifier_state()),
       ledIndicator: () => this.run(() => client.get_led_indicator()),
+      splitCentralLatency: () => this.run(() => client.get_split_central_latency()),
+      setSplitCentralLatency: (policy) =>
+        this.run(() => client.set_split_central_latency(policy)),
     };
 
     this.keymap = {

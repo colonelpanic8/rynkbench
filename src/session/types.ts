@@ -56,6 +56,8 @@ import type {
   Morse,
   PeripheralStatus,
   ProtocolVersion,
+  SplitCentralLatencyPolicy,
+  SplitCentralLatencyState,
   TopicEvent,
 } from "../vendor/rynk-wasm/rynk_wasm";
 
@@ -221,6 +223,9 @@ export interface DeviceOps {
   /** Final resolved modifier bitmap used by the HID keyboard report. */
   modifierState(): Promise<ModifierCombination>;
   ledIndicator(): Promise<LedIndicator>;
+  /** Volatile active-mode BLE latency policy for a split central. */
+  splitCentralLatency(): Promise<SplitCentralLatencyState>;
+  setSplitCentralLatency(policy: SplitCentralLatencyPolicy): Promise<SplitCentralLatencyState>;
 }
 
 export interface RynkSession {

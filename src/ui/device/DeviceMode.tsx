@@ -1,8 +1,12 @@
 // Device mode: identity, capabilities, status, BLE, matrix tester — and the
 // danger zone.
 
-import { useEffect, useRef, useState } from "react";
-import type { BleStatus, PeripheralStatus } from "../../vendor/rynk-wasm/rynk_wasm";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type {
+  BleStatus,
+  PeripheralStatus,
+  SplitCentralLatencyState,
+} from "../../vendor/rynk-wasm/rynk_wasm";
 import { KeyboardCanvas } from "../KeyboardCanvas";
 import { useWorkbench, errorMessage } from "../state";
 import { Button, Chip, Panel, Row, SectionLabel, cx } from "../kit";
@@ -189,6 +193,146 @@ function BleCard() {
         </div>
       )}
 
+      {error && <div className="mt-2 text-[12px] text-danger">Failed: {error}</div>}
+    </Panel>
+  );
+}
+
+function SplitLatencyCard() {
+  const { bundle } = useWorkbench();
+  const session = bundle.session;
+  const [deviceState, setDeviceState] = useState<SplitCentralLatencyState | null>(null);
+  const [powered, setPowered] = useState("0");
+  const [battery, setBattery] = useState("1");
+  const [overrideLatency, setOverrideLatency] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [supported, setSupported] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadDraft = useCallback((next: SplitCentralLatencyState) => {
+    setDeviceState(next);
+    setPowered(String(next.policy.powered));
+    setBattery(String(next.policy.battery));
+    setOverrideLatency(
+      next.policy.override_latency === undefined ? "" : String(next.policy.override_latency),
+    );
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    session.device.splitCentralLatency().then(
+      (next) => {
+        if (!cancelled) loadDraft(next);
+      },
+      () => {
+        if (!cancelled) setSupported(false);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [loadDraft, session]);
+
+  if (!supported || !deviceState) return null;
+
+  const values = [powered, battery, ...(overrideLatency === "" ? [] : [overrideLatency])];
+  const valid = values.every((value) => {
+    const parsed = Number(value);
+    return value !== "" && Number.isInteger(parsed) && parsed >= 0 && parsed <= 499;
+  });
+  const dirty =
+    powered !== String(deviceState.policy.powered) ||
+    battery !== String(deviceState.policy.battery) ||
+    overrideLatency !==
+      (deviceState.policy.override_latency === undefined
+        ? ""
+        : String(deviceState.policy.override_latency));
+
+  const save = async () => {
+    if (!valid) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await session.device.setSplitCentralLatency({
+        powered: Number(powered),
+        battery: Number(battery),
+        override_latency: overrideLatency === "" ? undefined : Number(overrideLatency),
+      });
+      loadDraft(next);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const inputClass =
+    "w-24 rounded-md border border-line bg-cap px-2 py-1 text-right font-mono text-[12px] text-cap-ink outline-none focus:border-accent";
+
+  return (
+    <Panel className="p-4">
+      <div className="flex items-center justify-between gap-3">
+        <SectionLabel>Split link latency</SectionLabel>
+        <Chip tone={deviceState.powered ? "ok" : "neutral"}>
+          {deviceState.powered ? "USB powered" : "battery"} · effective {deviceState.effective}
+        </Chip>
+      </div>
+      <p className="mt-2 text-[12px] leading-relaxed text-mute">
+        Maximum BLE connection events the central may skip while active. The runtime override is
+        volatile; leave it blank to follow the current power source.
+      </p>
+      <div className="mt-3 grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2">
+        <label htmlFor="latency-powered" className="text-[12.5px] text-mute">
+          USB-powered default
+        </label>
+        <input
+          id="latency-powered"
+          className={inputClass}
+          type="number"
+          min={0}
+          max={499}
+          value={powered}
+          onChange={(event) => setPowered(event.target.value)}
+        />
+        <label htmlFor="latency-battery" className="text-[12.5px] text-mute">
+          Battery default
+        </label>
+        <input
+          id="latency-battery"
+          className={inputClass}
+          type="number"
+          min={0}
+          max={499}
+          value={battery}
+          onChange={(event) => setBattery(event.target.value)}
+        />
+        <label htmlFor="latency-override" className="text-[12.5px] text-mute">
+          Runtime override
+        </label>
+        <input
+          id="latency-override"
+          className={inputClass}
+          type="number"
+          min={0}
+          max={499}
+          placeholder="auto"
+          value={overrideLatency}
+          onChange={(event) => setOverrideLatency(event.target.value)}
+        />
+      </div>
+      {!valid && (
+        <p className="mt-2 text-[11.5px] text-danger">Use whole numbers from 0 through 499.</p>
+      )}
+      <div className="mt-3 flex items-center gap-2">
+        <Button variant="primary" disabled={busy || !dirty || !valid} onClick={save}>
+          {busy ? "Saving…" : "Apply policy"}
+        </Button>
+        {overrideLatency !== "" && (
+          <Button variant="ghost" disabled={busy} onClick={() => setOverrideLatency("")}>
+            Restore automatic
+          </Button>
+        )}
+      </div>
       {error && <div className="mt-2 text-[12px] text-danger">Failed: {error}</div>}
     </Panel>
   );
@@ -487,6 +631,8 @@ export function DeviceMode() {
         </div>
 
         {caps.ble_enabled && caps.num_ble_profiles > 0 && <BleCard />}
+
+        {caps.is_split && caps.ble_enabled && <SplitLatencyCard />}
 
         <MatrixTester />
 

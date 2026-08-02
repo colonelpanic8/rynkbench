@@ -872,6 +872,43 @@ describe.each(boards)("%s device status", (_name, spec) => {
 });
 
 describe("BLE and peripherals", () => {
+  it("reads, overrides, and restores the Glove80 split latency policy", async () => {
+    await withSession(glove80Board, async (session) => {
+      expect(await session.device.splitCentralLatency()).toEqual({
+        policy: { powered: 0, battery: 1, override_latency: undefined },
+        powered: false,
+        effective: 1,
+      });
+      expect(
+        await session.device.setSplitCentralLatency({
+          powered: 2,
+          battery: 4,
+          override_latency: 9,
+        }),
+      ).toMatchObject({ effective: 9 });
+      expect(
+        await session.device.setSplitCentralLatency({
+          powered: 2,
+          battery: 4,
+          override_latency: undefined,
+        }),
+      ).toMatchObject({ effective: 4 });
+      await expect(
+        session.device.setSplitCentralLatency({
+          powered: 0,
+          battery: 500,
+          override_latency: undefined,
+        }),
+      ).rejects.toThrow(/0 to 499/);
+    });
+  });
+
+  it("rejects split latency policy reads on a non-split board", async () => {
+    await withSession(ortho60Board, async (session) => {
+      await expect(session.device.splitCentralLatency()).rejects.toThrow(/no split central/);
+    });
+  });
+
   it("validates profile slots against num_ble_profiles", async () => {
     await withSession(glove80Board, async (session) => {
       const caps = await session.device.capabilities();
