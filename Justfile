@@ -14,9 +14,11 @@ setup:
 wasm:
     npm run wasm
 
-# Start Vite on all interfaces using a fresh high port.
+# Start Vite on all interfaces using a fresh high port. NODE_ENV is forced to
+# development: an inherited NODE_ENV=production makes plugin-react skip the
+# Fast Refresh preamble while modules still call $RefreshReg$ — a blank page.
 dev port=random_port:
-    CHOKIDAR_USEPOLLING="${CHOKIDAR_USEPOLLING:-1}" npm run dev -- --host 0.0.0.0 --port {{port}} --strictPort
+    NODE_ENV=development CHOKIDAR_USEPOLLING="${CHOKIDAR_USEPOLLING:-1}" npm run dev -- --host 0.0.0.0 --port {{port}} --strictPort
 
 # Run lint, tests, and the production build.
 check: lint test build
