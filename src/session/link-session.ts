@@ -65,6 +65,73 @@ export interface LinkSessionHooks {
    * returned function stops watching (called from `close()`).
    */
   watchDisconnect(onUnplug: () => void): () => void;
+  /** Override the request watchdog (tests). Defaults to REQUEST_TIMEOUT_MS. */
+  requestTimeoutMs?: number;
+}
+
+/** How long one device request may go unanswered before the link is declared
+ *  dead. Requests settle in single-digit milliseconds on a healthy link, so
+ *  this only ever fires on a device that has genuinely stopped answering. */
+export const REQUEST_TIMEOUT_MS = 5_000;
+
+export class RequestTimeout extends Error {
+  constructor(
+    readonly op: string,
+    readonly timeoutMs: number,
+  ) {
+    super(`the keyboard did not answer ${op} within ${timeoutMs}ms — the link was closed`);
+    this.name = "RequestTimeout";
+  }
+}
+
+/** Requests that are parked by design and must never be timed out. */
+const UNWATCHED_CALLS = new Set(["next_topic", "free"]);
+
+/**
+ * Put a watchdog on every request the driver makes.
+ *
+ * Without this a dropped response wedges the session permanently: the wasm
+ * call never settles, so the caller's promise never settles, and the
+ * serializing queue behind it never advances again.
+ *
+ * A timeout cannot be a local failure. The protocol allows one request in
+ * flight, so a response that arrives after we gave up would be read as the
+ * answer to whatever request ran next — every later read would be silently
+ * wrong. `onTimeout` therefore ends the link, and the session reports a
+ * disconnect rather than carrying on against a stream it can no longer trust.
+ */
+export function watchdogClient<T extends object>(
+  client: T,
+  { timeoutMs, onTimeout }: { timeoutMs: number; onTimeout: (op: string) => void },
+): T {
+  if (timeoutMs <= 0) return client;
+  return new Proxy(client, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver) as unknown;
+      if (typeof value !== "function" || UNWATCHED_CALLS.has(String(prop))) return value;
+      const op = String(prop);
+      return (...args: unknown[]) => {
+        const result = (value as (...a: unknown[]) => unknown).apply(target, args);
+        if (!(result instanceof Promise)) return result;
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            onTimeout(op);
+            reject(new RequestTimeout(op, timeoutMs));
+          }, timeoutMs);
+          result.then(
+            (settled) => {
+              clearTimeout(timer);
+              resolve(settled);
+            },
+            (error: unknown) => {
+              clearTimeout(timer);
+              reject(error);
+            },
+          );
+        });
+      };
+    },
+  });
 }
 
 interface LightingPage<T> {
@@ -350,6 +417,12 @@ export class LinkSession implements RynkSession {
   private disconnectHandler: (() => void) | null = null;
 
   constructor(client: RynkClient, link: RynkByteLink, hooks: LinkSessionHooks) {
+    // Every op below closes over this binding, so the watchdog has to replace
+    // it before any of them are built.
+    client = watchdogClient(client, {
+      timeoutMs: hooks.requestTimeoutMs ?? REQUEST_TIMEOUT_MS,
+      onTimeout: () => this.failLink(),
+    });
     this.client = client;
     this.link = link;
     this.kind = hooks.kind;
@@ -475,6 +548,14 @@ export class LinkSession implements RynkSession {
   }
 
   /** Serialize ops: the protocol allows a single request in flight. */
+  /** Tear down a link we can no longer trust: ending it rejects the parked
+   *  topic pull and any in-flight request, and the UI is told the device is
+   *  gone so it can offer a reconnect. */
+  private failLink(): void {
+    this.link.end();
+    if (!this.closed) this.disconnectHandler?.();
+  }
+
   private run<T>(op: () => Promise<T>): Promise<T> {
     const next = this.queue.then(op, op);
     this.queue = next.then(

@@ -14,6 +14,7 @@ import {
   readLightingExtensionParams,
   readLightingOverlay,
   readLightingRuntimeConditionalScenes,
+  watchdogClient,
 } from "./link-session";
 
 const effect: LightingEffect = { Solid: { color: { r: 1, g: 2, b: 3 } } };
@@ -405,5 +406,58 @@ describe("WebHID layer-state readback", () => {
       activeLayers: [1, 2, 4, 9],
       complete: true,
     });
+  });
+});
+
+describe("request watchdog", () => {
+  const opts = (onTimeout = () => {}) => ({ timeoutMs: 20, onTimeout });
+
+  it("passes a prompt answer straight through", async () => {
+    const client = watchdogClient({ get_lighting_state: async () => state(4, 0) }, opts());
+    await expect(client.get_lighting_state()).resolves.toEqual(state(4, 0));
+  });
+
+  it("rejects and ends the link when a request goes unanswered", async () => {
+    const ended: string[] = [];
+    const client = watchdogClient(
+      { commit_lighting_overlay_replace: () => new Promise(() => {}) },
+      opts((op) => ended.push(op)),
+    );
+
+    await expect(client.commit_lighting_overlay_replace()).rejects.toThrow(
+      /did not answer commit_lighting_overlay_replace within 20ms/,
+    );
+    expect(ended).toEqual(["commit_lighting_overlay_replace"]);
+  });
+
+  it("leaves the parked topic pull alone", async () => {
+    const ended: string[] = [];
+    const client = watchdogClient(
+      { next_topic: () => new Promise(() => {}) },
+      opts((op) => ended.push(op)),
+    );
+    const parked = client.next_topic();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(ended).toEqual([]);
+    void parked;
+  });
+
+  it("does not fire once a request has settled", async () => {
+    const ended: string[] = [];
+    const client = watchdogClient(
+      { get_battery_status: async () => "Unavailable" },
+      opts((op) => ended.push(op)),
+    );
+    await client.get_battery_status();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(ended).toEqual([]);
+  });
+
+  it("passes synchronous members through untouched", () => {
+    const free = vi.fn();
+    const client = watchdogClient({ free, label: "dev" }, opts());
+    client.free();
+    expect(free).toHaveBeenCalled();
+    expect(client.label).toBe("dev");
   });
 });
