@@ -9,8 +9,16 @@ per-key lighting live — no install, nothing leaves your machine.
 - **Lighting** — a paint-on-the-board overlay plus on-device *layer scenes*:
   lighting that lives on the keyboard, composites natively as layers activate,
   and survives disconnect and reboot.
+- **Firmware lighting controls** — inspect compiled layer/battery conditions,
+  edit the firmware-advertised extension effect, palette, value, and speed,
+  bind every RMK lighting action, and see the effective
+  always-on/off/powered-only policy.
+- **Live presentation** — resolved modifiers, the complete active-layer state,
+  and conditional/status lighting are read back and reflected in the live view.
 - **Advanced config** — combos, morse (tap-dance), fork, and per-behavior tuning
   for firmware that reports support for them.
+- **Split tuning** — inspect and adjust the volatile powered/battery BLE latency
+  policy on compatible split centrals.
 - **Simulated boards** — demo a split ergo, an ortholinear 60, and a dev stub
   with no hardware attached, so the whole UI is explorable offline.
 
