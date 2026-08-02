@@ -25,7 +25,7 @@ import { LayerPresets } from "./LayerPresets";
 import type { Hsv } from "../color";
 import { cssEmissiveRgb, cssRgb, hsvToRgb } from "../color";
 import { Button, InspectorShell, SectionLabel, cx } from "../kit";
-import { EraserIcon, SpinnerIcon, WarningIcon } from "../icons";
+import { EraserIcon, MarqueeIcon, SpinnerIcon, WarningIcon } from "../icons";
 import { effectiveAction } from "../live/compositor";
 import { targetPreviewEffects } from "./preview";
 import { conditionalRuleMatches, describeConditions, firmwarePreviewCells } from "./firmwareRules";
@@ -35,7 +35,7 @@ import { NumberField } from "./EffectEditor";
 type EffectKind = "Solid" | "Blink" | "Breathe";
 
 interface Brush {
-  mode: "paint" | "erase";
+  mode: "paint" | "erase" | "select";
   hsv: Hsv;
   kind: EffectKind;
   periodMs: number;
@@ -335,6 +335,7 @@ export function LightingMode() {
   const { bundle, state, dispatch, io } = useWorkbench();
   const [brush, setBrush] = useState<Brush>(DEFAULT_BRUSH);
   const painting = useRef(false);
+  const strokeMode = useRef<"add" | "remove">("add");
 
   useEffect(() => {
     const up = () => {
@@ -461,7 +462,11 @@ export function LightingMode() {
 
   const stampKey = (key: KeyView) => {
     if (key.ledId === undefined) return;
-    if (brush.mode === "erase") {
+    if (brush.mode === "select") {
+      // A stroke keeps whichever polarity its first key implied, so dragging
+      // back over already-visited keys can't flip them off again.
+      dispatch({ type: "lightingSelect", leds: [key.ledId], mode: strokeMode.current });
+    } else if (brush.mode === "erase") {
       eraseLeds([key.ledId]);
     } else {
       dispatch({ type: "paint", cells: [brushCell(brush, key.ledId, !isLayerTarget)] });
@@ -571,6 +576,9 @@ export function LightingMode() {
             onKeyPointerDown={(key, ev) => {
               ev.preventDefault();
               painting.current = true;
+              if (brush.mode === "select")
+                strokeMode.current =
+                  key.ledId !== undefined && selectionSet.has(key.ledId) ? "remove" : "add";
               stampKey(key);
             }}
             onKeyPointerEnter={(key) => {
@@ -586,35 +594,48 @@ export function LightingMode() {
           <div>
             <SectionLabel>Brush</SectionLabel>
             <div className="mt-2 flex gap-0.5 rounded-lg border border-line-soft bg-well p-0.5">
-              <button
-                type="button"
-                onClick={() => setBrush({ ...brush, mode: "paint" })}
-                className={cx(
-                  "flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md py-1.5 text-[12px] font-medium transition-colors duration-120",
-                  brush.mode === "paint" ? "bg-raised text-ink shadow-sm" : "text-faint hover:text-mute",
-                )}
-              >
-                <span
-                  className="size-2.5 rounded-full"
-                  style={{ background: cssRgb(hsvToRgb(brush.hsv)) }}
-                />
-                Paint
-              </button>
-              <button
-                type="button"
-                onClick={() => setBrush({ ...brush, mode: "erase" })}
-                className={cx(
-                  "flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md py-1.5 text-[12px] font-medium transition-colors duration-120",
-                  brush.mode === "erase" ? "bg-raised text-ink shadow-sm" : "text-faint hover:text-mute",
-                )}
-              >
-                <EraserIcon size={13} />
-                Erase
-              </button>
+              {(
+                [
+                  { mode: "paint", label: "Paint", title: "Drag to paint keys with the brush" },
+                  { mode: "erase", label: "Erase", title: "Drag to clear keys" },
+                  {
+                    mode: "select",
+                    label: "Select",
+                    title:
+                      "Drag to build a multi-key selection — start on a selected key to deselect",
+                  },
+                ] as const
+              ).map(({ mode, label, title }) => (
+                <button
+                  key={mode}
+                  type="button"
+                  title={title}
+                  onClick={() => setBrush({ ...brush, mode })}
+                  className={cx(
+                    "flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md py-1.5 text-[12px] font-medium transition-colors duration-120",
+                    brush.mode === mode ? "bg-raised text-ink shadow-sm" : "text-faint hover:text-mute",
+                  )}
+                >
+                  {mode === "paint" && (
+                    <span
+                      className="size-2.5 rounded-full"
+                      style={{ background: cssRgb(hsvToRgb(brush.hsv)) }}
+                    />
+                  )}
+                  {mode === "erase" && <EraserIcon size={13} />}
+                  {mode === "select" && <MarqueeIcon size={13} />}
+                  {label}
+                </button>
+              ))}
             </div>
+            {brush.mode === "select" && (
+              <p className="mt-1.5 text-[11.5px] leading-relaxed text-faint">
+                Drag across keys to select them, then paint or erase the whole selection at once.
+              </p>
+            )}
           </div>
 
-          {brush.mode === "paint" && (
+          {brush.mode !== "erase" && (
             <>
               <ColorPicker value={brush.hsv} onChange={(hsv) => setBrush({ ...brush, hsv })} />
 
@@ -716,14 +737,28 @@ export function LightingMode() {
                       key={zone.id}
                       type="button"
                       title={
-                        brush.mode === "erase"
-                          ? `Stage erasing every key in ${zone.name}`
-                          : `Fill ${zone.name} with the current brush (staged)`
+                        brush.mode === "select"
+                          ? `${selected ? "Remove" : "Add"} ${zone.name} ${
+                              selected ? "from" : "to"
+                            } the selection`
+                          : brush.mode === "erase"
+                            ? `Stage erasing every key in ${zone.name}`
+                            : `Fill ${zone.name} with the current brush (staged)`
                       }
                       onPointerEnter={() => dispatch({ type: "hoverLeds", leds: members })}
                       onPointerLeave={() => dispatch({ type: "hoverLeds", leds: null })}
                       onClick={() => {
                         if (members.length === 0) return;
+                        // The select brush accumulates zones instead of
+                        // painting, so several can be combined before a stamp.
+                        if (brush.mode === "select") {
+                          dispatch({
+                            type: "lightingSelect",
+                            leds: members,
+                            mode: selected ? "remove" : "add",
+                          });
+                          return;
+                        }
                         if (brush.mode === "erase") {
                           eraseLeds(members);
                         } else {
@@ -747,21 +782,43 @@ export function LightingMode() {
                   );
                 })}
               </div>
-              </div>
-              {state.lightingSelection.length > 0 && (
-                <div className="mt-2 flex items-center gap-2">
-                  <Button variant="outline" className="flex-1" onClick={paintSelection}>
+            </div>
+          )}
+
+          {state.lightingSelection.length > 0 && (
+            <div>
+              <SectionLabel>Selection</SectionLabel>
+              <p className="mt-1 text-[11.5px] text-faint">
+                {state.lightingSelection.length} key
+                {state.lightingSelection.length === 1 ? "" : "s"} selected
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                {brush.mode === "select" ? (
+                  <>
+                    <Button variant="outline" className="flex-1" onClick={() => paintSelection()}>
+                      Paint
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => eraseLeds(state.lightingSelection)}
+                    >
+                      Erase
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="outline" className="flex-1" onClick={() => paintSelection()}>
                     {brush.mode === "erase" ? "Erase" : "Paint"} {state.lightingSelection.length}{" "}
                     selected
                   </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() => dispatch({ type: "lightingSelect", leds: [] })}
-                  >
-                    Clear
-                  </Button>
-                </div>
-              )}
+                )}
+                <Button
+                  variant="ghost"
+                  onClick={() => dispatch({ type: "lightingSelect", leds: [] })}
+                >
+                  Clear
+                </Button>
+              </div>
             </div>
           )}
 

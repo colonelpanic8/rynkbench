@@ -342,3 +342,22 @@ describe("modifier-state snapshots", () => {
     expect(next.modifierState).toEqual(modifiers);
   });
 });
+
+describe("lighting multi-selection", () => {
+  it("replaces the selection by default", () => {
+    const state = baseState({ lightingSelection: [1, 2] });
+    expect(reducer(state, { type: "lightingSelect", leds: [7] }).lightingSelection).toEqual([7]);
+  });
+
+  it("accumulates in add mode without duplicating", () => {
+    const state = baseState({ lightingSelection: [1, 2] });
+    const next = reducer(state, { type: "lightingSelect", leds: [2, 5], mode: "add" });
+    expect(next.lightingSelection).toEqual([1, 2, 5]);
+  });
+
+  it("drops only the named leds in remove mode", () => {
+    const state = baseState({ lightingSelection: [1, 2, 5] });
+    const next = reducer(state, { type: "lightingSelect", leds: [2, 9], mode: "remove" });
+    expect(next.lightingSelection).toEqual([1, 5]);
+  });
+});

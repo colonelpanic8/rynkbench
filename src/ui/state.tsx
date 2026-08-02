@@ -377,7 +377,7 @@ export type WorkbenchAction =
   | { type: "extensionStateSet"; state: LightingState; extension: LightingExtensionState }
   | { type: "extensionParamsLoaded"; effect: number; items: LightingExtensionParam[] }
   | { type: "hoverLeds"; leds: number[] | null }
-  | { type: "lightingSelect"; leds: number[] }
+  | { type: "lightingSelect"; leds: number[]; mode?: "replace" | "add" | "remove" }
   | { type: "lightingStateSet"; state: LightingState }
   | { type: "slotWriteStart"; kind: SlotKind; index: number; value: Combo | Morse | Fork }
   | { type: "slotWriteOk"; kind: SlotKind; index: number }
@@ -637,8 +637,26 @@ export function makeWorkbenchReducer(cols: number) {
         return { ...state, extensionParams: { effect: act.effect, items: act.items } };
       case "hoverLeds":
         return { ...state, hoverLeds: act.leds };
-      case "lightingSelect":
-        return { ...state, lightingSelection: act.leds };
+      case "lightingSelect": {
+        if (act.mode === undefined || act.mode === "replace")
+          return { ...state, lightingSelection: act.leds };
+        const next = new Set(state.lightingSelection);
+        for (const led of act.leds) {
+          if (act.mode === "add") next.add(led);
+          else next.delete(led);
+        }
+        // Preserve selection order so the count and paint order stay stable.
+        const selection = [...state.lightingSelection.filter((led) => next.has(led))];
+        if (act.mode === "add") {
+          const seen = new Set(selection);
+          for (const led of act.leds) {
+            if (seen.has(led)) continue;
+            seen.add(led);
+            selection.push(led);
+          }
+        }
+        return { ...state, lightingSelection: selection };
+      }
       case "lightingStateSet":
         return { ...state, lightingState: act.state, lightingBusy: false, lightingError: null };
       case "slotWriteStart": {

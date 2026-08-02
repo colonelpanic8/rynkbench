@@ -199,6 +199,15 @@ export function EraserIcon(props: IconProps) {
   );
 }
 
+/** Dashed marquee — the multi-select brush. */
+export function MarqueeIcon(props: IconProps) {
+  return (
+    <svg {...base(props)} strokeDasharray="2.4 2">
+      <rect x="2.2" y="2.2" width="11.6" height="11.6" rx="1.6" />
+    </svg>
+  );
+}
+
 export function BatteryGlyph({
   level,
   charging,
