@@ -149,25 +149,32 @@ export function EffectsPanel() {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <SectionLabel>Extension effects</SectionLabel>
+        <SectionLabel>Firmware effect extension</SectionLabel>
         {dirty && <span className="text-[10.5px] text-warn">unapplied</span>}
       </div>
+      <p className="mt-1 text-[11.5px] leading-relaxed text-faint">
+        Names and control behavior are supplied by the connected firmware.
+      </p>
 
       <div className="mt-2 flex flex-col gap-2">
-        <NameSelect
-          label="Effect"
-          names={effects}
-          value={draft.effect}
-          onChange={(effect) => setDraft({ ...draft, effect })}
-        />
-        <NameSelect
-          label="Palette"
-          names={palettes}
-          value={draft.palette}
-          onChange={(palette) => setDraft({ ...draft, palette })}
-        />
+        {effects.length > 0 && (
+          <NameSelect
+            label="Effect"
+            names={effects}
+            value={draft.effect}
+            onChange={(effect) => setDraft({ ...draft, effect })}
+          />
+        )}
+        {palettes.length > 0 && (
+          <NameSelect
+            label="Palette"
+            names={palettes}
+            value={draft.palette}
+            onChange={(palette) => setDraft({ ...draft, palette })}
+          />
+        )}
         <Slider
-          label="Brightness"
+          label="Value"
           value={draft.value}
           onChange={(value) => setDraft({ ...draft, value })}
         />

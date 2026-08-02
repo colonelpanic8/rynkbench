@@ -354,7 +354,7 @@ export type WorkbenchAction =
       overlay: LightingOverlayCell[];
       /** Present only when the device supports on-device scenes. */
       scenes?: LightingSceneCell[];
-      /** Present only when the device supports extension effects. */
+      /** Present only when the device exposes a lighting extension. */
       extension?: LightingExtension | null;
       /** Present only when the device has a mutable conditional table. */
       runtimeConditional?: LightingConditionalSceneCell[];

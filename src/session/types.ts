@@ -114,13 +114,13 @@ export interface LightingOps {
   readOverlay(): Promise<LightingOverlayCell[]>;
   /** Mutate background/output state; revision handshake is the backend's job. */
   setState(state: LightingMutableState): Promise<LightingState>;
-  /** Extension-effects discovery: name-list sizes plus the live selection.
+  /** Extension discovery: firmware-provided name-list sizes plus live state.
    *  Supported iff the firmware advertises EXTENSION_EFFECTS; unsupported
    *  firmware rejects with a descriptive error. */
   extension(): Promise<LightingExtension>;
   /** Read one whole extension name list (paging is the backend's job). */
   extensionNames(kind: LightingExtensionNameKind): Promise<string[]>;
-  /** Replace the extension selection; revision handshake is the backend's job. */
+  /** Replace the extension state; revision handshake is the backend's job. */
   setExtensionState(state: LightingExtensionState): Promise<LightingState>;
   /** Read one effect's whole generic parameter list (paging is the backend's
    *  job). Parameters are per-(effect, ordinal) and the firmware names and

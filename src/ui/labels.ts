@@ -183,6 +183,17 @@ const LIGHT_LABELS: Record<string, string> = {
   RgbVad: "Val−",
   RgbSpi: "Spd+",
   RgbSpd: "Spd−",
+  RgbModePlain: "Plain",
+  RgbModeBreathe: "Breathe",
+  RgbModeRainbow: "Rainbow",
+  RgbModeSwirl: "Swirl",
+  RgbModeSnake: "Snake",
+  RgbModeKnight: "Knight",
+  RgbModeXmas: "Xmas",
+  RgbModeGradient: "Gradient",
+  RgbModeRgbtest: "RGB Test",
+  RgbModeTwinkle: "Twinkle",
+  OutputModeCycle: "OutMode",
 };
 
 const CONTROL_LABELS: Record<string, string> = {
@@ -282,8 +293,7 @@ export function actionDescription(action: Action): string {
   if ("LayerToggle" in action) return `Toggle layer ${action.LayerToggle}`;
   if ("DefaultLayer" in action) return `Default layer ${action.DefaultLayer}`;
   if ("OneShotLayer" in action) return `One-shot layer ${action.OneShotLayer}`;
-  if ("OneShotModifier" in action)
-    return `One-shot ${modifierSymbols(action.OneShotModifier)}`;
+  if ("OneShotModifier" in action) return `One-shot ${modifierSymbols(action.OneShotModifier)}`;
   if ("TriggerMacro" in action) return `Trigger macro ${action.TriggerMacro}`;
   if ("Light" in action) return `Lighting · ${action.Light}`;
   if ("KeyboardControl" in action) return `Control · ${action.KeyboardControl}`;

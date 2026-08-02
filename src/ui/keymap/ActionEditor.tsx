@@ -359,19 +359,37 @@ const SYSTEM_ACTIONS: Array<{
   },
 ];
 
-/** The useful lighting actions, curated — full RGB-mode zoo omitted. */
+/** Every lighting action currently exposed by the generated RMK protocol. */
 const LIGHT_ACTIONS: Array<{ id: LightAction; label: string; hint: string }> = [
-  { id: "RgbTog", label: "RGB toggle", hint: "Lighting on/off" },
-  { id: "RgbModeForward", label: "Mode →", hint: "Next lighting mode" },
-  { id: "RgbModeReverse", label: "Mode ←", hint: "Previous lighting mode" },
-  { id: "RgbHui", label: "Hue +", hint: "Shift hue forward" },
-  { id: "RgbHud", label: "Hue −", hint: "Shift hue back" },
-  { id: "RgbSai", label: "Sat +", hint: "More saturated" },
-  { id: "RgbSad", label: "Sat −", hint: "Less saturated" },
-  { id: "RgbVai", label: "Bright +", hint: "Raise brightness" },
-  { id: "RgbVad", label: "Bright −", hint: "Lower brightness" },
-  { id: "RgbSpi", label: "Speed +", hint: "Faster animation" },
-  { id: "RgbSpd", label: "Speed −", hint: "Slower animation" },
+  { id: "BacklightOn", label: "Output on", hint: "Select the always-on output policy" },
+  { id: "BacklightOff", label: "Output off", hint: "Select the always-off output policy" },
+  { id: "BacklightToggle", label: "Output toggle", hint: "Toggle all composed lighting" },
+  { id: "OutputModeCycle", label: "Output policy cycle", hint: "Cycle always on, always off, and powered-only" },
+  { id: "BacklightDown", label: "Output brightness −", hint: "Dim all composed lighting" },
+  { id: "BacklightUp", label: "Output brightness +", hint: "Brighten all composed lighting" },
+  { id: "BacklightStep", label: "Output brightness step", hint: "Advance brightness, wrapping at the top" },
+  { id: "BacklightToggleBreathing", label: "Background breathing toggle", hint: "Switch the standard background between solid and breathing" },
+  { id: "RgbTog", label: "Background toggle", hint: "Enable or disable the background source" },
+  { id: "RgbModeForward", label: "Effect →", hint: "Next extension effect or background mode" },
+  { id: "RgbModeReverse", label: "Effect ←", hint: "Previous extension effect or background mode" },
+  { id: "RgbHui", label: "Palette / hue +", hint: "Next extension palette or raise background hue" },
+  { id: "RgbHud", label: "Palette / hue −", hint: "Previous extension palette or lower background hue" },
+  { id: "RgbSai", label: "Saturation +", hint: "Raise background saturation" },
+  { id: "RgbSad", label: "Saturation −", hint: "Lower background saturation" },
+  { id: "RgbVai", label: "Effect brightness +", hint: "Raise extension or background brightness" },
+  { id: "RgbVad", label: "Effect brightness −", hint: "Lower extension or background brightness" },
+  { id: "RgbSpi", label: "Effect speed +", hint: "Speed up extension or background animation" },
+  { id: "RgbSpd", label: "Effect speed −", hint: "Slow down extension or background animation" },
+  { id: "RgbModePlain", label: "Mode · plain", hint: "Select the standard solid background" },
+  { id: "RgbModeBreathe", label: "Mode · breathe", hint: "Select the standard breathing background" },
+  { id: "RgbModeRainbow", label: "Mode · rainbow", hint: "Select rainbow when the installed extension supports it" },
+  { id: "RgbModeSwirl", label: "Mode · swirl", hint: "Select swirl when the installed extension supports it" },
+  { id: "RgbModeSnake", label: "Mode · snake", hint: "Select snake when the installed extension supports it" },
+  { id: "RgbModeKnight", label: "Mode · knight", hint: "Select knight when the installed extension supports it" },
+  { id: "RgbModeXmas", label: "Mode · Xmas", hint: "Select Xmas when the installed extension supports it" },
+  { id: "RgbModeGradient", label: "Mode · gradient", hint: "Select gradient when the installed extension supports it" },
+  { id: "RgbModeRgbtest", label: "Mode · RGB test", hint: "Select RGB test when the installed extension supports it" },
+  { id: "RgbModeTwinkle", label: "Mode · twinkle", hint: "Select twinkle when the installed extension supports it" },
 ];
 
 function PickList<T extends string>({
@@ -492,7 +510,7 @@ export function ActionEditor({
   numLayers: number;
   onCommit: (action: KeyAction) => void;
 }) {
-  const { bundle } = useWorkbench();
+  const { bundle, state } = useWorkbench();
   const [tab, setTab] = useState<Tab>("keys");
   const [query, setQuery] = useState("");
   const [keyMods, setKeyMods] = useState<ModifierCombination>(EMPTY_MODS);
@@ -505,6 +523,27 @@ export function ActionEditor({
     out.push({ id: "system", label: "System" }, { id: "lighting", label: "Lighting" });
     return out;
   }, [bundle.caps.macro_space_size, bundle.caps.max_morse]);
+
+  const boardLightingActions = useMemo(() => {
+    const actions: Array<{ action: number; label: string; hint: string }> = [];
+    const toggle = state.lightingControls.output_toggle_user_action;
+    if (toggle !== undefined) {
+      actions.push({
+        action: toggle,
+        label: `Board output toggle · U${toggle}`,
+        hint: "Bind the exact user action configured by this firmware",
+      });
+    }
+    const cycle = state.lightingOutputMode?.cycle_user_action;
+    if (cycle !== undefined && cycle !== toggle) {
+      actions.push({
+        action: cycle,
+        label: `Board output policy · U${cycle}`,
+        hint: "Bind this board's configured always-on/off/powered-only control",
+      });
+    }
+    return actions;
+  }, [state.lightingControls.output_toggle_user_action, state.lightingOutputMode?.cycle_user_action]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -621,7 +660,28 @@ export function ActionEditor({
       )}
 
       {tab === "lighting" && (
-        <PickList items={LIGHT_ACTIONS} onPick={(id) => onCommit({ Single: { Light: id } })} />
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          {boardLightingActions.length > 0 && (
+            <div>
+              <SectionLabel>Board controls</SectionLabel>
+              <div className="mt-1.5 flex flex-col gap-1.5">
+                {boardLightingActions.map((item) => (
+                  <button
+                    key={item.action}
+                    type="button"
+                    onClick={() => onCommit({ Single: { User: item.action } })}
+                    className="cursor-pointer rounded-lg border border-accent-deep/40 bg-accent-dim/15 px-3 py-2 text-left transition-colors duration-120 hover:border-accent-deep"
+                  >
+                    <div className="text-[13px] font-medium text-accent">{item.label}</div>
+                    <div className="text-[11.5px] text-faint">{item.hint}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <SectionLabel>Protocol actions</SectionLabel>
+          <PickList items={LIGHT_ACTIONS} onPick={(id) => onCommit({ Single: { Light: id } })} />
+        </div>
       )}
     </div>
   );
