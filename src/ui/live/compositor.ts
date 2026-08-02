@@ -4,12 +4,16 @@
 // the same complete set as the firmware.
 
 import type {
+  BatteryStatus,
   KeyAction,
+  LightingConditionalSceneCell,
   LightingEffect,
   LightingLayerPolicy,
   LightingOverlayCell,
+  LightingOutputModeState,
   LightingSceneCell,
 } from "../../vendor/rynk-wasm/rynk_wasm";
+import { conditionalRuleMatches } from "../lighting/firmwareRules";
 
 export type LitSource =
   | "overlay"
@@ -19,6 +23,8 @@ export type LitSource =
   | "compiled-effective"
   | "compiled-active"
   | "compiled-default"
+  | "conditional"
+  | "output-mode"
   | "background";
 
 export interface LitCell {
@@ -58,6 +64,9 @@ export function compositeScenes(
   defaultLayer: number,
   compiledPolicy: LightingLayerPolicy | null,
   runtimePolicy: LightingLayerPolicy | null,
+  conditionalScenes: LightingConditionalSceneCell[] = [],
+  batteries: ReadonlyMap<number, BatteryStatus> = new Map(),
+  outputMode: LightingOutputModeState | null = null,
 ): Map<number, LitCell> {
   const out = new Map<number, LitCell>();
 
@@ -73,7 +82,10 @@ export function compositeScenes(
         layer === effectiveLayer ? "effective" : layer === defaultLayer ? "default" : "active";
       for (const cell of cells)
         if (cell.layer === layer)
-          out.set(cell.led_id, { effect: cell.effect, source: `${source}-${suffix}` });
+          out.set(cell.led_id, {
+            effect: cell.effect,
+            source: `${source}-${suffix}`,
+          });
     }
   };
 
@@ -81,6 +93,21 @@ export function compositeScenes(
   applySource(scenes, runtimePolicy, "runtime");
   for (const cell of Object.values(overlay))
     out.set(cell.led_id, { effect: cell.effect, source: "overlay" });
+  const activeLayerSet = new Set([defaultLayer, ...activeLayers]);
+  for (const cell of conditionalScenes) {
+    if (conditionalRuleMatches(cell, { activeLayers: activeLayerSet, batteries })) {
+      out.set(cell.led_id, { effect: cell.effect, source: "conditional" });
+    }
+  }
+  if (outputMode?.wake_active && outputMode.indicator) {
+    const effect =
+      outputMode.mode === "AlwaysOn"
+        ? outputMode.indicator.always_on
+        : outputMode.mode === "AlwaysOff"
+          ? outputMode.indicator.always_off
+          : outputMode.indicator.powered_only;
+    out.set(outputMode.indicator.led_id, { effect, source: "output-mode" });
+  }
   return out;
 }
 

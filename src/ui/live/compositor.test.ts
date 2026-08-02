@@ -1,7 +1,13 @@
 // Live-view resolution: index-ordered binding fall-through and scene compositing.
 
 import { describe, expect, it } from "vitest";
-import type { KeyAction, LightingEffect, LightingSceneCell } from "../../vendor/rynk-wasm/rynk_wasm";
+import type {
+  KeyAction,
+  LightingConditionalSceneCell,
+  LightingEffect,
+  LightingOutputModeState,
+  LightingSceneCell,
+} from "../../vendor/rynk-wasm/rynk_wasm";
 import { compositeScenes, effectiveAction } from "./compositor";
 
 function solid(r: number): LightingEffect {
@@ -89,6 +95,69 @@ describe("compositeScenes", () => {
       "ActiveStack",
     );
     expect(out.get(1)).toEqual({ effect: solid(99), source: "overlay" });
+  });
+
+  it("applies matching conditional status after the host overlay", () => {
+    const conditional: LightingConditionalSceneCell[] = [
+      {
+        conditions: {
+          layer: { layer: 2, active: true },
+          battery: { node: 1, min_level: 20, max_level: 40, charge: "Discharging" },
+        },
+        led_id: 1,
+        effect: solid(77),
+      },
+    ];
+    const out = compositeScenes(
+      [],
+      scenes,
+      { 1: { led_id: 1, effect: solid(99), ttl_ms: undefined } },
+      [0, 2],
+      0,
+      null,
+      "ActiveStack",
+      conditional,
+      new Map([[1, { Available: { charge_state: "Discharging", level: 30 } }]]),
+    );
+    expect(out.get(1)).toEqual({ effect: solid(77), source: "conditional" });
+  });
+
+  it("applies the wake-layer output indicator after conditional status", () => {
+    const outputMode: LightingOutputModeState = {
+      mode: "PoweredOnly",
+      powered: false,
+      wake_active: true,
+      effective_enabled: true,
+      powered_only_scope: "Local",
+      cycle_user_action: 13,
+      wake_layer: 2,
+      indicator: {
+        led_id: 1,
+        always_on: solid(1),
+        always_off: solid(2),
+        powered_only: solid(3),
+      },
+    };
+    const conditional: LightingConditionalSceneCell[] = [
+      {
+        conditions: { layer: { layer: 2, active: true }, battery: undefined },
+        led_id: 1,
+        effect: solid(77),
+      },
+    ];
+    const out = compositeScenes(
+      [],
+      [],
+      {},
+      [0, 2],
+      0,
+      null,
+      null,
+      conditional,
+      new Map(),
+      outputMode,
+    );
+    expect(out.get(1)).toEqual({ effect: solid(3), source: "output-mode" });
   });
 
   it("ActiveStack composites every active layer in index order", () => {

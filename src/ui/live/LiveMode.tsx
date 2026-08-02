@@ -4,7 +4,7 @@
 // backed by the firmware's complete active-layer snapshot.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { LightingEffect } from "../../vendor/rynk-wasm/rynk_wasm";
+import type { LightingEffect, ModifierCombination } from "../../vendor/rynk-wasm/rynk_wasm";
 import type { KeyView } from "../../model/keyboard";
 import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
@@ -71,6 +71,39 @@ function IndicatorRow() {
         </span>
       ))}
     </span>
+  );
+}
+
+const MODIFIER_LABELS: Array<[keyof ModifierCombination, string]> = [
+  ["left_ctrl", "L Ctrl"],
+  ["left_shift", "L Shift"],
+  ["left_alt", "L Alt"],
+  ["left_gui", "L GUI"],
+  ["right_ctrl", "R Ctrl"],
+  ["right_shift", "R Shift"],
+  ["right_alt", "R Alt"],
+  ["right_gui", "R GUI"],
+];
+
+function ModifierRow() {
+  const { state } = useWorkbench();
+  if (!state.modifierState) return null;
+  const active = MODIFIER_LABELS.filter(([key]) => state.modifierState?.[key]);
+  return (
+    <Row label="Resolved modifiers">
+      <span className="flex flex-wrap justify-end gap-1">
+        {active.length === 0
+          ? "none"
+          : active.map(([, label]) => (
+              <span
+                key={label}
+                className="rounded-full border border-accent-deep/60 bg-accent-dim/30 px-2 py-0.5 text-[10.5px] text-accent"
+              >
+                {label}
+              </span>
+            ))}
+      </span>
+    </Row>
   );
 }
 
@@ -156,10 +189,13 @@ export function LiveMode() {
   const [pressedIndices, setPressedIndices] = useState<number[]>([]);
   const matrixPollInFlight = useRef(false);
   const lighting = state.lightingState;
-  const outputOn = lighting?.output_enabled ?? false;
+  const outputOn = state.lightingOutputMode?.effective_enabled ?? lighting?.output_enabled ?? false;
   const bg = lighting?.background;
   const bgOn = outputOn && (bg?.enabled ?? false);
-  const bgColor = bg && bgOn ? wireHsvCss(bg.hue, bg.saturation, bg.value) : null;
+  const extensionActive = state.lightingExtension !== null;
+  const bgColor = bg && bgOn && !extensionActive
+    ? wireHsvCss(bg.hue, bg.saturation, bg.value)
+    : null;
 
   useEffect(() => {
     if (state.modifierState !== null) return;
@@ -215,6 +251,9 @@ export function LiveMode() {
         state.defaultLayer,
         state.compiledScenePolicy,
         state.scenePolicy,
+        state.conditionalScenes,
+        new Map([[0, state.battery], [1, state.peripheralBattery]]),
+        state.lightingOutputMode,
       ),
     [
       state.compiledScenes,
@@ -224,6 +263,10 @@ export function LiveMode() {
       state.defaultLayer,
       state.compiledScenePolicy,
       state.scenePolicy,
+      state.conditionalScenes,
+      state.battery,
+      state.peripheralBattery,
+      state.lightingOutputMode,
     ],
   );
 
@@ -292,7 +335,9 @@ export function LiveMode() {
           {outputOn ? (
             <>
               Composited preview: scene lighting and the overlay over each key's effective binding.
-              {bgOn && " The firmware background fills keys without a higher-priority source."}
+              {bgOn && !extensionActive && " The firmware background fills keys without a higher-priority source."}
+              {extensionActive &&
+                " The animated extension runs on the device; its selected effect is reported below, while its moving frames are not available over the protocol."}
             </>
           ) : (
             "Lighting output is off — the device is dark. Key labels show each key's effective binding."
@@ -348,6 +393,55 @@ export function LiveMode() {
                     {!state.compiledScenePolicy && !state.scenePolicy && "—"}
                   </span>
                 </Row>
+                {state.lightingOutputMode && (
+                  <>
+                    <Row label="Output policy">{state.lightingOutputMode.mode}</Row>
+                    <Row label="Power scope">{state.lightingOutputMode.powered_only_scope}</Row>
+                    <Row label="Power input">
+                      {state.lightingOutputMode.powered ? "USB powered" : "battery"}
+                    </Row>
+                    <Row label="Wake layer">
+                      {state.lightingOutputMode.wake_layer === undefined
+                        ? "—"
+                        : `L${state.lightingOutputMode.wake_layer}${state.lightingOutputMode.wake_active ? " · active" : ""}`}
+                    </Row>
+                  </>
+                )}
+                {state.conditionalScenes.length > 0 && (
+                  <Row label="Conditional cells">{state.conditionalScenes.length}</Row>
+                )}
+                {(state.lightingControls.output_toggle_user_action !== undefined ||
+                  state.lightingOutputMode?.cycle_user_action !== undefined) && (
+                  <Row label="Board controls">
+                    <span className="text-right">
+                      {state.lightingControls.output_toggle_user_action !== undefined && (
+                        <span className="block">
+                          Toggle · U{state.lightingControls.output_toggle_user_action}
+                        </span>
+                      )}
+                      {state.lightingOutputMode?.cycle_user_action !== undefined && (
+                        <span className="block">
+                          Policy · U{state.lightingOutputMode.cycle_user_action}
+                        </span>
+                      )}
+                    </span>
+                  </Row>
+                )}
+                {state.lightingExtension && (
+                  <>
+                    <Row label="Extension effect">
+                      {bundle.extensionEffectNames[state.lightingExtension.state.effect] ??
+                        `#${state.lightingExtension.state.effect}`}
+                    </Row>
+                    <Row label="Extension palette">
+                      {bundle.extensionPaletteNames[state.lightingExtension.state.palette] ??
+                        `#${state.lightingExtension.state.palette}`}
+                    </Row>
+                    <Row label="Extension value / speed">
+                      {state.lightingExtension.state.value} / {state.lightingExtension.state.speed}
+                    </Row>
+                  </>
+                )}
               </div>
             ) : (
               <div className="mt-2 text-[12.5px] text-faint">Lighting state unavailable.</div>
@@ -366,6 +460,7 @@ export function LiveMode() {
               </Row>
               <Row label="Transport">{KIND_LABEL[bundle.session.kind] ?? bundle.session.kind}</Row>
               {state.connection && <Row label="Preferred">{state.connection.preferred}</Row>}
+              <ModifierRow />
             </div>
           </Panel>
         </div>

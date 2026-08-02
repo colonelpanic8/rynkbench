@@ -28,7 +28,7 @@ import { Button, InspectorShell, SectionLabel, cx } from "../kit";
 import { EraserIcon, SpinnerIcon, WarningIcon } from "../icons";
 import { effectiveAction } from "../live/compositor";
 import { targetPreviewEffects } from "./preview";
-import { describeConditions, firmwarePreviewCells } from "./firmwareRules";
+import { conditionalRuleMatches, describeConditions, firmwarePreviewCells } from "./firmwareRules";
 import { effectRgb } from "./effect";
 import { NumberField } from "./EffectEditor";
 
@@ -205,9 +205,20 @@ function LightingTargets() {
   );
 }
 
-function FirmwareRulesPanel({ activeCount }: { activeCount: number }) {
+function FirmwareRulesPanel() {
   const { bundle, state } = useWorkbench();
   const total = state.compiledScenes.length + state.conditionalScenes.length;
+  const activeLayers = useMemo(
+    () =>
+      state.lightingTarget === "overlay"
+        ? new Set(state.activeLayers)
+        : new Set([state.defaultLayer, state.lightingTarget]),
+    [state.activeLayers, state.defaultLayer, state.lightingTarget],
+  );
+  const batteries = useMemo(
+    () => new Map([[0, state.battery], [1, state.peripheralBattery]]),
+    [state.battery, state.peripheralBattery],
+  );
   const labels = useMemo(() => {
     const result = new Map<number, string>();
     for (const key of bundle.model.keys) {
@@ -216,13 +227,17 @@ function FirmwareRulesPanel({ activeCount }: { activeCount: number }) {
     return result;
   }, [bundle.model]);
   const groups = useMemo(() => {
-    const result = new Map<string, { description: string; color: string; leds: number[] }>();
+    const result = new Map<
+      string,
+      { description: string; color: string; leds: number[]; active: boolean }
+    >();
     for (const cell of state.compiledScenes) {
       const key = JSON.stringify({ layer: cell.layer, effect: cell.effect });
       const group = result.get(key) ?? {
         description: `L${cell.layer} active`,
         color: effectColor(cell.effect),
         leds: [],
+        active: activeLayers.has(cell.layer),
       };
       group.leds.push(cell.led_id);
       result.set(key, group);
@@ -233,12 +248,18 @@ function FirmwareRulesPanel({ activeCount }: { activeCount: number }) {
         description: describeConditions(cell),
         color: effectColor(cell.effect),
         leds: [],
+        active: conditionalRuleMatches(cell, { activeLayers, batteries }),
       };
       group.leds.push(cell.led_id);
       result.set(key, group);
     }
-    return [...result.values()];
-  }, [state.compiledScenes, state.conditionalScenes]);
+    return [...result.entries()].map(([id, group]) => ({ id, ...group }));
+  }, [activeLayers, batteries, state.compiledScenes, state.conditionalScenes]);
+
+  const activeCount = groups.reduce(
+    (count, group) => count + (group.active ? group.leds.length : 0),
+    0,
+  );
 
   const outputMode = state.lightingOutputMode;
   if (total === 0 && outputMode === null) return null;
@@ -275,30 +296,37 @@ function FirmwareRulesPanel({ activeCount }: { activeCount: number }) {
           {outputMode.powered_only_scope === "Local" && " · power evaluated per half"}
         </p>
       )}
-      <details className="mt-2 rounded-lg border border-line-soft bg-well px-3 py-2">
-        <summary className="cursor-pointer text-[12px] font-medium text-mute">
-          Show {groups.length} conditions
-        </summary>
-        <div className="mt-2 flex flex-col gap-2">
-          {groups.map((group, index) => {
-            const names = group.leds.map((id) => labels.get(id) ?? `LED ${id}`).join(", ");
-            return (
-              <div key={index} className="flex items-start gap-2 text-[11.5px]">
-                <span
-                  className="mt-1 size-2 shrink-0 rounded-full"
-                  style={{ background: group.color }}
-                />
-                <div className="min-w-0">
-                  <div className="text-mute">{group.description}</div>
-                  <div className="truncate text-faint" title={names}>
-                    {names}
+      {groups.length > 0 && (
+        <details className="mt-2 rounded-lg border border-line-soft bg-well px-3 py-2">
+          <summary className="cursor-pointer text-[12px] font-medium text-mute">
+            Show {groups.length} rule groups
+          </summary>
+          <div className="mt-2 flex flex-col gap-2">
+            {groups.map((group) => {
+              const names = group.leds.map((id) => labels.get(id) ?? `LED ${id}`).join(", ");
+              return (
+                <div key={group.id} className="flex items-start gap-2 text-[11.5px]">
+                  <span
+                    className="mt-1 size-2 shrink-0 rounded-full"
+                    style={{ background: group.color }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-mute">{group.description}</span>
+                      <span className={group.active ? "text-ok" : "text-faint"}>
+                        {group.active ? "active" : "inactive"}
+                      </span>
+                    </div>
+                    <div className="truncate text-faint" title={names}>
+                      {names}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      </details>
+              );
+            })}
+          </div>
+        </details>
+      )}
     </div>
   );
 }
@@ -719,6 +747,7 @@ export function LightingMode() {
                   );
                 })}
               </div>
+              </div>
               {state.lightingSelection.length > 0 && (
                 <div className="mt-2 flex items-center gap-2">
                   <Button variant="outline" className="flex-1" onClick={paintSelection}>
@@ -737,7 +766,7 @@ export function LightingMode() {
           )}
 
           <div className="border-t border-line-soft pt-4">
-            <FirmwareRulesPanel activeCount={conditionalPreview.size + compiledCount} />
+            <FirmwareRulesPanel />
           </div>
 
           {bundle.runtimeConditionalStatus && (
