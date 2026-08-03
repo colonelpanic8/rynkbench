@@ -278,9 +278,10 @@ describe("extension parameters", () => {
     expect(actions[0]).toEqual({ type: "extensionParamsLoaded", effect: 6, items: [] });
   });
 
-  it("applies the selection first, then each staged parameter, then re-reads", async () => {
+  it("applies the selection first, then each staged parameter, then reads back the device", async () => {
     const calls: string[] = [];
     const selection = { effect: 6, palette: 2, value: 200, speed: 40 };
+    const applied = { ...selection, value: 180 };
     const { io, actions } = ioWith({
       setExtensionState: async () => {
         calls.push("selection");
@@ -289,6 +290,19 @@ describe("extension parameters", () => {
       setExtensionParam: async (effect, index, value) => {
         calls.push(`param ${effect}:${index}=${value}`);
         return { ...LIGHTING, revision: LIGHTING.revision + 1 + index };
+      },
+      state: async () => {
+        calls.push("readback state");
+        return { ...LIGHTING, revision: LIGHTING.revision + 4 };
+      },
+      extension: async () => {
+        calls.push("readback");
+        return {
+          revision: LIGHTING.revision + 4,
+          effect_count: 12,
+          palette_count: 4,
+          state: applied,
+        };
       },
       extensionParams: async () => {
         calls.push("reload");
@@ -300,13 +314,20 @@ describe("extension parameters", () => {
       { index: 0, value: 20 },
       { index: 2, value: 3 },
     ]);
-    await vi.waitFor(() => expect(calls).toHaveLength(4));
-    expect(calls).toEqual(["selection", "param 6:0=20", "param 6:2=3", "reload"]);
-    // The device's last reply is the state of record.
+    await vi.waitFor(() => expect(calls).toHaveLength(6));
+    expect(calls).toEqual([
+      "selection",
+      "param 6:0=20",
+      "param 6:2=3",
+      "readback state",
+      "readback",
+      "reload",
+    ]);
+    // The readback, including a device-clamped value, is the state of record.
     expect(actions).toContainEqual({
       type: "extensionStateSet",
-      state: { ...LIGHTING, revision: LIGHTING.revision + 3 },
-      extension: selection,
+      state: { ...LIGHTING, revision: LIGHTING.revision + 4 },
+      extension: applied,
       extensionLayers: null,
     });
   });
@@ -340,6 +361,18 @@ describe("extension parameters", () => {
           calls.push(`overlay ${overlay}`);
           return { ...LIGHTING, revision: 3 };
         },
+        state: async () => {
+          calls.push("readback state");
+          return { ...LIGHTING, revision: 3 };
+        },
+        extension: async () => {
+          calls.push("readback primary");
+          return { revision: 3, effect_count: 12, palette_count: 4, state: selection };
+        },
+        extensionLayers: async () => {
+          calls.push("readback overlay");
+          return { revision: 3, overlay: 2 };
+        },
         extensionParams: async () => {
           calls.push("reload");
           return [];
@@ -349,13 +382,133 @@ describe("extension parameters", () => {
     );
 
     io.setExtensionState(selection, [], 2);
-    await vi.waitFor(() => expect(calls).toHaveLength(3));
-    expect(calls).toEqual(["primary", "overlay 2", "reload"]);
+    await vi.waitFor(() => expect(calls).toHaveLength(6));
+    expect(calls).toEqual([
+      "primary",
+      "overlay 2",
+      "readback state",
+      "readback primary",
+      "readback overlay",
+      "reload",
+    ]);
     expect(actions).toContainEqual({
       type: "extensionStateSet",
       state: { ...LIGHTING, revision: 3 },
       extension: selection,
       extensionLayers: { revision: 3, overlay: 2 },
+    });
+  });
+
+  it("changes value without rewriting an unchanged overlay selection", async () => {
+    const calls: string[] = [];
+    const current = { effect: 5, palette: 0, value: 51, speed: 128 };
+    const selection = { ...current, value: 52 };
+    const { io } = ioWith(
+      {
+        setExtensionState: async () => {
+          calls.push("primary");
+          return { ...LIGHTING, revision: 5 };
+        },
+        setExtensionLayers: async () => {
+          throw new Error("unchanged overlay selection was rewritten");
+        },
+        state: async () => {
+          calls.push("readback state");
+          return { ...LIGHTING, revision: 5 };
+        },
+        extension: async () => {
+          calls.push("readback primary");
+          return { revision: 5, effect_count: 12, palette_count: 4, state: selection };
+        },
+        extensionLayers: async () => {
+          calls.push("readback overlay");
+          return { revision: 5, overlay: 2 };
+        },
+        extensionParams: async () => {
+          calls.push("reload");
+          return [];
+        },
+      },
+      baseState({
+        lightingExtension: {
+          revision: 4,
+          effect_count: 12,
+          palette_count: 4,
+          state: current,
+        },
+        lightingExtensionLayers: { revision: 4, overlay: 2 },
+      }),
+    );
+
+    io.setExtensionState(selection, [], 2);
+    await vi.waitFor(() => expect(calls).toHaveLength(5));
+    expect(calls).toEqual([
+      "primary",
+      "readback state",
+      "readback primary",
+      "readback overlay",
+      "reload",
+    ]);
+  });
+
+  it("does not rewrite unchanged primary and overlay selections", async () => {
+    const calls: string[] = [];
+    const selection = { effect: 5, palette: 0, value: 128, speed: 128 };
+    const layers = { revision: 4, overlay: 2 };
+    const { io, actions } = ioWith(
+      {
+        setExtensionState: async () => {
+          throw new Error("unchanged primary selection was rewritten");
+        },
+        setExtensionLayers: async () => {
+          throw new Error("unchanged overlay selection was rewritten");
+        },
+        setExtensionParam: async (effect, index, value) => {
+          calls.push(`param ${effect}:${index}=${value}`);
+          return { ...LIGHTING, revision: 5 };
+        },
+        state: async () => {
+          calls.push("readback state");
+          return { ...LIGHTING, revision: 5 };
+        },
+        extension: async () => {
+          calls.push("readback primary");
+          return { revision: 5, effect_count: 12, palette_count: 4, state: selection };
+        },
+        extensionLayers: async () => {
+          calls.push("readback overlay");
+          return { revision: 5, overlay: 2 };
+        },
+        extensionParams: async () => {
+          calls.push("reload");
+          return params;
+        },
+      },
+      baseState({
+        lightingExtension: {
+          revision: 4,
+          effect_count: 12,
+          palette_count: 4,
+          state: selection,
+        },
+        lightingExtensionLayers: layers,
+      }),
+    );
+
+    io.setExtensionState(selection, [{ index: 0, value: 20 }], 2);
+    await vi.waitFor(() => expect(calls).toHaveLength(5));
+    expect(calls).toEqual([
+      "param 5:0=20",
+      "readback state",
+      "readback primary",
+      "readback overlay",
+      "reload",
+    ]);
+    expect(actions).toContainEqual({
+      type: "extensionStateSet",
+      state: { ...LIGHTING, revision: 5 },
+      extension: selection,
+      extensionLayers: { revision: 5, overlay: 2 },
     });
   });
 });

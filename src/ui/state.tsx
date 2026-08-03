@@ -1020,32 +1020,44 @@ export function makeIo(
     },
     setExtensionState(extension, params = [], overlay) {
       dispatch({ type: "lightingBusy", busy: true, error: null });
-      // One serialized chain: the selection first, then each staged parameter
-      // of the now-selected effect. The device's last reply is the state of
-      // record, and the re-read afterwards makes its values authoritative.
+      // Write only the parts that changed. Each extension mutation is durable,
+      // so repeating the unchanged primary/layer selections needlessly queues
+      // more flash work and creates extra LightingChange refreshes.
       (async () => {
-        let lightingState = await session.lighting.setExtensionState(extension);
-        let extensionLayers = getState().lightingExtensionLayers;
-        if (extensionLayers !== null) {
-          lightingState = await session.lighting.setExtensionLayers(overlay);
-          extensionLayers = { revision: lightingState.revision, overlay };
+        const before = getState();
+        const currentExtension = before.lightingExtension?.state;
+        const currentLayers = before.lightingExtensionLayers;
+        if (
+          currentExtension === undefined ||
+          currentExtension.effect !== extension.effect ||
+          currentExtension.palette !== extension.palette ||
+          currentExtension.value !== extension.value ||
+          currentExtension.speed !== extension.speed
+        ) {
+          await session.lighting.setExtensionState(extension);
+        }
+        if (currentLayers !== null && currentLayers.overlay !== overlay) {
+          await session.lighting.setExtensionLayers(overlay);
         }
         for (const write of params) {
-          lightingState = await session.lighting.setExtensionParam(
+          await session.lighting.setExtensionParam(
             extension.effect,
             write.index,
             write.value,
           );
         }
+        const [lightingState, appliedExtension, extensionLayers] = await Promise.all([
+          session.lighting.state(),
+          session.lighting.extension(),
+          currentLayers === null ? Promise.resolve(null) : session.lighting.extensionLayers(),
+        ]);
         dispatch({
           type: "extensionStateSet",
           state: lightingState,
-          extension,
+          extension: appliedExtension.state,
           extensionLayers,
         });
-        // Re-read after every apply: the device's values, not the staged ones,
-        // are the record, and a write may clamp or reject silently.
-        loadParams(extension.effect);
+        loadParams(appliedExtension.state.effect);
       })().catch((err) =>
         dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
       );
