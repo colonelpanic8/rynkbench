@@ -98,6 +98,40 @@ describe("parseDocument", () => {
       /KC_NOPE/,
     );
   });
+
+  it("accepts the nested modifier objects emitted by the MoErgo editor", () => {
+    const keys = Array.from({ length: 80 }, () => ({ value: "&trans" }));
+    keys[0] = {
+      value: "&kp",
+      params: [{ value: "LS", params: [{ value: "N9" }] }],
+    } as (typeof keys)[number];
+    const text = JSON.stringify({
+      keyboard: "glove80",
+      layer_names: ["Base"],
+      layers: [keys],
+    });
+
+    const { format, snapshot } = parseDocument(text, CATALOG);
+    expect(format).toBe("moergo-json");
+    expect(snapshot.layers).toHaveLength(1);
+    expect(snapshot.layers[0][0]).toEqual({
+      Single: {
+        KeyWithModifier: [
+          "Kc9",
+          {
+            left_ctrl: false,
+            left_shift: true,
+            left_alt: false,
+            left_gui: false,
+            right_ctrl: false,
+            right_shift: false,
+            right_alt: false,
+            right_gui: false,
+          },
+        ],
+      },
+    });
+  });
 });
 
 describe("snapshotFromState", () => {

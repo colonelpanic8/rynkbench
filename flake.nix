@@ -97,7 +97,8 @@
           src = pkgs.runCommand "glove80-rmk-with-rmk" { } ''
             cp -r ${glove80-rmk} "$out"
             chmod -R u+w "$out"
-            rmdir "$out/dependencies/rmk"
+            rm -rf "$out/dependencies/rmk"
+            mkdir -p "$out/dependencies"
             cp -r ${rmk} "$out/dependencies/rmk"
           '';
 
