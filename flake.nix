@@ -57,7 +57,9 @@
           buildPhase = ''
             runHook preBuild
             export HOME="$TMPDIR/home"
-            export RUST_MIN_STACK=16777216
+            # 32 MiB: rustc overflows its default stack compiling `syn` and
+            # asks for exactly this much in the SIGSEGV report.
+            export RUST_MIN_STACK=33554432
             mkdir -p "$HOME"
             pushd rynk
             wasm-pack build --release --target web --mode no-install \
