@@ -495,7 +495,7 @@ function DiagnosticsCard() {
     <Panel className="p-4">
       <div className="flex items-center justify-between gap-3">
         <SectionLabel>Session diagnostics</SectionLabel>
-        <Chip tone={failures > 0 ? "warn" : "neutral"}>
+        <Chip tone={failures > 0 ? "danger" : "neutral"}>
           {records.length} recorded{failures > 0 ? ` · ${failures} failed` : ""}
         </Chip>
       </div>

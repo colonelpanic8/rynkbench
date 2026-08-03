@@ -79,11 +79,13 @@ export interface LinkSessionHooks {
 export const REQUEST_TIMEOUT_MS = 5_000;
 
 export class RequestTimeout extends Error {
-  constructor(
-    readonly op: string,
-    readonly timeoutMs: number,
-  ) {
+  readonly op: string;
+  readonly timeoutMs: number;
+
+  constructor(op: string, timeoutMs: number) {
     super(`the keyboard did not answer ${op} within ${timeoutMs}ms — the link was closed`);
+    this.op = op;
+    this.timeoutMs = timeoutMs;
     this.name = "RequestTimeout";
   }
 }

@@ -103,6 +103,7 @@ describe("compositeScenes", () => {
         conditions: {
           layer: { layer: 2, active: true },
           battery: { node: 1, min_level: 20, max_level: 40, charge: "Discharging" },
+          output_mode: undefined,
         },
         led_id: 1,
         effect: solid(77),
@@ -130,7 +131,7 @@ describe("compositeScenes", () => {
       effective_enabled: true,
       powered_only_scope: "Local",
       cycle_user_action: 13,
-      wake_layer: 2,
+      wake_layers: 1 << 2,
       indicator: {
         led_id: 1,
         always_on: solid(1),
@@ -140,7 +141,11 @@ describe("compositeScenes", () => {
     };
     const conditional: LightingConditionalSceneCell[] = [
       {
-        conditions: { layer: { layer: 2, active: true }, battery: undefined },
+        conditions: {
+          layer: { layer: 2, active: true },
+          battery: undefined,
+          output_mode: undefined,
+        },
         led_id: 1,
         effect: solid(77),
       },

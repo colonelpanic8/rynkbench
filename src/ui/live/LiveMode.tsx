@@ -22,6 +22,12 @@ import {
 
 const MATRIX_POLL_MS = 100;
 
+function layersInMask(mask: number, count: number): number[] {
+  return Array.from({ length: count }, (_, layer) => layer).filter(
+    (layer) => Math.floor(mask / 2 ** layer) % 2 === 1,
+  );
+}
+
 function effectColor(effect: LightingEffect): string {
   if ("Solid" in effect) return cssEmissiveRgb(effect.Solid.color);
   if ("Blink" in effect) return cssEmissiveRgb(effect.Blink.color);
@@ -190,6 +196,9 @@ export function LiveMode() {
   const matrixPollInFlight = useRef(false);
   const lighting = state.lightingState;
   const outputOn = state.lightingOutputMode?.effective_enabled ?? lighting?.output_enabled ?? false;
+  const wakeLayers = state.lightingOutputMode
+    ? layersInMask(state.lightingOutputMode.wake_layers, bundle.caps.num_layers)
+    : [];
   const bg = lighting?.background;
   const bgOn = outputOn && (bg?.enabled ?? false);
   const extensionActive = state.lightingExtension !== null;
@@ -400,10 +409,10 @@ export function LiveMode() {
                     <Row label="Power input">
                       {state.lightingOutputMode.powered ? "USB powered" : "battery"}
                     </Row>
-                    <Row label="Wake layer">
-                      {state.lightingOutputMode.wake_layer === undefined
+                    <Row label="Wake layers">
+                      {wakeLayers.length === 0
                         ? "—"
-                        : `L${state.lightingOutputMode.wake_layer}${state.lightingOutputMode.wake_active ? " · active" : ""}`}
+                        : `${wakeLayers.map((layer) => `L${layer}`).join(", ")}${state.lightingOutputMode.wake_active ? " · active" : ""}`}
                     </Row>
                   </>
                 )}

@@ -95,7 +95,13 @@ export function compositeScenes(
     out.set(cell.led_id, { effect: cell.effect, source: "overlay" });
   const activeLayerSet = new Set([defaultLayer, ...activeLayers]);
   for (const cell of conditionalScenes) {
-    if (conditionalRuleMatches(cell, { activeLayers: activeLayerSet, batteries })) {
+    if (
+      conditionalRuleMatches(cell, {
+        activeLayers: activeLayerSet,
+        batteries,
+        outputMode: outputMode?.mode,
+      })
+    ) {
       out.set(cell.led_id, { effect: cell.effect, source: "conditional" });
     }
   }

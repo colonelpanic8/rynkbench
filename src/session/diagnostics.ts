@@ -36,8 +36,11 @@ function truncate(text: string): string {
  *  grow it without limit. */
 export class SessionLog {
   private records: LogRecord[] = [];
+  private readonly limit: number;
 
-  constructor(private readonly limit = 300) {}
+  constructor(limit = 300) {
+    this.limit = limit;
+  }
 
   private append(record: LogRecord): void {
     this.records.push(record);
@@ -45,11 +48,15 @@ export class SessionLog {
   }
 
   request(record: RequestRecord): void {
-    this.append(record);
+    const stored = {
+      ...record,
+      detail: record.detail === undefined ? undefined : truncate(record.detail),
+    };
+    this.append(stored);
     if (!debugEnabled()) return;
-    const line = `rynk ${record.op} ${record.outcome} ${record.durationMs.toFixed(1)}ms`;
-    if (record.outcome === "ok") console.debug(line);
-    else console.warn(line, record.detail ?? "");
+    const line = `rynk ${stored.op} ${stored.outcome} ${stored.durationMs.toFixed(1)}ms`;
+    if (stored.outcome === "ok") console.debug(line);
+    else console.warn(line, stored.detail ?? "");
   }
 
   event(message: string): void {

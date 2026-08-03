@@ -248,13 +248,23 @@ function FirmwareRulesPanel() {
         description: describeConditions(cell),
         color: effectColor(cell.effect),
         leds: [],
-        active: conditionalRuleMatches(cell, { activeLayers, batteries }),
+        active: conditionalRuleMatches(cell, {
+          activeLayers,
+          batteries,
+          outputMode: state.lightingOutputMode?.mode,
+        }),
       };
       group.leds.push(cell.led_id);
       result.set(key, group);
     }
     return [...result.entries()].map(([id, group]) => ({ id, ...group }));
-  }, [activeLayers, batteries, state.compiledScenes, state.conditionalScenes]);
+  }, [
+    activeLayers,
+    batteries,
+    state.compiledScenes,
+    state.conditionalScenes,
+    state.lightingOutputMode,
+  ]);
 
   const activeCount = groups.reduce(
     (count, group) => count + (group.active ? group.leds.length : 0),

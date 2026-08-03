@@ -411,7 +411,7 @@ describe("WebHID layer-state readback", () => {
 });
 
 describe("request watchdog", () => {
-  const opts = (onTimeout = () => {}) => ({ timeoutMs: 20, onTimeout });
+  const opts = (onTimeout: (op: string) => void = () => {}) => ({ timeoutMs: 20, onTimeout });
 
   it("passes a prompt answer straight through", async () => {
     const client = watchdogClient({ get_lighting_state: async () => state(4, 0) }, opts());
