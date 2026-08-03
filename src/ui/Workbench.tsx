@@ -11,22 +11,45 @@ import {
 import { TopBar } from "./TopBar";
 import { KeymapCenter, KeymapInspector } from "./keymap/KeymapMode";
 import { LightingMode } from "./lighting/LightingMode";
+import { EffectsMode } from "./effects/EffectsMode";
 import { LiveMode } from "./live/LiveMode";
 import { AdvancedMode } from "./advanced/AdvancedMode";
 import { DeviceMode } from "./device/DeviceMode";
 import { InspectorShell, cx } from "./kit";
-import { CombinatorIcon, DeviceIcon, EyeIcon, KeymapIcon, LightingIcon } from "./icons";
+import {
+  CombinatorIcon,
+  DeviceIcon,
+  EyeIcon,
+  KeymapIcon,
+  LightingIcon,
+  SparkleIcon,
+} from "./icons";
 
-const MODES: Array<{ id: Mode; label: string; icon: typeof KeymapIcon }> = [
+interface ModeEntry {
+  id: Mode;
+  label: string;
+  icon: typeof KeymapIcon;
+}
+
+const MODES: ModeEntry[] = [
   { id: "keymap", label: "Keymap", icon: KeymapIcon },
   { id: "lighting", label: "Lighting", icon: LightingIcon },
+  { id: "effects", label: "Effects", icon: SparkleIcon },
   { id: "live", label: "Live", icon: EyeIcon },
   { id: "advanced", label: "Advanced", icon: CombinatorIcon },
   { id: "device", label: "Device", icon: DeviceIcon },
 ];
 
-function ModeRail({ mode, onMode }: { mode: Mode; onMode: (m: Mode) => void }) {
-  const activeIndex = MODES.findIndex((m) => m.id === mode);
+function ModeRail({
+  modes,
+  mode,
+  onMode,
+}: {
+  modes: ModeEntry[];
+  mode: Mode;
+  onMode: (m: Mode) => void;
+}) {
+  const activeIndex = modes.findIndex((m) => m.id === mode);
   return (
     <nav className="relative flex w-[76px] shrink-0 flex-col items-stretch gap-1 border-r border-line-soft bg-panel px-2 py-3">
       {/* sliding active indicator */}
@@ -38,7 +61,7 @@ function ModeRail({ mode, onMode }: { mode: Mode; onMode: (m: Mode) => void }) {
           transitionTimingFunction: "cubic-bezier(0.25,0.8,0.35,1)",
         }}
       />
-      {MODES.map((m) => {
+      {modes.map((m) => {
         const Icon = m.icon;
         const active = m.id === mode;
         return (
@@ -75,6 +98,14 @@ export function Workbench({
     [bundle.caps.num_cols],
   );
   const [state, dispatch] = useReducer(reducer, bundle, initialWorkbenchState);
+
+  // Effects is its own view rather than a lighting panel, but it only exists
+  // on firmware that ships the effect extension.
+  const modes = useMemo(
+    () =>
+      MODES.filter((m) => m.id !== "effects" || bundle.lightingExtension !== null),
+    [bundle.lightingExtension],
+  );
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -142,7 +173,11 @@ export function Workbench({
       <div className="flex h-full flex-col">
         <TopBar />
         <div className="flex min-h-0 flex-1">
-          <ModeRail mode={state.mode} onMode={(mode) => dispatch({ type: "mode", mode })} />
+          <ModeRail
+            modes={modes}
+            mode={state.mode}
+            onMode={(mode) => dispatch({ type: "mode", mode })}
+          />
           <main className="flex min-h-0 flex-1 gap-4 p-4 max-lg:flex-col max-lg:overflow-y-auto">
             {state.mode === "keymap" && (
               <>
@@ -153,6 +188,7 @@ export function Workbench({
               </>
             )}
             {state.mode === "lighting" && <LightingMode />}
+            {state.mode === "effects" && <EffectsMode />}
             {state.mode === "live" && <LiveMode />}
             {state.mode === "advanced" && <AdvancedMode />}
             {state.mode === "device" && <DeviceMode />}

@@ -20,12 +20,11 @@ import {
 import { ColorPicker } from "./ColorPicker";
 import { BackgroundPanel } from "./BackgroundPanel";
 import { ConditionalRulesPanel } from "./ConditionalRulesPanel";
-import { EffectsPanel } from "./EffectsPanel";
 import { LayerPresets } from "./LayerPresets";
 import type { Hsv } from "../color";
 import { cssEmissiveRgb, cssRgb, hsvToRgb } from "../color";
 import { Button, InspectorShell, SectionLabel, cx } from "../kit";
-import { EraserIcon, MarqueeIcon, SpinnerIcon, WarningIcon } from "../icons";
+import { EraserIcon, MarqueeIcon, SparkleIcon, SpinnerIcon, WarningIcon } from "../icons";
 import { effectiveAction } from "../live/compositor";
 import { targetPreviewEffects } from "./preview";
 import { conditionalRuleMatches, describeConditions, firmwarePreviewCells } from "./firmwareRules";
@@ -846,9 +845,24 @@ export function LightingMode() {
             <BackgroundPanel />
           </div>
 
+          {/* The effect pack is configured in its own mode; this is only a
+              signpost so the lighting inspector still says where it went. */}
           {state.lightingExtension && (
             <div className="border-t border-line-soft pt-4">
-              <EffectsPanel />
+              <SectionLabel>Firmware effect extension</SectionLabel>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-faint">
+                {bundle.extensionEffectNames[state.lightingExtension.state.effect] ??
+                  `Effect ${state.lightingExtension.state.effect}`}{" "}
+                is running.
+              </p>
+              <Button
+                variant="outline"
+                className="mt-2 w-full"
+                onClick={() => dispatch({ type: "mode", mode: "effects" })}
+              >
+                <SparkleIcon size={13} />
+                Open Effects
+              </Button>
             </div>
           )}
 
