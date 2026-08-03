@@ -463,6 +463,9 @@ describe("lighting extension effects", () => {
         "Rain",
         "Reactive",
         "Crosshair",
+        "Tracer",
+        "Keyfall",
+        "Shockwave",
       ]);
       const palettes = await session.lighting.extensionNames("Palettes");
       expect(palettes).toHaveLength(16);
@@ -505,7 +508,9 @@ describe("lighting extension effects", () => {
         revision: cleared.revision,
         overlay: undefined,
       });
-      await expect(session.lighting.setExtensionLayers(8)).rejects.toThrow(/out of range/);
+      await expect(
+        session.lighting.setExtensionLayers(glove80Board.extensionEffects!.effects.length),
+      ).rejects.toThrow(/out of range/);
     });
   });
 

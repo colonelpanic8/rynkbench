@@ -470,6 +470,9 @@ export const glove80Board: BoardSpec = {
       "Rain",
       "Reactive",
       "Crosshair",
+      "Tracer",
+      "Keyfall",
+      "Shockwave",
     ],
     palettes: [
       "Afterburn",
