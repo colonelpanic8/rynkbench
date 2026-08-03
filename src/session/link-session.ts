@@ -55,6 +55,7 @@ import type {
   SessionKind,
 } from "./types";
 import type { RynkByteLink } from "./rynk-link";
+import { sessionLog, type SessionLog } from "./diagnostics";
 
 /** Transport-specific pieces a LinkSession cannot know itself. */
 export interface LinkSessionHooks {
@@ -67,6 +68,8 @@ export interface LinkSessionHooks {
   watchDisconnect(onUnplug: () => void): () => void;
   /** Override the request watchdog (tests). Defaults to REQUEST_TIMEOUT_MS. */
   requestTimeoutMs?: number;
+  /** Where to record the request trace. Defaults to the shared sessionLog. */
+  log?: SessionLog;
 }
 
 /** How long one device request may go unanswered before the link is declared
@@ -102,9 +105,13 @@ const UNWATCHED_CALLS = new Set(["next_topic", "free"]);
  */
 export function watchdogClient<T extends object>(
   client: T,
-  { timeoutMs, onTimeout }: { timeoutMs: number; onTimeout: (op: string) => void },
+  {
+    timeoutMs,
+    onTimeout,
+    log,
+  }: { timeoutMs: number; onTimeout: (op: string) => void; log?: SessionLog },
 ): T {
-  if (timeoutMs <= 0) return client;
+  if (timeoutMs <= 0 && !log) return client;
   return new Proxy(client, {
     get(target, prop, receiver) {
       const value = Reflect.get(target, prop, receiver) as unknown;
@@ -113,18 +120,34 @@ export function watchdogClient<T extends object>(
       return (...args: unknown[]) => {
         const result = (value as (...a: unknown[]) => unknown).apply(target, args);
         if (!(result instanceof Promise)) return result;
+        const started = performance.now();
+        const record = (outcome: "ok" | "error" | "timeout", detail?: unknown) =>
+          log?.request({
+            op,
+            at: Date.now(),
+            durationMs: performance.now() - started,
+            outcome,
+            detail: detail === undefined ? undefined : errorText(detail),
+          });
         return new Promise((resolve, reject) => {
-          const timer = setTimeout(() => {
-            onTimeout(op);
-            reject(new RequestTimeout(op, timeoutMs));
-          }, timeoutMs);
+          const timer =
+            timeoutMs > 0
+              ? setTimeout(() => {
+                  const failure = new RequestTimeout(op, timeoutMs);
+                  record("timeout", failure);
+                  onTimeout(op);
+                  reject(failure);
+                }, timeoutMs)
+              : undefined;
           result.then(
             (settled) => {
               clearTimeout(timer);
+              record("ok");
               resolve(settled);
             },
             (error: unknown) => {
               clearTimeout(timer);
+              record("error", error);
               reject(error);
             },
           );
@@ -132,6 +155,11 @@ export function watchdogClient<T extends object>(
       };
     },
   });
+}
+
+function errorText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
 
 interface LightingPage<T> {
@@ -409,6 +437,7 @@ export class LinkSession implements RynkSession {
   private readonly client: RynkClient;
   private readonly link: RynkByteLink;
   private readonly unwatchDisconnect: () => void;
+  private readonly log: SessionLog;
   private readonly pumpDone: Promise<void>;
   private queue: Promise<unknown> = Promise.resolve();
   private closed = false;
@@ -422,13 +451,17 @@ export class LinkSession implements RynkSession {
     client = watchdogClient(client, {
       timeoutMs: hooks.requestTimeoutMs ?? REQUEST_TIMEOUT_MS,
       onTimeout: () => this.failLink(),
+      log: hooks.log ?? sessionLog,
     });
+    this.log = hooks.log ?? sessionLog;
+    this.log.event(`session opened on ${hooks.kind} (${link.label})`);
     this.client = client;
     this.link = link;
     this.kind = hooks.kind;
     this.label = link.label;
 
     this.unwatchDisconnect = hooks.watchDisconnect(() => {
+      this.log.event("device unplugged");
       this.link.end();
       if (!this.closed) this.disconnectHandler?.();
     });
@@ -538,6 +571,7 @@ export class LinkSession implements RynkSession {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    this.log.event("session closed");
     this.unwatchDisconnect();
     // Ending the link rejects the parked next_topic and any in-flight
     // request; only free the wasm handle once both have settled.
@@ -552,6 +586,7 @@ export class LinkSession implements RynkSession {
    *  topic pull and any in-flight request, and the UI is told the device is
    *  gone so it can offer a reconnect. */
   private failLink(): void {
+    this.log.event("link ended after a request timed out — the device stopped answering");
     this.link.end();
     if (!this.closed) this.disconnectHandler?.();
   }

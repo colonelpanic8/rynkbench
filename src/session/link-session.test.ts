@@ -16,6 +16,7 @@ import {
   readLightingRuntimeConditionalScenes,
   watchdogClient,
 } from "./link-session";
+import { isRequest, SessionLog } from "./diagnostics";
 
 const effect: LightingEffect = { Solid: { color: { r: 1, g: 2, b: 3 } } };
 
@@ -459,5 +460,51 @@ describe("request watchdog", () => {
     client.free();
     expect(free).toHaveBeenCalled();
     expect(client.label).toBe("dev");
+  });
+});
+
+describe("request tracing", () => {
+  it("records a successful request with its duration", async () => {
+    const log = new SessionLog();
+    const client = watchdogClient(
+      { get_lighting_state: async () => state(4, 0) },
+      { timeoutMs: 50, onTimeout: () => {}, log },
+    );
+    await client.get_lighting_state();
+    const [entry] = log.entries();
+    expect(entry).toMatchObject({ op: "get_lighting_state", outcome: "ok" });
+    expect(isRequest(entry) && entry.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("records the op that timed out, with its message", async () => {
+    const log = new SessionLog();
+    const client = watchdogClient(
+      { commit_lighting_overlay_replace: () => new Promise(() => {}) },
+      { timeoutMs: 10, onTimeout: () => {}, log },
+    );
+    await expect(client.commit_lighting_overlay_replace()).rejects.toThrow();
+    expect(log.entries()[0]).toMatchObject({
+      op: "commit_lighting_overlay_replace",
+      outcome: "timeout",
+    });
+    expect(log.format()).toContain("did not answer commit_lighting_overlay_replace");
+  });
+
+  it("records a rejected request as an error, not a timeout", async () => {
+    const log = new SessionLog();
+    const client = watchdogClient(
+      {
+        put_lighting_overlay_chunk: async () => {
+          throw new Error("StateRevisionConflict");
+        },
+      },
+      { timeoutMs: 50, onTimeout: () => {}, log },
+    );
+    await expect(client.put_lighting_overlay_chunk()).rejects.toThrow();
+    expect(log.entries()[0]).toMatchObject({
+      op: "put_lighting_overlay_chunk",
+      outcome: "error",
+      detail: "StateRevisionConflict",
+    });
   });
 });
