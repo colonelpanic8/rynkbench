@@ -188,7 +188,7 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
 
   const [layerState, battery, connection, peripheralBattery] = await Promise.all([
     session.keymap.layerState(),
-    session.device.battery(),
+    session.device.battery().catch(() => "Unavailable" as const),
     session.device.connectionStatus().catch(() => null),
     caps.num_split_peripherals > 0
       ? session.device

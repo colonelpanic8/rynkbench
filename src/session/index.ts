@@ -4,14 +4,14 @@
 
 import { nativeProvider } from "./native";
 import { webHidProvider } from "./webhid";
+import { webSerialProvider } from "./webserial";
 import type { SessionProvider } from "./types";
 
 export type { RynkSession, SessionKind, SessionProvider } from "./types";
 
 /** All providers, in display order. Availability is checked at render time.
- * Inside the Tauri desktop app the native HID backend is available and
- * WebHID is not (WebKit never shipped it); in a browser it is the reverse —
- * so exactly one USB provider lights up in any environment. */
+ * Tauri exposes native HID; Chromium exposes the two browser transports:
+ * vendor WebHID for fork firmware and Web Serial for upstream RMK. */
 export function sessionProviders(): SessionProvider[] {
-  return [nativeProvider, webHidProvider];
+  return [nativeProvider, webHidProvider, webSerialProvider];
 }

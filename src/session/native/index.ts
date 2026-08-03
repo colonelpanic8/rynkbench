@@ -1,5 +1,5 @@
 // Native backend for the Tauri desktop app: the same vendored rynk-wasm
-// client as WebHID, but the raw-HID transport lives in the Rust process
+// client as the browser transports, but raw-HID I/O lives in the Rust process
 // (hidapi), because WebKitGTK/WKWebView never shipped WebHID.
 //
 // Wire shape (see src-tauri/src/main.rs):

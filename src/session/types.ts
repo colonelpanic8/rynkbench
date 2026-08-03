@@ -1,16 +1,16 @@
 // The Rynkbench session seam.
 //
 // Everything above this interface is backend-neutral UI; everything below it
-// is one of the pluggable backends (mock, WebHID via rynk-wasm, and later a
-// native Tauri transport). Nothing outside src/session/ may import transport
-// or wasm machinery — but *types* from the vendored rynk-wasm package are
-// fine anywhere: `import type` is erased at compile time, so the mock backend
-// and the UI share the generated protocol types without pulling in wasm.
+// is one of the pluggable backends (mock, WebHID/Web Serial via rynk-wasm, or
+// native Tauri HID). Nothing outside src/session/ may import transport or wasm
+// machinery — but *types* from the vendored rynk-wasm package are fine
+// anywhere: `import type` is erased at compile time, so the mock backend and
+// the UI share the generated protocol types without pulling in wasm.
 //
 // Design rules:
 // - Connection is modeled as "request a session" because the most constrained
-//   backend (WebHID) can only open a device from a user-gesture-triggered
-//   browser picker. Backends that can enumerate devices freely still fit.
+//   browser backends can only open a device from a user-gesture-triggered
+//   picker. Backends that can enumerate devices freely still fit.
 // - Paged topology endpoints are wrapped into whole-topology reads here; the
 //   UI never sees revision-pinned pagination.
 // - v1 scope is keymap + lighting + device status. Combos, macros, forks and
@@ -62,7 +62,7 @@ import type {
 } from "../vendor/rynk-wasm/rynk_wasm";
 
 /** Which backend produced a session. Drives labels, never behavior. */
-export type SessionKind = "mock" | "webhid" | "webbluetooth" | "native";
+export type SessionKind = "mock" | "webhid" | "webserial" | "webbluetooth" | "native";
 
 /** A fully-assembled lighting topology (all pages, one revision). */
 export interface LightingTopology {

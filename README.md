@@ -1,8 +1,8 @@
 # Rynkbench
 
-A browser configurator for [RMK](https://github.com/HaoboGu/rmk) keyboards that
-speak the **Rynk** protocol. Connect over WebHID and edit your keymap and
-per-key lighting live — no install, nothing leaves your machine.
+A browser configurator for [RMK](https://github.com/rmk-rs/rmk) keyboards that
+speak the **Rynk** protocol. Connect over Web Serial or WebHID and edit your
+keymap and per-key lighting live — no install, nothing leaves your machine.
 
 - **Keymap editing** — per-layer bindings, tap-hold, layer-tap, and the rest of
   RMK's action set, rendered on the board's real geometry.
@@ -22,11 +22,12 @@ per-key lighting live — no install, nothing leaves your machine.
 - **Simulated boards** — demo a split ergo, an ortholinear 60, and a dev stub
   with no hardware attached, so the whole UI is explorable offline.
 
-WebHID needs a Chromium-based browser (Chrome or Edge); Firefox and Safari don't
-implement it. The page must be served from a secure context — `localhost`
-counts, so local dev works out of the box. Alternatively, the [Tauri desktop
-app](#desktop-app-tauri) bundles the same UI with a native HID transport, so no
-browser is needed at all.
+Web Serial and WebHID need a Chromium-based browser (Chrome or Edge); Firefox
+and Safari don't implement them. Use **Web Serial** for upstream RMK's USB CDC
+transport and **WebHID** for firmware exposing the vendor Rynk HID interface.
+The page must be served from a secure context — `localhost` counts, so local dev
+works out of the box. Alternatively, the [Tauri desktop app](#desktop-app-tauri)
+bundles the same UI with a native HID transport, so no browser is needed at all.
 
 ## Quick start
 
@@ -54,17 +55,16 @@ production bundle. Enable them only for a particular build/startup with
 - **Vite + React + TypeScript + Tailwind v4.** UI under `src/ui`, keyboard/board
   models under `src/model`.
 - **The session seam** (`src/session/types.ts`) is the one interface the UI talks
-  to. Three implementations back it: a `mock` backend with demo boards, a
-  `webhid` backend that drives real hardware in the browser, and a `native`
-  backend that drives the Tauri app's hidapi transport. The UI never imports a
-  transport or WASM directly — only *types* from the generated client and the
-  seam. The two USB backends share one protocol core (`src/session/link-session.ts`
-  over the byte-link framing in `src/session/rynk-link.ts`); only the report
-  plumbing differs.
+  to. Four implementations back it: a `mock` backend with demo boards,
+  `webserial` and `webhid` backends that drive real hardware in the browser, and
+  a `native` backend that drives the Tauri app's hidapi transport. The UI never
+  imports a transport or WASM directly — only *types* from the generated client
+  and the seam. All USB backends share one protocol core
+  (`src/session/link-session.ts`); only their byte plumbing differs.
 - **`src/vendor/rynk-wasm`** is an ignored build output containing the Rynk
   protocol client compiled to WASM with `wasm-pack`. The browser owns transports
-  (WebHID chooser, stream locks, hot-plug); the WASM owns request/response typing
-  and protocol validation.
+  (Web Serial/WebHID choosers, stream locks, hot-plug); the WASM owns
+  request/response typing and protocol validation.
 
 ## Desktop app (Tauri)
 

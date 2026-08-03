@@ -8,6 +8,7 @@ import { BatteryGlyph, PowerIcon, Wordmark } from "./icons";
 export const KIND_LABEL: Record<string, string> = {
   mock: "Mock",
   webhid: "USB · HID",
+  webserial: "USB · Serial",
   webbluetooth: "Bluetooth",
   native: "Native",
 };

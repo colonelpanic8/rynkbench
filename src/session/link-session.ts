@@ -1,6 +1,7 @@
 // RynkSession over a live wasm RynkClient and a RynkByteLink — the shared
-// core of every USB transport (WebHID, native Tauri). Transports supply the
-// link plus a disconnect watcher; everything protocol-shaped lives here.
+// core of every USB transport (WebHID, Web Serial, native Tauri). Transports
+// supply the link plus a disconnect watcher; everything protocol-shaped lives
+// here.
 //
 // The protocol allows one request in flight (next_topic is the sanctioned
 // exception: one parked pull runs alongside one request), so every op goes
