@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "wasm": "nix build .#rynk-wasm --out-link src/vendor/rynk-wasm",
+    "wasm": "npm run wasm:rynk && npm run wasm:config",
     "predev": "npm run wasm",
     "dev": "vite",
     "prebuild": "npm run wasm",
@@ -12,7 +12,9 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "pretest": "npm run wasm",
-    "test": "vitest run"
+    "test": "vitest run",
+    "wasm:rynk": "nix build .#rynk-wasm --out-link src/vendor/rynk-wasm",
+    "wasm:config": "nix build .#glove80-config-wasm --out-link src/vendor/glove80-config-wasm"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

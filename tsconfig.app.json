@@ -4,7 +4,10 @@
     "target": "es2023",
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
-    "types": ["vite/client"],
+    // `node` is here for the tests under src/, which read the vendored wasm
+    // off disk: a `--target web` package initializes from a fetch the Node
+    // test runner cannot serve.
+    "types": ["vite/client", "node"],
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 

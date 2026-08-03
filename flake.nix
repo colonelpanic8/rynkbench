@@ -14,13 +14,22 @@
       url = "github:colonelpanic8/rmk/assembled";
       flake = false;
     };
+    # The Glove80 configuration model. Its `dependencies/rmk` submodule is not
+    # part of what GitHub serves for a revision, so the package below grafts
+    # this flake's own `rmk` pin into that slot — which is also what keeps the
+    # two wasm packages agreeing about the protocol types they both generate.
+    glove80-rmk = {
+      url = "github:colonelpanic8/glove80-rmk";
+      flake = false;
+    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, fenix, rmk }:
+  outputs = { self, nixpkgs, flake-utils, fenix, rmk, glove80-rmk }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
         rmkRev = rmk.rev or "unknown";
+        glove80RmkRev = glove80-rmk.rev or "unknown";
         rustToolchain = fenix.packages.${system}.combine [
           fenix.packages.${system}.stable.rustc
           fenix.packages.${system}.stable.cargo
@@ -78,6 +87,49 @@
           doCheck = false;
         };
 
+        # The `glove80.toml` / MoErgo JSON round-trip, compiled to wasm. The
+        # browser and the `glove80-control` CLI run the same parser, validator
+        # and renderer, so a file cannot mean one thing here and another there.
+        glove80-config-wasm = rustPlatform.buildRustPackage {
+          pname = "glove80-config-wasm";
+          version = "0.0.0-${builtins.substring 0 8 glove80RmkRev}";
+
+          src = pkgs.runCommand "glove80-rmk-with-rmk" { } ''
+            cp -r ${glove80-rmk} "$out"
+            chmod -R u+w "$out"
+            rmdir "$out/dependencies/rmk"
+            cp -r ${rmk} "$out/dependencies/rmk"
+          '';
+
+          cargoLock.lockFile = "${glove80-rmk}/Cargo.lock";
+          nativeBuildInputs = [
+            pkgs.binaryen
+            pkgs.wasm-bindgen-cli_0_2_126
+            pkgs.wasm-pack
+          ];
+
+          buildPhase = ''
+            runHook preBuild
+            export HOME="$TMPDIR/home"
+            export RUST_MIN_STACK=33554432
+            mkdir -p "$HOME"
+            wasm-pack build --release --target web --mode no-install \
+              --out-dir pkg crates/glove80-config-wasm
+            runHook postBuild
+          '';
+
+          installPhase = ''
+            runHook preInstall
+            mkdir -p "$out"
+            cp -r crates/glove80-config-wasm/pkg/. "$out/"
+            runHook postInstall
+          '';
+
+          # The crate is wasm32-gated, so a host-target check would compile an
+          # empty library; the model's own tests live in glove80-config.
+          doCheck = false;
+        };
+
         rynkbench = pkgs.buildNpmPackage {
           pname = "rynkbench";
           version = "0.0.0";
@@ -85,9 +137,10 @@
           npmDepsHash = "sha256-RFEkBVhRRTnM6hDVL+wQz65EnPz8YOhzLmLBf92aKfQ=";
 
           preBuild = ''
-            rm -rf src/vendor/rynk-wasm
-            mkdir -p src/vendor/rynk-wasm
+            rm -rf src/vendor/rynk-wasm src/vendor/glove80-config-wasm
+            mkdir -p src/vendor/rynk-wasm src/vendor/glove80-config-wasm
             cp -r ${rynk-wasm}/. src/vendor/rynk-wasm/
+            cp -r ${glove80-config-wasm}/. src/vendor/glove80-config-wasm/
           '';
 
           buildPhase = ''
@@ -206,6 +259,7 @@
         packages.rynkbench = rynkbench;
         packages.rynkbench-tauri = rynkbench-tauri;
         packages.rynk-wasm = rynk-wasm;
+        packages.glove80-config-wasm = glove80-config-wasm;
 
         checks.default = rynkbench;
 

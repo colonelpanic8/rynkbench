@@ -39,6 +39,22 @@
         "type": "github"
       }
     },
+    "glove80-rmk": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1785788447,
+        "narHash": "sha256-6uDMjxe/qWcHFCBWfjs0Cn2glwOJQl3PgXhoHjYcBDU=",
+        "owner": "colonelpanic8",
+        "repo": "glove80-rmk",
+        "rev": "5a199d2a57a1853e2e14231f61f403525ff5fa14",
+        "type": "github"
+      },
+      "original": {
+        "owner": "colonelpanic8",
+        "repo": "glove80-rmk",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1784555310,
@@ -76,6 +92,7 @@
       "inputs": {
         "fenix": "fenix",
         "flake-utils": "flake-utils",
+        "glove80-rmk": "glove80-rmk",
         "nixpkgs": "nixpkgs",
         "rmk": "rmk"
       }

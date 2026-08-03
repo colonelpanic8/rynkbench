@@ -2,9 +2,15 @@
 
 import { useRef, useState } from "react";
 import type { ChangeEvent } from "react";
-import { parseMoergoJson, serializeMoergoJson } from "../config/moergo";
-import type { MoergoImport } from "../config/moergo";
-import type { BatteryStatus, KeyAction } from "../vendor/rynk-wasm/rynk_wasm";
+import {
+  FORMAT_EXTENSION,
+  FORMAT_LABEL,
+  initConfigWasm,
+  loadCatalog,
+} from "../config/document";
+import type { ConfigFormat, ExtensionCatalog } from "../config/document";
+import { exportDocument, importDocument } from "../config/transfer";
+import type { BatteryStatus } from "../vendor/rynk-wasm/rynk_wasm";
 import { useWorkbench } from "./state";
 import { Chip, Button } from "./kit";
 import { BatteryGlyph, PowerIcon, Wordmark } from "./icons";
@@ -41,7 +47,10 @@ function BatteryReadout({ battery, split }: { battery: BatteryStatus; split: boo
 export function TopBar() {
   const { bundle, state, dispatch, io } = useWorkbench();
   const fileInput = useRef<HTMLInputElement>(null);
-  const imported = useRef<Pick<MoergoImport, "layerNames" | "template"> | null>(null);
+  /** The last document imported, kept verbatim. An export reuses it for the
+   *  layer labels the firmware does not store, and — for MoErgo output — as the
+   *  template carrying the editor-owned sections Rynk never sees. */
+  const imported = useRef<string | null>(null);
   const [transfer, setTransfer] = useState<"importing" | "exporting" | null>(null);
   const [fileNotice, setFileNotice] = useState<string | null>(null);
   const split = bundle.caps.is_split;
@@ -49,54 +58,45 @@ export function TopBar() {
     .sort((a, b) => a - b)
     .join(" | ");
 
-  const importJson = async (event: ChangeEvent<HTMLInputElement>) => {
+  const catalog = async (): Promise<ExtensionCatalog> => {
+    await initConfigWasm();
+    return loadCatalog(
+      bundle.session,
+      state,
+      bundle.extensionEffectNames,
+      bundle.extensionPaletteNames,
+    );
+  };
+
+  const importFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
     setTransfer("importing");
     setFileNotice(null);
     try {
-      const parsed = parseMoergoJson(
-        await file.text(),
-        bundle.caps.num_rows,
-        bundle.caps.num_cols,
-      );
-      if (parsed.layers.length > bundle.caps.num_layers) {
-        throw new Error(
-          `Layout has ${parsed.layers.length} layers; this keyboard supports ${bundle.caps.num_layers}`,
-        );
-      }
-      let changed = 0;
-      for (let layer = 0; layer < parsed.layers.length; layer += 1) {
-        for (let offset = 0; offset < parsed.layers[layer].length; offset += 1) {
-          const action = parsed.layers[layer][offset];
-          const previous = state.layers[layer][offset];
-          if (JSON.stringify(action) === JSON.stringify(previous)) continue;
-          const row = Math.floor(offset / bundle.caps.num_cols);
-          const col = offset % bundle.caps.num_cols;
-          dispatch({ type: "keyWriteStart", layer, row, col, action });
-          try {
-            await bundle.session.keymap.setKey(layer, row, col, action);
-            dispatch({ type: "keyWriteOk", layer, row, col });
-            changed += 1;
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            dispatch({
-              type: "keyWriteErr",
-              layer,
-              row,
-              col,
-              prev: previous,
-              attempted: action,
-              message,
-            });
-            throw new Error(`Writing layer ${layer} r${row},c${col}: ${message}`);
-          }
-        }
-      }
-      imported.current = { layerNames: parsed.layerNames, template: parsed.template };
+      const text = await file.text();
+      const result = await importDocument({
+        text,
+        session: bundle.session,
+        bundle,
+        state,
+        dispatch,
+        catalog: await catalog(),
+      });
+      imported.current = text;
+      const parts = [
+        result.changedKeys > 0
+          ? `${result.changedKeys} key${result.changedKeys === 1 ? "" : "s"}`
+          : null,
+        ...result.applied,
+      ].filter((part) => part !== null);
+      const summary =
+        parts.length === 0
+          ? `${file.name} already matches the keyboard`
+          : `Imported ${parts.join(", ")} from ${file.name}`;
       setFileNotice(
-        changed === 0 ? `${file.name} already matches the keyboard` : `Imported ${changed} key${changed === 1 ? "" : "s"} from ${file.name}`,
+        result.skipped.length === 0 ? summary : `${summary} — not applied: ${result.skipped.join(", ")}`,
       );
     } catch (error) {
       setFileNotice(error instanceof Error ? error.message : String(error));
@@ -105,30 +105,26 @@ export function TopBar() {
     }
   };
 
-  const exportJson = () => {
+  const exportFile = async (format: ConfigFormat) => {
     setTransfer("exporting");
     setFileNotice(null);
     try {
-      let layerCount = state.layers.length;
-      while (
-        layerCount > 1 &&
-        state.layers[layerCount - 1].every(
-          (action: KeyAction) => action === "No" || action === "Transparent",
-        )
-      ) {
-        layerCount -= 1;
-      }
-      const text = serializeMoergoJson(state.layers.slice(0, layerCount), {
-        layerNames: imported.current?.layerNames,
-        template: imported.current?.template,
-      });
-      const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+      const text = exportDocument(
+        state,
+        await catalog(),
+        format,
+        imported.current ?? undefined,
+      );
+      const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${bundle.model.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "glove80"}-rynkbench.json`;
+      const stem =
+        bundle.model.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() ||
+        "glove80";
+      link.download = `${stem}-rynkbench.${FORMAT_EXTENSION[format]}`;
       link.click();
       URL.revokeObjectURL(url);
-      setFileNotice(`Exported ${layerCount} layer${layerCount === 1 ? "" : "s"}`);
+      setFileNotice(`Exported ${FORMAT_LABEL[format]}`);
     } catch (error) {
       setFileNotice(error instanceof Error ? error.message : String(error));
     } finally {
@@ -167,9 +163,9 @@ export function TopBar() {
       <input
         ref={fileInput}
         type="file"
-        accept=".json,application/json"
+        accept=".toml,.json,application/json,application/toml"
         className="hidden"
-        onChange={importJson}
+        onChange={importFile}
       />
       {fileNotice && (
         <span className="max-w-64 truncate text-[11px] text-mute" title={fileNotice}>
@@ -180,17 +176,25 @@ export function TopBar() {
         variant="ghost"
         disabled={transfer !== null}
         onClick={() => fileInput.current?.click()}
-        title="Import a MoErgo Layout Editor JSON backup and write changed keys to the keyboard"
+        title="Import a glove80.toml or a MoErgo Layout Editor JSON backup, writing only what differs from the keyboard"
       >
-        {transfer === "importing" ? "Importing…" : "Import JSON"}
+        {transfer === "importing" ? "Importing…" : "Import"}
       </Button>
       <Button
         variant="ghost"
         disabled={transfer !== null}
-        onClick={exportJson}
+        onClick={() => void exportFile("toml")}
+        title="Export the live configuration as a glove80.toml — keymap and lighting"
+      >
+        {transfer === "exporting" ? "Exporting…" : "Export TOML"}
+      </Button>
+      <Button
+        variant="ghost"
+        disabled={transfer !== null}
+        onClick={() => void exportFile("moergo-json")}
         title="Export the live keymap as a MoErgo Layout Editor JSON backup"
       >
-        {transfer === "exporting" ? "Exporting…" : "Export JSON"}
+        Export JSON
       </Button>
 
       <div className="h-6 w-px bg-line-soft" />

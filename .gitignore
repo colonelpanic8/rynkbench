@@ -12,8 +12,9 @@ dist
 dist-ssr
 *.local
 
-# Generated from the flake-pinned RMK source by `npm run wasm`.
+# Generated from the flake-pinned RMK and Glove80 sources by `npm run wasm`.
 src/vendor/rynk-wasm
+src/vendor/glove80-config-wasm
 
 # Nix
 result
