@@ -12,6 +12,7 @@ import type {
   LightingConditionalSceneCell,
   LightingControls,
   LightingExtension,
+  LightingExtensionLayers,
   LightingOverlayCell,
   LightingOutputModeState,
   LightingRuntimeConditionalSceneStatus,
@@ -97,6 +98,7 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
   let runtimeConditionalStatus: LightingRuntimeConditionalSceneStatus | null = null;
   let runtimeConditionalScenes: LightingConditionalSceneCell[] = [];
   let lightingExtension: LightingExtension | null = null;
+  let lightingExtensionLayers: LightingExtensionLayers | null = null;
   let extensionEffectNames: string[] = [];
   let extensionPaletteNames: string[] = [];
   if (caps.lighting_enabled) {
@@ -164,12 +166,14 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     // feature-gated newer firmware; absence just hides the panel.
     try {
       lightingExtension = await session.lighting.extension();
+      lightingExtensionLayers = await session.lighting.extensionLayers().catch(() => null);
       [extensionEffectNames, extensionPaletteNames] = await Promise.all([
         session.lighting.extensionNames("Effects"),
         session.lighting.extensionNames("Palettes"),
       ]);
     } catch {
       lightingExtension = null;
+      lightingExtensionLayers = null;
       extensionEffectNames = [];
       extensionPaletteNames = [];
     }
@@ -244,6 +248,7 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     runtimeConditionalStatus,
     runtimeConditionalScenes,
     lightingExtension,
+    lightingExtensionLayers,
     extensionEffectNames,
     extensionPaletteNames,
     combos,

@@ -34,6 +34,7 @@ import type {
   LightingConditionalSceneCell,
   LightingConditionalSceneStatus,
   LightingExtension,
+  LightingExtensionLayers,
   LightingExtensionNameKind,
   LightingExtensionParam,
   LightingExtensionState,
@@ -118,10 +119,13 @@ export interface LightingOps {
    *  Supported iff the firmware advertises EXTENSION_EFFECTS; unsupported
    *  firmware rejects with a descriptive error. */
   extension(): Promise<LightingExtension>;
+  /** Optional second effect from the extension's ordinary effect list. */
+  extensionLayers(): Promise<LightingExtensionLayers>;
   /** Read one whole extension name list (paging is the backend's job). */
   extensionNames(kind: LightingExtensionNameKind): Promise<string[]>;
   /** Replace the extension state; revision handshake is the backend's job. */
   setExtensionState(state: LightingExtensionState): Promise<LightingState>;
+  setExtensionLayers(overlay: number | undefined): Promise<LightingState>;
   /** Read one effect's whole generic parameter list (paging is the backend's
    *  job). Parameters are per-(effect, ordinal) and the firmware names and
    *  bounds them; nothing here ascribes meaning to any name. Effects with no

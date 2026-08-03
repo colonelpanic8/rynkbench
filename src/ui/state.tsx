@@ -19,6 +19,7 @@ import type {
   LightingConditionalSceneCell,
   LightingControls,
   LightingExtension,
+  LightingExtensionLayers,
   LightingExtensionParam,
   LightingExtensionState,
   LightingLayerPolicy,
@@ -81,6 +82,7 @@ export interface ConnectedBundle {
   runtimeConditionalScenes: LightingConditionalSceneCell[];
   /** null when the firmware has no extension-effects support. */
   lightingExtension: LightingExtension | null;
+  lightingExtensionLayers: LightingExtensionLayers | null;
   /** Static extension name lists; empty when lightingExtension is null. */
   extensionEffectNames: string[];
   extensionPaletteNames: string[];
@@ -157,6 +159,7 @@ export interface WorkbenchState {
   runtimeConditionalDraft: LightingConditionalSceneCell[];
   /** Extension-effects discovery + live selection; null when unsupported. */
   lightingExtension: LightingExtension | null;
+  lightingExtensionLayers: LightingExtensionLayers | null;
   /** The generic parameter list last read, and which effect it describes.
    *  null before the first read; an empty `items` means "this effect has no
    *  parameters", which is also how firmware without the parameter surface
@@ -292,6 +295,7 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     runtimeConditionalScenes: bundle.runtimeConditionalScenes,
     runtimeConditionalDraft: bundle.runtimeConditionalScenes,
     lightingExtension: bundle.lightingExtension,
+    lightingExtensionLayers: bundle.lightingExtensionLayers,
     extensionParams: null,
     scenePolicy: bundle.sceneStatus?.policy ?? null,
     compiledScenePolicy: bundle.compiledSceneStatus?.policy ?? null,
@@ -356,6 +360,7 @@ export type WorkbenchAction =
       scenes?: LightingSceneCell[];
       /** Present only when the device exposes a lighting extension. */
       extension?: LightingExtension | null;
+      extensionLayers?: LightingExtensionLayers | null;
       /** Present only when the device has a mutable conditional table. */
       runtimeConditional?: LightingConditionalSceneCell[];
     }
@@ -374,7 +379,12 @@ export type WorkbenchAction =
       cells: LightingConditionalSceneCell[];
     }
   | { type: "scenePolicySet"; state: LightingState; policy: LightingLayerPolicy }
-  | { type: "extensionStateSet"; state: LightingState; extension: LightingExtensionState }
+  | {
+      type: "extensionStateSet";
+      state: LightingState;
+      extension: LightingExtensionState;
+      extensionLayers: LightingExtensionLayers | null;
+    }
   | { type: "extensionParamsLoaded"; effect: number; items: LightingExtensionParam[] }
   | { type: "hoverLeds"; leds: number[] | null }
   | { type: "lightingSelect"; leds: number[]; mode?: "replace" | "add" | "remove" }
@@ -509,6 +519,7 @@ export function makeWorkbenchReducer(cols: number) {
           lightingState: act.state,
           lightingOutputMode: act.outputMode ?? state.lightingOutputMode,
           lightingExtension: act.extension ?? state.lightingExtension,
+          lightingExtensionLayers: act.extensionLayers ?? state.lightingExtensionLayers,
           applied,
           draft: draftWasClean ? { ...applied } : state.draft,
           scenes: act.scenes ?? state.scenes,
@@ -630,6 +641,7 @@ export function makeWorkbenchReducer(cols: number) {
           lightingExtension: state.lightingExtension
             ? { ...state.lightingExtension, revision: act.state.revision, state: act.extension }
             : state.lightingExtension,
+          lightingExtensionLayers: act.extensionLayers,
           lightingBusy: false,
           lightingError: null,
         };
@@ -819,7 +831,11 @@ export interface WorkbenchIo {
   applyConditionalScenes(cells: LightingConditionalSceneCell[]): void;
   /** Select an extension effect/palette, then write any staged parameter
    *  values for the selected effect (only when the firmware supports it). */
-  setExtensionState(state: LightingExtensionState, params?: ExtensionParamWrite[]): void;
+  setExtensionState(
+    state: LightingExtensionState,
+    params?: ExtensionParamWrite[],
+    overlay?: number,
+  ): void;
   /** Read one effect's generic parameter list. Firmware without the parameter
    *  surface records an empty list, which renders as no parameter controls. */
   loadExtensionParams(effect: number): void;
@@ -942,13 +958,24 @@ export function makeIo(
         extensionSupported
           ? session.lighting.extension().catch(() => getState().lightingExtension)
           : Promise.resolve(undefined),
+        extensionSupported
+          ? session.lighting.extensionLayers().catch(() => getState().lightingExtensionLayers)
+          : Promise.resolve(undefined),
         conditionalScenesSupported
           ? session.lighting.conditionalScenes
               .read()
               .catch(() => getState().runtimeConditionalScenes)
           : Promise.resolve(undefined),
       ]).then(
-        ([lightingState, outputMode, overlay, scenes, extension, runtimeConditional]) =>
+        ([
+          lightingState,
+          outputMode,
+          overlay,
+          scenes,
+          extension,
+          extensionLayers,
+          runtimeConditional,
+        ]) =>
           dispatch({
             type: "lightingRefresh",
             state: lightingState,
@@ -956,6 +983,7 @@ export function makeIo(
             overlay,
             scenes,
             extension,
+            extensionLayers,
             runtimeConditional,
           }),
         () => {},
@@ -990,13 +1018,18 @@ export function makeIo(
         (err) => dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
       );
     },
-    setExtensionState(extension, params = []) {
+    setExtensionState(extension, params = [], overlay) {
       dispatch({ type: "lightingBusy", busy: true, error: null });
       // One serialized chain: the selection first, then each staged parameter
       // of the now-selected effect. The device's last reply is the state of
       // record, and the re-read afterwards makes its values authoritative.
       (async () => {
         let lightingState = await session.lighting.setExtensionState(extension);
+        let extensionLayers = getState().lightingExtensionLayers;
+        if (extensionLayers !== null) {
+          lightingState = await session.lighting.setExtensionLayers(overlay);
+          extensionLayers = { revision: lightingState.revision, overlay };
+        }
         for (const write of params) {
           lightingState = await session.lighting.setExtensionParam(
             extension.effect,
@@ -1004,7 +1037,12 @@ export function makeIo(
             write.value,
           );
         }
-        dispatch({ type: "extensionStateSet", state: lightingState, extension });
+        dispatch({
+          type: "extensionStateSet",
+          state: lightingState,
+          extension,
+          extensionLayers,
+        });
         // Re-read after every apply: the device's values, not the staged ones,
         // are the record, and a write may clamp or reject silently.
         loadParams(extension.effect);

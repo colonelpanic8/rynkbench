@@ -61,6 +61,7 @@ function placedKey(row: number, col: number, board: BoardKey): Key {
     rect: { x: board.x, y: board.y, w: 1, h: 1 },
     r: board.rot,
     rect2: undefined,
+    pivot: undefined,
   };
 }
 
@@ -460,7 +461,16 @@ export const glove80Board: BoardSpec = {
   // The real firmware's extension band: PaletteFX effects with its palette
   // pack (display names from rmk-palettefx/palettes/*.toml).
   extensionEffects: {
-    effects: ["Gradient", "Flow", "Vortex", "Sparkle", "Ripple", "Reactive", "Rain", "Storm"],
+    effects: [
+      "Gradient",
+      "Flow",
+      "Vortex",
+      "Sparkle",
+      "Ripple",
+      "Rain",
+      "Reactive",
+      "Crosshair",
+    ],
     palettes: [
       "Afterburn",
       "Amber",
@@ -479,20 +489,26 @@ export const glove80Board: BoardSpec = {
       "Viridis",
       "Watermelon",
     ],
-    initial: { effect: 1, palette: 0, value: 128, speed: 128 },
+    initial: { effect: 5, palette: 0, value: 128, speed: 128 },
+    overlay: 6,
     // Only some effects declare parameters, and the names/bounds are the
     // firmware's to choose — the UI renders whatever is advertised here.
     params: {
-      6: [
-        { name: "Density", min: 1, max: 32, default: 8 },
-        { name: "Interval", min: 10, max: 250, default: 60 },
-        { name: "Trail", min: 0, max: 255, default: 160 },
-        { name: "Width", min: 1, max: 5, default: 1 },
+      5: [
+        { name: "Drops", min: 1, max: 32, default: 6 },
+        { name: "Spawn x10ms", min: 1, max: 255, default: 30 },
+        { name: "Trail", min: 16, max: 255, default: 128 },
+        { name: "Width", min: 4, max: 64, default: 14 },
+        { name: "Rain hue", min: 0, max: 255, default: 172 },
       ],
       7: [
-        { name: "Density", min: 1, max: 64, default: 24 },
-        { name: "Gust", min: 0, max: 255, default: 96 },
-        { name: "Flash", min: 0, max: 100, default: 12 },
+        { name: "Motion", min: 0, max: 3, default: 0 },
+        { name: "Duration x10ms", min: 4, max: 255, default: 16 },
+        { name: "Arm width", min: 0, max: 48, default: 8 },
+        { name: "Pulse width", min: 4, max: 192, default: 56 },
+        { name: "Crosses", min: 1, max: 16, default: 4 },
+        { name: "Arm hue", min: 0, max: 255, default: 172 },
+        { name: "Key hue", min: 0, max: 255, default: 16 },
       ],
     },
   },

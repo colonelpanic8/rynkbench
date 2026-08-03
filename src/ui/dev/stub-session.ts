@@ -184,6 +184,7 @@ function buildLayout(): LayoutInfo {
         rect: { x: c * 1.02, y: r * 1.02, w: 0.94, h: 0.94 },
         r: 0,
         rect2: undefined,
+        pivot: undefined,
       });
     }
   }
@@ -194,8 +195,8 @@ function buildLayout(): LayoutInfo {
         name: "Stub Ortho 48",
         keys,
         encoders: [
-          { id: 0, x: (COLS - 1) * 1.02 + 1.35, y: 0.1 },
-          { id: 1, x: (COLS - 1) * 1.02 + 1.35, y: 1.35 },
+          { id: 0, x: (COLS - 1) * 1.02 + 1.35, y: 0.1, pivot: undefined },
+          { id: 1, x: (COLS - 1) * 1.02 + 1.35, y: 1.35, pivot: undefined },
         ],
       },
     ],
@@ -296,6 +297,7 @@ class StubSession implements RynkSession {
       mode: undefined,
       hold_timeout_ms: undefined,
       gap_timeout_ms: undefined,
+      quick_tap_timeout_ms: undefined,
     },
     actions: [],
   }));
@@ -577,11 +579,17 @@ class StubSession implements RynkSession {
       await lag();
       throw new Error("this firmware does not support extension effects");
     },
+    extensionLayers: async (): Promise<never> => {
+      throw new Error("this firmware does not support extension effect layering");
+    },
     extensionNames: async (): Promise<never> => {
       throw new Error("this firmware does not support extension effects");
     },
     setExtensionState: async (): Promise<never> => {
       throw new Error("this firmware does not support extension effects");
+    },
+    setExtensionLayers: async (): Promise<never> => {
+      throw new Error("this firmware does not support extension effect layering");
     },
     extensionParams: async (): Promise<never> => {
       throw new Error("this firmware does not support extension effects");

@@ -21,6 +21,7 @@ const EMPTY_PROFILE: MorseProfile = {
   mode: undefined,
   hold_timeout_ms: undefined,
   gap_timeout_ms: undefined,
+  quick_tap_timeout_ms: undefined,
 };
 
 const MODES: Array<{ id: MorseMode; label: string }> = [

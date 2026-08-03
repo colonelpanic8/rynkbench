@@ -63,6 +63,7 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     runtimeConditionalScenes: [],
     runtimeConditionalDraft: [],
     lightingExtension: null,
+    lightingExtensionLayers: null,
     extensionParams: null,
     scenePolicy: "EffectiveOnly",
     compiledScenePolicy: "EffectiveOnly",
@@ -251,10 +252,10 @@ describe("extension parameters", () => {
   });
 
   /** A session stub with just the extension surface the io facade touches. */
-  function ioWith(lighting: Partial<RynkSession["lighting"]>) {
+  function ioWith(lighting: Partial<RynkSession["lighting"]>, state = baseState()) {
     const actions: WorkbenchAction[] = [];
     const session = { lighting } as unknown as RynkSession;
-    const io = makeIo(session, () => baseState(), (act) => actions.push(act), 2, () => {});
+    const io = makeIo(session, () => state, (act) => actions.push(act), 2, () => {});
     return { io, actions };
   }
 
@@ -306,6 +307,7 @@ describe("extension parameters", () => {
       type: "extensionStateSet",
       state: { ...LIGHTING, revision: LIGHTING.revision + 3 },
       extension: selection,
+      extensionLayers: null,
     });
   });
 
@@ -322,6 +324,38 @@ describe("extension parameters", () => {
       type: "lightingBusy",
       busy: false,
       error: "parameter 99 is outside 1..=32",
+    });
+  });
+
+  it("applies the overlay selection when layering is supported", async () => {
+    const calls: string[] = [];
+    const selection = { effect: 5, palette: 0, value: 128, speed: 128 };
+    const { io, actions } = ioWith(
+      {
+        setExtensionState: async () => {
+          calls.push("primary");
+          return { ...LIGHTING, revision: 2 };
+        },
+        setExtensionLayers: async (overlay) => {
+          calls.push(`overlay ${overlay}`);
+          return { ...LIGHTING, revision: 3 };
+        },
+        extensionParams: async () => {
+          calls.push("reload");
+          return [];
+        },
+      },
+      baseState({ lightingExtensionLayers: { revision: 1, overlay: 6 } }),
+    );
+
+    io.setExtensionState(selection, [], 2);
+    await vi.waitFor(() => expect(calls).toHaveLength(3));
+    expect(calls).toEqual(["primary", "overlay 2", "reload"]);
+    expect(actions).toContainEqual({
+      type: "extensionStateSet",
+      state: { ...LIGHTING, revision: 3 },
+      extension: selection,
+      extensionLayers: { revision: 3, overlay: 2 },
     });
   });
 });

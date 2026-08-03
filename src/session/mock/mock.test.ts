@@ -460,9 +460,9 @@ describe("lighting extension effects", () => {
         "Vortex",
         "Sparkle",
         "Ripple",
-        "Reactive",
         "Rain",
-        "Storm",
+        "Reactive",
+        "Crosshair",
       ]);
       const palettes = await session.lighting.extensionNames("Palettes");
       expect(palettes).toHaveLength(16);
@@ -484,6 +484,28 @@ describe("lighting extension effects", () => {
       expect(after.state).toEqual(next);
       expect(after.revision).toBe(state.revision);
       expect(events.filter((event) => "LightingChange" in event).length).toBe(1);
+    });
+  });
+
+  it("round-trips an arbitrary overlay from the same effect list", async () => {
+    await withSession(glove80Board, async (session) => {
+      expect((await session.lighting.capabilities()).features & (1 << 13)).not.toBe(0);
+      const before = await session.lighting.extensionLayers();
+      expect(before.overlay).toBe(6);
+
+      const state = await session.lighting.setExtensionLayers(2);
+      expect(state.revision).toBeGreaterThan(before.revision);
+      expect(await session.lighting.extensionLayers()).toEqual({
+        revision: state.revision,
+        overlay: 2,
+      });
+
+      const cleared = await session.lighting.setExtensionLayers(undefined);
+      expect(await session.lighting.extensionLayers()).toEqual({
+        revision: cleared.revision,
+        overlay: undefined,
+      });
+      await expect(session.lighting.setExtensionLayers(8)).rejects.toThrow(/out of range/);
     });
   });
 
@@ -561,11 +583,13 @@ describe("lighting extension effects", () => {
     await withSession(ortho60Board, async (session) => {
       expect((await session.lighting.capabilities()).features & (1 << 11)).toBe(0);
       await expect(session.lighting.extension()).rejects.toThrow(/does not support/);
+      await expect(session.lighting.extensionLayers()).rejects.toThrow(/does not support/);
       await expect(session.lighting.extensionNames("Effects")).rejects.toThrow(/does not support/);
       await expect(session.lighting.extensionNames("Palettes")).rejects.toThrow(/does not support/);
       await expect(
         session.lighting.setExtensionState({ effect: 0, palette: 0, value: 0, speed: 0 }),
       ).rejects.toThrow(/does not support/);
+      await expect(session.lighting.setExtensionLayers(0)).rejects.toThrow(/does not support/);
       await expect(session.lighting.extensionParams(0)).rejects.toThrow(/does not support/);
       await expect(session.lighting.setExtensionParam(0, 0, 1)).rejects.toThrow(/does not support/);
     });
@@ -603,8 +627,27 @@ describe("lighting extension parameters", () => {
 
   it("serves parameters of an effect that is not the active one", async () => {
     await withSession(glove80Board, async (session) => {
+      const current = await session.lighting.extension();
+      await session.lighting.setExtensionState({ ...current.state, effect: 1 });
       expect((await session.lighting.extension()).state.effect).not.toBe(withParams);
       expect(await session.lighting.extensionParams(withParams)).toHaveLength(specs.length);
+    });
+  });
+
+  it("advertises all Crosshair controls with their firmware defaults", async () => {
+    await withSession(glove80Board, async (session) => {
+      const effects = await session.lighting.extensionNames("Effects");
+      const crosshair = effects.indexOf("Crosshair");
+      expect(crosshair).toBe(7);
+      expect(await session.lighting.extensionParams(crosshair)).toEqual([
+        { name: "Motion", min: 0, max: 3, default: 0, value: 0 },
+        { name: "Duration x10ms", min: 4, max: 255, default: 16, value: 16 },
+        { name: "Arm width", min: 0, max: 48, default: 8, value: 8 },
+        { name: "Pulse width", min: 4, max: 192, default: 56, value: 56 },
+        { name: "Crosses", min: 1, max: 16, default: 4, value: 4 },
+        { name: "Arm hue", min: 0, max: 255, default: 172, value: 172 },
+        { name: "Key hue", min: 0, max: 255, default: 16, value: 16 },
+      ]);
     });
   });
 
@@ -747,6 +790,7 @@ describe("morse slots", () => {
           mode: "PermissiveHold",
           hold_timeout_ms: 180,
           gap_timeout_ms: undefined,
+          quick_tap_timeout_ms: undefined,
         },
         actions: [[0b10, { Key: { Hid: "A" } }]],
       };

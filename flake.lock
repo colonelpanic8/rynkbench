@@ -58,11 +58,11 @@
     "rmk": {
       "flake": false,
       "locked": {
-        "lastModified": 1785529653,
-        "narHash": "sha256-lP1fSVZdXwDJDzO35OYQMJ8phYSUGgaH/nds9pJeFnw=",
+        "lastModified": 1785751290,
+        "narHash": "sha256-ZMIDBsAuHClHwfPG43ncyZRje7YEiNWamcjUT743Akk=",
         "owner": "colonelpanic8",
         "repo": "rmk",
-        "rev": "2dc13ec98f50e59928b606fa4acf8c9f8e56a42a",
+        "rev": "84dc07b22357d7a9fa6afdc8f4841521d2025983",
         "type": "github"
       },
       "original": {

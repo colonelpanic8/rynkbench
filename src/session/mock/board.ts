@@ -26,6 +26,7 @@ import type {
   LightingConditionalSceneStatus,
   LightingControls,
   LightingExtension,
+  LightingExtensionLayers,
   LightingExtensionParam,
   LightingExtensionState,
   LightingLayerPolicy,
@@ -118,6 +119,9 @@ export interface BoardSpec {
     effects: string[];
     palettes: string[];
     initial: LightingExtensionState;
+    /** Omit to simulate pre-layering firmware; null enables layering with no
+     * overlay, and a number selects that effect initially. */
+    overlay?: number | null;
     /** Generic per-effect parameters, keyed by effect index. Effects absent
      *  from the map advertise none. Omit the whole map to simulate firmware
      *  with an effect pack but no parameter surface. */
@@ -192,6 +196,7 @@ export function emptyMorse(): Morse {
       mode: undefined,
       hold_timeout_ms: undefined,
       gap_timeout_ms: undefined,
+      quick_tap_timeout_ms: undefined,
     },
     actions: [],
   };
@@ -290,6 +295,7 @@ export const COMPILED_CONDITIONAL_SCENES = 1 << 9;
 export const OUTPUT_MODE = 1 << 10;
 export const EXTENSION_EFFECTS = 1 << 11;
 export const RUNTIME_CONDITIONAL_SCENES = 1 << 12;
+export const EXTENSION_LAYERING = 1 << 13;
 const SCENE_CHUNK_CAPACITY = 16;
 // Conditional cells are much wider on the wire than scene cells, so the
 // firmware pages them far more coarsely (LIGHTING_CONDITIONAL_SCENE_CHUNK_SIZE).
@@ -343,6 +349,7 @@ class MockSession implements RynkSession {
   private background: LightingBackgroundState;
   private overlay = new Map<LightingLedId, OverlayEntry>();
   private extensionState: LightingExtensionState | null = null;
+  private extensionOverlay: number | undefined;
   /** Live parameter values keyed `${effect}:${index}`, seeded from defaults. */
   private readonly extensionParamValues = new Map<string, number>();
   /** Durable scene table keyed `${layer}:${led_id}`, insertion-ordered. */
@@ -392,6 +399,7 @@ class MockSession implements RynkSession {
     this.brightness = spec.brightness;
     this.background = { ...spec.background };
     this.extensionState = spec.extensionEffects ? { ...spec.extensionEffects.initial } : null;
+    this.extensionOverlay = spec.extensionEffects?.overlay ?? undefined;
     for (const [effect, params] of Object.entries(spec.extensionEffects?.params ?? {})) {
       params.forEach((param, index) =>
         this.extensionParamValues.set(`${effect}:${index}`, param.default),
@@ -539,12 +547,14 @@ class MockSession implements RynkSession {
         return this.touchLighting();
       }),
     extension: () => latency(() => this.readExtension()),
+    extensionLayers: () => latency(() => this.readExtensionLayers()),
     extensionNames: (kind) =>
       latency(() => {
         const pack = this.requireExtensionEffects();
         return [...(kind === "Effects" ? pack.effects : pack.palettes)];
       }),
     setExtensionState: (state) => this.setExtensionSelection(state),
+    setExtensionLayers: (overlay) => this.setExtensionLayerSelection(overlay),
     extensionParams: (effect) => latency(() => this.readExtensionParams(effect)),
     setExtensionParam: (effect, index, value) => this.setExtensionParamValue(effect, index, value),
     scenes: {
@@ -755,6 +765,7 @@ class MockSession implements RynkSession {
           : 0) |
         (this.spec.lightingOutputMode !== undefined ? OUTPUT_MODE : 0) |
         (this.spec.extensionEffects !== undefined ? EXTENSION_EFFECTS : 0) |
+        (this.spec.extensionEffects?.overlay !== undefined ? EXTENSION_LAYERING : 0) |
         ((this.spec.runtimeConditionalCapacity ?? 0) > 0 ? RUNTIME_CONDITIONAL_SCENES : 0),
       effects: 0b111, // solid | blink | breathe
     };
@@ -776,6 +787,14 @@ class MockSession implements RynkSession {
       palette_count: pack.palettes.length,
       state: { ...this.extensionState! },
     };
+  }
+
+  private readExtensionLayers(): LightingExtensionLayers {
+    const pack = this.requireExtensionEffects();
+    if (pack.overlay === undefined) {
+      throw new Error("this firmware does not support extension effect layering");
+    }
+    return { revision: this.revision, overlay: this.extensionOverlay };
   }
 
   /** The declared parameters of one effect, or [] when it declares none.
@@ -861,6 +880,22 @@ class MockSession implements RynkSession {
       }
     }
     throw new Error("extension revision retry exhausted");
+  }
+
+  private async setExtensionLayerSelection(overlay: number | undefined): Promise<LightingState> {
+    return latency(() => {
+      const current = this.readExtensionLayers();
+      const pack = this.requireExtensionEffects();
+      if (
+        overlay !== undefined &&
+        (!Number.isInteger(overlay) || overlay < 0 || overlay >= pack.effects.length)
+      ) {
+        throw new Error(`extension overlay effect ${overlay} out of range`);
+      }
+      if (current.revision !== this.revision) throw new Error("StateRevisionConflict");
+      this.extensionOverlay = overlay;
+      return this.touchLighting();
+    });
   }
 
   private checkExtensionState(

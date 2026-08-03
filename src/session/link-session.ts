@@ -513,8 +513,10 @@ export class LinkSession implements RynkSession {
       readOverlay: () => this.run(() => readLightingOverlay(client)),
       setState: (state) => this.run(() => this.setLightingState(state)),
       extension: () => this.run(() => this.readExtension()),
+      extensionLayers: () => this.run(() => this.client.get_lighting_extension_layers()),
       extensionNames: (kind) => this.run(() => this.readExtensionNames(kind)),
       setExtensionState: (state) => this.run(() => this.setExtensionSelection(state)),
+      setExtensionLayers: (overlay) => this.run(() => this.setExtensionLayers(overlay)),
       extensionParams: (effect) => this.run(() => this.readExtensionParams(effect)),
       setExtensionParam: (effect, index, value) =>
         this.run(() => this.setExtensionParamValue(effect, index, value)),
@@ -1021,6 +1023,23 @@ export class LinkSession implements RynkSession {
       return this.client.set_lighting_extension_state({
         expected_revision: fresh.revision,
         state,
+      });
+    }
+  }
+
+  private async setExtensionLayers(overlay: number | undefined): Promise<LightingState> {
+    const current = await this.client.get_lighting_extension_layers();
+    try {
+      return await this.client.set_lighting_extension_layers({
+        expected_revision: current.revision,
+        overlay,
+      });
+    } catch (error) {
+      if (!String(error).includes("RevisionConflict")) throw error;
+      const fresh = await this.client.get_lighting_extension_layers();
+      return this.client.set_lighting_extension_layers({
+        expected_revision: fresh.revision,
+        overlay,
       });
     }
   }

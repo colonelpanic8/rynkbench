@@ -21,7 +21,14 @@ const NUM_LAYERS = 3;
 const layoutKeys: Key[] = Array.from({ length: ROWS * COLS }, (_, index) => {
   const row = Math.floor(index / COLS);
   const col = index % COLS;
-  return { row, col, rect: { x: col, y: row, w: 1, h: 1 }, r: 0, rect2: undefined };
+  return {
+    row,
+    col,
+    rect: { x: col, y: row, w: 1, h: 1 },
+    r: 0,
+    rect2: undefined,
+    pivot: undefined,
+  };
 });
 
 const ZONE_NUMBER_ROW = 0;
@@ -119,7 +126,13 @@ export const ortho60Board: BoardSpec = {
   },
   layout: {
     default_variant: 0,
-    variants: [{ name: "Ortho 60", keys: layoutKeys, encoders: [{ id: 0, x: 12.7, y: 0 }] }],
+    variants: [
+      {
+        name: "Ortho 60",
+        keys: layoutKeys,
+        encoders: [{ id: 0, x: 12.7, y: 0, pivot: undefined }],
+      },
+    ],
   },
   topology: buildTopology(1, zones, simLeds),
   defaultLayers,

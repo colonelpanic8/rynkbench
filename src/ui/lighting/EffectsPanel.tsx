@@ -51,14 +51,48 @@ function NameSelect({
   );
 }
 
+function OptionalNameSelect({
+  names,
+  value,
+  onChange,
+}: {
+  names: string[];
+  value: number | undefined;
+  onChange: (index: number | undefined) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3 text-[12.5px] text-mute">
+      Overlay
+      <select
+        value={value ?? ""}
+        onChange={(event) =>
+          onChange(event.target.value === "" ? undefined : Number(event.target.value))
+        }
+        className="min-w-0 max-w-[60%] rounded-lg border border-line bg-well px-2 py-1 text-[12.5px] text-ink"
+      >
+        <option value="">None</option>
+        {names.map((name, index) => (
+          <option key={index} value={index}>
+            {name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export function EffectsPanel() {
   const { bundle, state, io } = useWorkbench();
   const extension = state.lightingExtension;
+  const extensionLayers = state.lightingExtensionLayers;
 
   const toDraft = (): LightingExtensionState | null =>
     extension ? { ...extension.state } : null;
 
   const [draft, setDraft] = useState<LightingExtensionState | null>(toDraft);
+  const [overlayDraft, setOverlayDraft] = useState<number | undefined>(
+    extensionLayers?.overlay,
+  );
 
   // Follow device pushes while the draft is clean.
   const deviceRef = useRef(toDraft());
@@ -68,6 +102,13 @@ export function EffectsPanel() {
     deviceRef.current = next;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extension]);
+
+  const overlayDeviceRef = useRef(extensionLayers?.overlay);
+  useEffect(() => {
+    const next = extensionLayers?.overlay;
+    if (overlayDraft === overlayDeviceRef.current) setOverlayDraft(next);
+    overlayDeviceRef.current = next;
+  }, [extensionLayers, overlayDraft]);
 
   // Parameters belong to the *staged* effect: the protocol serves any effect's
   // list, so picking one in the dropdown previews its parameters before Apply.
@@ -144,7 +185,10 @@ export function EffectsPanel() {
       loaded === null ? null : { effect: draft.effect, values: loaded.map((p) => p.value) },
     );
 
-  const dirty = !same(draft, clean) || paramWrites.length > 0;
+  const dirty =
+    !same(draft, clean) ||
+    overlayDraft !== extensionLayers?.overlay ||
+    paramWrites.length > 0;
 
   return (
     <div>
@@ -158,12 +202,21 @@ export function EffectsPanel() {
 
       <div className="mt-2 flex flex-col gap-2">
         {effects.length > 0 && (
-          <NameSelect
-            label="Effect"
-            names={effects}
-            value={draft.effect}
-            onChange={(effect) => setDraft({ ...draft, effect })}
-          />
+          <>
+            <NameSelect
+              label="Effect"
+              names={effects}
+              value={draft.effect}
+              onChange={(effect) => setDraft({ ...draft, effect })}
+            />
+            {extensionLayers !== null && (
+              <OptionalNameSelect
+                names={effects}
+                value={overlayDraft}
+                onChange={setOverlayDraft}
+              />
+            )}
+          </>
         )}
         {palettes.length > 0 && (
           <NameSelect
@@ -221,7 +274,7 @@ export function EffectsPanel() {
               variant="primary"
               className="flex-1 py-1"
               disabled={state.lightingBusy}
-              onClick={() => io.setExtensionState({ ...draft }, paramWrites)}
+              onClick={() => io.setExtensionState({ ...draft }, paramWrites, overlayDraft)}
             >
               Apply
             </Button>
@@ -230,6 +283,7 @@ export function EffectsPanel() {
               className="py-1"
               onClick={() => {
                 setDraft(clean);
+                setOverlayDraft(extensionLayers?.overlay);
                 revertParams();
               }}
             >
