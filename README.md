@@ -17,6 +17,9 @@ keymap and per-key lighting live — no install, nothing leaves your machine.
   and conditional/status lighting are read back and reflected in the live view.
 - **Advanced config** — combos, morse (tap-dance), fork, and per-behavior tuning
   for firmware that reports support for them.
+- **Configuration files** — import `glove80.toml` or a MoErgo Layout Editor JSON
+  backup, write only runtime differences, and export either format through the
+  same validation and conversion model as `glove80-control`.
 - **Split tuning** — inspect and adjust the volatile powered/battery BLE latency
   policy on compatible split centrals.
 - **Simulated boards** — demo a split ergo, an ortholinear 60, and a dev stub
