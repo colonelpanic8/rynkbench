@@ -1131,11 +1131,13 @@ class MockSession implements RynkSession {
 }
 
 export function mockProvider(spec: BoardSpec): SessionProvider {
+  const open = () => latency<RynkSession>(() => new MockSession(spec));
   return {
     kind: "mock",
     title: spec.title,
     description: spec.description,
     available: () => true,
-    connect: () => latency<RynkSession>(() => new MockSession(spec)),
+    connect: open,
+    reconnect: open,
   };
 }

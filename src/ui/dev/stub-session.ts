@@ -666,13 +666,16 @@ class StubSession implements RynkSession {
   }
 }
 
+const openStubSession = async () => {
+  await sleep(700);
+  return new StubSession();
+};
+
 export const devStubProvider: SessionProvider = {
   kind: "mock",
   title: "Dev stub board",
   description: "In-memory simulated 4×12 ortho with encoders and lighting",
   available: () => true,
-  connect: async () => {
-    await sleep(700);
-    return new StubSession();
-  },
+  connect: openStubSession,
+  reconnect: openStubSession,
 };

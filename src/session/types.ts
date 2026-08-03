@@ -263,4 +263,10 @@ export interface SessionProvider {
    * that show a browser device picker are permitted to do so.
    */
   connect(): Promise<RynkSession>;
+  /**
+   * Reopen the most recently connected device without requiring a user
+   * gesture or showing a device picker. Used for automatic recovery after an
+   * unexpected transport drop.
+   */
+  reconnect(): Promise<RynkSession>;
 }

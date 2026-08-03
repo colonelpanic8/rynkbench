@@ -26,6 +26,9 @@ interface NativeOpenResult {
   label: string;
 }
 
+let lastCandidate: NativeCandidate | null = null;
+let hasConnected = false;
+
 function tauri(): TauriGlobal {
   const t = window.__TAURI__;
   if (!t) throw new Error("Tauri runtime is not available");
@@ -84,39 +87,60 @@ export const nativeProvider: SessionProvider = {
   title: "USB (native)",
   description: "Connect to a Rynk keyboard over USB through the desktop app's HID backend.",
   available: () => typeof window !== "undefined" && window.__TAURI__ !== undefined,
-  async connect() {
-    // Two keyboards of the same model expose identical labels, and only a
-    // completed handshake proves which interface is a usable Rynk peer, so
-    // try each candidate rather than trusting enumeration order. Serials come
-    // back with the list purely so a failure can name what was tried.
-    const t = tauri();
-    let candidates: NativeCandidate[] = [];
-    try {
-      candidates = await t.core.invoke<NativeCandidate[]>("rynk_list");
-    } catch {
-      // An older desktop shell has no rynk_list; fall back to its own choice.
-    }
-    const paths: (string | undefined)[] = candidates.length
-      ? candidates.map((c) => c.path)
-      : [undefined];
-
-    let failure: unknown;
-    for (const path of paths) {
-      let session: LinkSession | undefined;
-      try {
-        session = await openSession(path);
-        return session;
-      } catch (error) {
-        failure ??= error;
-      }
-    }
-    throw failure instanceof Error
-      ? new Error(
-          `No Rynk interface completed the handshake (tried ${describe(candidates)}): ${failure.message}`,
-        )
-      : failure;
+  connect: () => connectNative(),
+  reconnect: () => {
+    if (!hasConnected) throw new Error("No native keyboard has been connected yet");
+    return connectNative(lastCandidate);
   },
 };
+
+/**
+ * Two keyboards of the same model expose identical labels, and only a
+ * completed handshake proves which interface is a usable Rynk peer. On
+ * reconnect, prefer the previous serial/path but still tolerate a changed
+ * hidraw path after USB re-enumeration.
+ */
+async function connectNative(preferred: NativeCandidate | null = null): Promise<LinkSession> {
+  const t = tauri();
+  let candidates: NativeCandidate[] = [];
+  try {
+    candidates = await t.core.invoke<NativeCandidate[]>("rynk_list");
+  } catch {
+    // An older desktop shell has no rynk_list; fall back to its own choice.
+  }
+  if (preferred) {
+    candidates.sort(
+      (a, b) =>
+        Number(matchesCandidate(b, preferred)) - Number(matchesCandidate(a, preferred)),
+    );
+  }
+  const paths: (string | undefined)[] = candidates.length
+    ? candidates.map((candidate) => candidate.path)
+    : [undefined];
+
+  let failure: unknown;
+  for (const path of paths) {
+    try {
+      const session = await openSession(path);
+      lastCandidate = candidates.find((candidate) => candidate.path === path) ?? null;
+      hasConnected = true;
+      return session;
+    } catch (error) {
+      failure ??= error;
+    }
+  }
+  throw failure instanceof Error
+    ? new Error(
+        `No Rynk interface completed the handshake (tried ${describe(candidates)}): ${failure.message}`,
+      )
+    : failure;
+}
+
+function matchesCandidate(candidate: NativeCandidate, preferred: NativeCandidate): boolean {
+  return preferred.serial
+    ? candidate.serial === preferred.serial
+    : candidate.path === preferred.path;
+}
 
 function describe(candidates: NativeCandidate[]): string {
   if (!candidates.length) return "the default interface";

@@ -24,15 +24,20 @@ vi.mock("../link-session", () => ({
   REQUEST_TIMEOUT_MS: 5_000,
   LinkSession: class {
     client: { label: string };
+    link: { close(): Promise<void> };
     constructor(
       client: { label: string },
-      _link: unknown,
+      link: { close(): Promise<void> },
       hooks: { watchDisconnect: (onUnplug: () => void) => () => void },
     ) {
       this.client = client;
+      this.link = link;
       hooks.watchDisconnect(() => {
         unplugged = true;
       });
+    }
+    close() {
+      return this.link.close();
     }
   },
 }));
@@ -96,6 +101,17 @@ describe("Web Serial provider", () => {
 
     disconnect();
     expect(unplugged).toBe(true);
+  });
+
+  it("reconnects the selected port without reopening the chooser", async () => {
+    const selected = port();
+    const { requestPort } = install(selected);
+    const original = await webSerialProvider.connect();
+    await original.close();
+
+    await webSerialProvider.reconnect();
+
+    expect(requestPort).toHaveBeenCalledOnce();
   });
 
   it("closes the serial port when the Rynk handshake fails", async () => {

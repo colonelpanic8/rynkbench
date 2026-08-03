@@ -91,7 +91,7 @@ export function Workbench({
 }: {
   bundle: ConnectedBundle;
   onClose: () => void;
-  onUnexpectedDisconnect: () => void;
+  onUnexpectedDisconnect: (session: ConnectedBundle["session"]) => void;
 }) {
   const reducer = useMemo(
     () => makeWorkbenchReducer(bundle.caps.num_cols),
@@ -160,7 +160,7 @@ export function Workbench({
       (modifiers) => dispatch({ type: "topicModifier", modifiers }),
       () => {},
     );
-    bundle.session.onDisconnect(onUnexpectedDisconnect);
+    bundle.session.onDisconnect(() => onUnexpectedDisconnect(bundle.session));
   }, [bundle.session, bundle.caps.lighting_enabled, io, onUnexpectedDisconnect]);
 
   const ctx = useMemo(

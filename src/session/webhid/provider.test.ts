@@ -15,8 +15,13 @@ vi.mock("../wasm", () => ({ initWasm: () => Promise.resolve() }));
 vi.mock("../link-session", () => ({
   LinkSession: class {
     client: { label: string };
-    constructor(client: { label: string }) {
+    link: { close(): Promise<void> };
+    constructor(client: { label: string }, link: { close(): Promise<void> }) {
       this.client = client;
+      this.link = link;
+    }
+    close() {
+      return this.link.close();
     }
   },
 }));
@@ -82,6 +87,18 @@ describe("WebHID provider device selection", () => {
     const session = (await webHidProvider.connect()) as unknown as { client: { label: string } };
 
     expect(session.client.label).toBe("Glove80");
+    expect(requestDevice).toHaveBeenCalledOnce();
+  });
+
+  it("reconnects the last device without opening the picker", async () => {
+    const working = device("Glove80");
+    handshakes.add("Glove80");
+    const requestDevice = install([], working);
+    const original = await webHidProvider.connect();
+    await original.close();
+
+    await webHidProvider.reconnect();
+
     expect(requestDevice).toHaveBeenCalledOnce();
   });
 

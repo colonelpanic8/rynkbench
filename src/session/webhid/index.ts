@@ -13,6 +13,8 @@ import {
   requestRynkDevice,
 } from "./link";
 
+let lastDevice: HIDDevice | null = null;
+
 export const webHidProvider: SessionProvider = {
   kind: "webhid",
   title: "USB (WebHID)",
@@ -30,7 +32,7 @@ export const webHidProvider: SessionProvider = {
     let failure: unknown;
     for (const candidate of granted) {
       try {
-        return await session(candidate);
+        return await rememberedSession(candidate);
       } catch (error) {
         // A grant that cannot handshake is out of the running for this page
         // session, so a later attempt reaches the picker instead of retrying
@@ -51,9 +53,21 @@ export const webHidProvider: SessionProvider = {
     // No usable grant, so this is the first run (or every grant has been
     // ruled out). The picker must open before any await on wasm init would
     // burn the user gesture that allows it.
-    return await session(await requestRynkDevice());
+    return await rememberedSession(await requestRynkDevice());
+  },
+  async reconnect() {
+    if (!lastDevice) throw new Error("No WebHID keyboard has been connected yet");
+    // Do not reject or prompt for a device here. A transient USB loss is
+    // expected during recovery, and the app will retry this exact grant.
+    return rememberedSession(lastDevice);
   },
 };
+
+async function rememberedSession(device: HIDDevice) {
+  const connected = await session(device);
+  lastDevice = device;
+  return connected;
+}
 
 async function session(device: HIDDevice) {
   await openRynkHidDevice(device);

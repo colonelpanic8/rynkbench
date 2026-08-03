@@ -8,6 +8,8 @@ import type { SessionProvider } from "../types";
 import { initWasm } from "../wasm";
 import { requestRynkSerialPort, serialByteLink } from "./link";
 
+let lastPort: SerialPort | null = null;
+
 export const webSerialProvider: SessionProvider = {
   kind: "webserial",
   title: "USB (Web Serial)",
@@ -18,9 +20,21 @@ export const webSerialProvider: SessionProvider = {
     // requestPort must run before any await that would consume the click's user
     // activation. The chooser is intentionally unfiltered because RMK boards
     // do not share a vendor/product id.
-    return session(await requestRynkSerialPort());
+    return rememberedSession(await requestRynkSerialPort());
+  },
+  async reconnect() {
+    if (!lastPort) throw new Error("No Web Serial keyboard has been connected yet");
+    // Reusing the granted SerialPort is permitted without a user gesture and
+    // avoids opening a chooser while the workbench is recovering.
+    return rememberedSession(lastPort);
   },
 };
+
+async function rememberedSession(port: SerialPort) {
+  const connected = await session(port);
+  lastPort = port;
+  return connected;
+}
 
 async function session(port: SerialPort) {
   const link = await serialByteLink(port);
