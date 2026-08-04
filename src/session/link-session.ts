@@ -19,6 +19,8 @@ import type {
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
   LightingConditionalSceneStatus,
+  LightingExtendedConditionalSceneCell,
+  LightingExtendedRuntimeConditionalScenesPage,
   LightingExtension,
   LightingExtensionNameKind,
   LightingExtensionParam,
@@ -193,6 +195,25 @@ interface RuntimeConditionalClient {
   ): Promise<LightingRuntimeConditionalScenesPage>;
 }
 
+interface ExtendedRuntimeConditionalClient {
+  get_lighting_extended_runtime_conditional_scene_status(): Promise<LightingRuntimeConditionalSceneStatus>;
+  get_lighting_extended_runtime_conditional_scenes(
+    request: LightingRuntimeConditionalScenePageRequest,
+  ): Promise<LightingExtendedRuntimeConditionalScenesPage>;
+}
+
+/** The two conditional-table readers differ only in which endpoint pair they
+ *  call, so they share one pager rather than one copy of the coherence rules
+ *  each. */
+interface ConditionalPager<Cell> {
+  status(): Promise<LightingRuntimeConditionalSceneStatus>;
+  page(request: LightingRuntimeConditionalScenePageRequest): Promise<{
+    revision: number;
+    total_count: number;
+    items: Cell[];
+  }>;
+}
+
 const TOPOLOGY_READ_ATTEMPTS = 3;
 const OVERLAY_READ_ATTEMPTS = 3;
 const SCENE_READ_ATTEMPTS = 3;
@@ -207,6 +228,12 @@ const COMPILED_CONDITIONAL_SCENES = 1 << 9;
 const OUTPUT_MODE = 1 << 10;
 const EXTENSION_EFFECTS = 1 << 11;
 const RUNTIME_CONDITIONAL_SCENES = 1 << 12;
+// LightingFeatureFlags::RUNTIME_EFFECTS_CONDITIONS. This bit describes the
+// extended cell's *encoding*, not just an extra predicate: firmware that
+// advertises only RUNTIME_CONNECTION_CONDITIONS (1 << 14) speaks an earlier
+// extended cell, so gating on that bit instead would risk a misparse. Anything
+// short of this bit therefore uses the legacy endpoints.
+const RUNTIME_EFFECTS_CONDITIONS = 1 << 15;
 
 /** The topology changed under a paged read; the whole read restarts. */
 class TopologyDrift extends Error {
@@ -383,15 +410,45 @@ export async function readLightingRuntimeConditionalScenes(
   client: RuntimeConditionalClient,
   attempts = RUNTIME_CONDITIONAL_READ_ATTEMPTS,
 ): Promise<LightingConditionalSceneCell[]> {
+  return readConditionalTable(
+    {
+      status: () => client.get_lighting_runtime_conditional_scene_status(),
+      page: (request) => client.get_lighting_runtime_conditional_scenes(request),
+    },
+    attempts,
+  );
+}
+
+/** The extended table read. Same coherence rules; the cells additionally carry
+ *  the connection and effects predicates the legacy endpoints omit. Reading a
+ *  predicate-bearing table through the legacy pair and writing it back is what
+ *  silently strips those predicates, so callers that can use this must. */
+export async function readLightingExtendedRuntimeConditionalScenes(
+  client: ExtendedRuntimeConditionalClient,
+  attempts = RUNTIME_CONDITIONAL_READ_ATTEMPTS,
+): Promise<LightingExtendedConditionalSceneCell[]> {
+  return readConditionalTable(
+    {
+      status: () => client.get_lighting_extended_runtime_conditional_scene_status(),
+      page: (request) => client.get_lighting_extended_runtime_conditional_scenes(request),
+    },
+    attempts,
+  );
+}
+
+async function readConditionalTable<Cell>(
+  pager: ConditionalPager<Cell>,
+  attempts: number,
+): Promise<Cell[]> {
   let lastConflict: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {
     // Request the status even for an empty table: besides pinning the
     // revision, it probes endpoint support on firmware without the surface.
-    const status = await client.get_lighting_runtime_conditional_scene_status();
+    const status = await pager.status();
     try {
-      const cells: LightingConditionalSceneCell[] = [];
+      const cells: Cell[] = [];
       while (cells.length < status.cell_len) {
-        const page = await client.get_lighting_runtime_conditional_scenes({
+        const page = await pager.page({
           revision: status.revision,
           offset: cells.length,
         });
@@ -480,6 +537,7 @@ export class LinkSession implements RynkSession {
       rebootToBootloader: () => this.run(() => client.bootloader_jump()),
       bleStatus: () => this.run(() => client.get_ble_status()),
       clearBleProfile: (slot) => this.run(() => client.clear_ble_profile(slot)),
+      switchBleProfile: (slot) => this.run(() => client.switch_ble_profile(slot)),
       peripheralStatus: (slot) => this.run(() => client.get_peripheral_status(slot)),
       matrixState: () => this.run(() => client.get_matrix_state()),
       modifierState: () => this.run(() => client.get_modifier_state()),
@@ -1078,38 +1136,90 @@ export class LinkSession implements RynkSession {
     return this.client.get_lighting_runtime_conditional_scene_status();
   }
 
-  private async readAllRuntimeConditionalScenes(): Promise<LightingConditionalSceneCell[]> {
+  /** Whether this firmware speaks the extended conditional cell. */
+  private async extendedConditionalsSupported(): Promise<boolean> {
+    const caps = await this.client.get_lighting_capabilities();
+    return (caps.features & RUNTIME_EFFECTS_CONDITIONS) !== 0;
+  }
+
+  private async readAllRuntimeConditionalScenes(): Promise<
+    LightingExtendedConditionalSceneCell[]
+  > {
     await this.readRuntimeConditionalStatus();
-    return readLightingRuntimeConditionalScenes(this.client);
+    if (await this.extendedConditionalsSupported()) {
+      return readLightingExtendedRuntimeConditionalScenes(this.client);
+    }
+    // Legacy firmware stores no connection or effects predicate, so widening
+    // its cells loses nothing.
+    const cells = await readLightingRuntimeConditionalScenes(this.client);
+    return cells.map((cell) => ({ cell, connection: undefined, effects: undefined }));
   }
 
   private async replaceRuntimeConditionalCells(
-    cells: LightingConditionalSceneCell[],
+    cells: LightingExtendedConditionalSceneCell[],
   ): Promise<LightingState> {
     // Same shape as replaceSceneCells: one atomic replacement, staged in
     // chunk-sized pages under the revision the status pinned, with a
     // best-effort abort so a failed stage never leaves a dangling transaction.
     const status = await this.readRuntimeConditionalStatus();
     const chunkCapacity = Math.max(1, status.chunk_capacity);
-    const transaction = await this.client.begin_lighting_runtime_conditional_scene_replace({
-      expected_revision: status.revision,
-      cell_count: cells.length,
-    });
+    const extended = await this.extendedConditionalsSupported();
+    if (!extended) {
+      // Refuse rather than write a table the firmware would store without its
+      // predicates. Dropping them silently is the exact failure this path
+      // exists to prevent, and the rule would then match unconditionally.
+      const gated = cells.findIndex(
+        (cell) => cell.connection !== undefined || cell.effects !== undefined,
+      );
+      if (gated !== -1) {
+        throw new Error(
+          `rule ${gated + 1} names a connection or effects condition, which this ` +
+            `firmware cannot store; update the firmware or remove the condition`,
+        );
+      }
+    }
+    const transaction = extended
+      ? await this.client.begin_lighting_extended_runtime_conditional_scene_replace({
+          expected_revision: status.revision,
+          cell_count: cells.length,
+        })
+      : await this.client.begin_lighting_runtime_conditional_scene_replace({
+          expected_revision: status.revision,
+          cell_count: cells.length,
+        });
     try {
       for (let offset = 0; offset < cells.length; offset += chunkCapacity) {
-        await this.client.put_lighting_runtime_conditional_scene_chunk({
-          transaction_id: transaction.id,
-          offset,
-          cells: cells.slice(offset, offset + chunkCapacity),
-        });
+        const chunk = cells.slice(offset, offset + chunkCapacity);
+        if (extended) {
+          await this.client.put_lighting_extended_runtime_conditional_scene_chunk({
+            transaction_id: transaction.id,
+            offset,
+            cells: chunk,
+          });
+        } else {
+          await this.client.put_lighting_runtime_conditional_scene_chunk({
+            transaction_id: transaction.id,
+            offset,
+            cells: chunk.map((entry) => entry.cell),
+          });
+        }
       }
-      return await this.client.commit_lighting_runtime_conditional_scene_replace({
-        transaction_id: transaction.id,
-      });
+      return extended
+        ? await this.client.commit_lighting_extended_runtime_conditional_scene_replace({
+            transaction_id: transaction.id,
+          })
+        : await this.client.commit_lighting_runtime_conditional_scene_replace({
+            transaction_id: transaction.id,
+          });
     } catch (error) {
-      await this.client
-        .abort_lighting_runtime_conditional_scene_replace({ transaction_id: transaction.id })
-        .catch(() => undefined);
+      const abort = extended
+        ? this.client.abort_lighting_extended_runtime_conditional_scene_replace({
+            transaction_id: transaction.id,
+          })
+        : this.client.abort_lighting_runtime_conditional_scene_replace({
+            transaction_id: transaction.id,
+          });
+      await abort.catch(() => undefined);
       throw error;
     }
   }

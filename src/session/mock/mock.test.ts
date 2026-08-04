@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   Combo,
   LightingConditionalSceneCell,
+  LightingExtendedConditionalSceneCell,
   Morse,
   TopicEvent,
 } from "../../vendor/rynk-wasm/rynk_wasm";
@@ -339,15 +340,19 @@ describe("runtime conditional scenes", () => {
   const rule = (
     led_id: number,
     over: Partial<LightingConditionalSceneCell["conditions"]> = {},
-  ): LightingConditionalSceneCell => ({
-    conditions: {
-      layer: undefined,
-      battery: undefined,
-      output_mode: undefined,
-      ...over,
+  ): LightingExtendedConditionalSceneCell => ({
+    cell: {
+      conditions: {
+        layer: undefined,
+        battery: undefined,
+        output_mode: undefined,
+        ...over,
+      },
+      led_id,
+      effect: { Solid: { color: { r: 1, g: 2, b: 3 } } },
     },
-    led_id,
-    effect: { Solid: { color: { r: 1, g: 2, b: 3 } } },
+    connection: undefined,
+    effects: undefined,
   });
 
   it("advertises RUNTIME_CONDITIONAL_SCENES and serves the seeded ordered table", async () => {
@@ -362,7 +367,7 @@ describe("runtime conditional scenes", () => {
       expect(cells).toEqual(glove80Board.seedRuntimeConditionalScenes);
       // Two rules deliberately claim the same LED; the later one wins, so
       // duplicates must survive the round trip in order.
-      const shared = cells.filter((cell) => cell.led_id === cells[0].led_id);
+      const shared = cells.filter((entry) => entry.cell.led_id === cells[0].cell.led_id);
       expect(shared.length).toBeGreaterThan(1);
     });
   });
@@ -390,6 +395,48 @@ describe("runtime conditional scenes", () => {
       expect(await session.lighting.conditionalScenes.read()).toEqual([]);
       expect((await session.lighting.conditionalScenes.status()).cell_len).toBe(0);
       expect((await session.lighting.capabilities()).features & (1 << 12)).not.toBe(0);
+    });
+  });
+
+  it("advertises the extended cell and round-trips connection and effects predicates", async () => {
+    await withSession(glove80Board, async (session) => {
+      // RUNTIME_CONNECTION_CONDITIONS | RUNTIME_EFFECTS_CONDITIONS.
+      const features = (await session.lighting.capabilities()).features;
+      expect(features & (1 << 14)).not.toBe(0);
+      expect(features & (1 << 15)).not.toBe(0);
+      const gated = {
+        ...rule(0),
+        connection: {
+          transport: "Ble" as const,
+          profile: 2,
+          ble_state: "Connected" as const,
+          bonded: { slot: 1, bonded: true },
+          usb_connected: false,
+        },
+        effects: { enabled: true },
+      };
+      await session.lighting.conditionalScenes.replace([gated]);
+      // The predicates must survive the round trip verbatim: reading a table
+      // and writing it back is exactly how a host silently strips them.
+      expect(await session.lighting.conditionalScenes.read()).toEqual([gated]);
+    });
+  });
+
+  it("refuses predicates on firmware that cannot store them", async () => {
+    // Firmware without the extended cell cannot hold the seeded predicate
+    // rules either, so the fixture drops them alongside the capability.
+    const legacy = {
+      ...glove80Board,
+      runtimeConditionalPredicates: false,
+      seedRuntimeConditionalScenes: glove80Board.seedRuntimeConditionalScenes?.filter(
+        (entry) => entry.connection === undefined && entry.effects === undefined,
+      ),
+    };
+    await withSession(legacy, async (session) => {
+      expect((await session.lighting.capabilities()).features & (1 << 15)).toBe(0);
+      await expect(
+        session.lighting.conditionalScenes.replace([{ ...rule(0), effects: { enabled: true } }]),
+      ).rejects.toThrow(/cannot store/);
     });
   });
 

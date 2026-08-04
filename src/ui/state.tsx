@@ -17,6 +17,7 @@ import type {
   LightingCapabilities,
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
+  LightingExtendedConditionalSceneCell,
   LightingControls,
   LightingExtension,
   LightingExtensionLayers,
@@ -79,7 +80,7 @@ export interface ConnectedBundle {
   /** Mutable ordered conditional table. null when the firmware has no such
    *  table at all — distinct from a supported-but-empty table ([] cells). */
   runtimeConditionalStatus: LightingRuntimeConditionalSceneStatus | null;
-  runtimeConditionalScenes: LightingConditionalSceneCell[];
+  runtimeConditionalScenes: LightingExtendedConditionalSceneCell[];
   /** null when the firmware has no extension-effects support. */
   lightingExtension: LightingExtension | null;
   lightingExtensionLayers: LightingExtensionLayers | null;
@@ -152,11 +153,11 @@ export interface WorkbenchState {
   lightingControls: LightingControls;
   /** The mutable ordered conditional table as last known on-device. Always
    *  empty when the firmware has no such table. */
-  runtimeConditionalScenes: LightingConditionalSceneCell[];
+  runtimeConditionalScenes: LightingExtendedConditionalSceneCell[];
   /** The same table as the user wants it (staged). Order carries meaning, so
    *  this is a list, and a reorder is a real, applicable difference. Follows
    *  device pushes while it matches `runtimeConditionalScenes`. */
-  runtimeConditionalDraft: LightingConditionalSceneCell[];
+  runtimeConditionalDraft: LightingExtendedConditionalSceneCell[];
   /** Extension-effects discovery + live selection; null when unsupported. */
   lightingExtension: LightingExtension | null;
   lightingExtensionLayers: LightingExtensionLayers | null;
@@ -362,7 +363,7 @@ export type WorkbenchAction =
       extension?: LightingExtension | null;
       extensionLayers?: LightingExtensionLayers | null;
       /** Present only when the device has a mutable conditional table. */
-      runtimeConditional?: LightingConditionalSceneCell[];
+      runtimeConditional?: LightingExtendedConditionalSceneCell[];
     }
   | { type: "lightingTarget"; target: LightingTarget }
   | { type: "paint"; cells: LightingOverlayCell[] }
@@ -371,12 +372,12 @@ export type WorkbenchAction =
   | { type: "lightingBusy"; busy: boolean; error?: string | null }
   | { type: "overlayApplied"; state: LightingState; cells: LightingOverlayCell[] }
   | { type: "scenesApplied"; state: LightingState; cells: LightingSceneCell[] }
-  | { type: "conditionalDraft"; cells: LightingConditionalSceneCell[] }
+  | { type: "conditionalDraft"; cells: LightingExtendedConditionalSceneCell[] }
   | { type: "conditionalDraftReset" }
   | {
       type: "conditionalApplied";
       state: LightingState;
-      cells: LightingConditionalSceneCell[];
+      cells: LightingExtendedConditionalSceneCell[];
     }
   | { type: "scenePolicySet"; state: LightingState; policy: LightingLayerPolicy }
   | {
@@ -767,8 +768,8 @@ export function overlaysEqual(
  *  design: these rules compose in table order and a later rule wins a shared
  *  slot, so permuting them is a real change the device must be told about. */
 export function conditionalTablesEqual(
-  a: LightingConditionalSceneCell[],
-  b: LightingConditionalSceneCell[],
+  a: LightingExtendedConditionalSceneCell[],
+  b: LightingExtendedConditionalSceneCell[],
 ): boolean {
   if (a.length !== b.length) return false;
   return a.every((cell, index) => JSON.stringify(cell) === JSON.stringify(b[index]));
@@ -828,7 +829,7 @@ export interface WorkbenchIo {
   setScenePolicy(policy: LightingLayerPolicy): void;
   /** Atomically replace the mutable conditional table with this exact order
    *  (only when the firmware has such a table). */
-  applyConditionalScenes(cells: LightingConditionalSceneCell[]): void;
+  applyConditionalScenes(cells: LightingExtendedConditionalSceneCell[]): void;
   /** Select an extension effect/palette, then write any staged parameter
    *  values for the selected effect (only when the firmware supports it). */
   setExtensionState(

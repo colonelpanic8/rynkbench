@@ -11,21 +11,36 @@
 
 import { useMemo, useState } from "react";
 import type {
+  BleState,
+  LightingActiveTransport,
   LightingChargeCondition,
   LightingConditionalSceneCell,
+  LightingConnectionCondition,
   LightingOutputMode,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import { conditionalTablesEqual, useWorkbench } from "../state";
 import { Button, SectionLabel, TextInput, cx } from "../kit";
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, TrashIcon } from "../icons";
 import { cssEmissiveRgb } from "../color";
-import { describeConditions, runtimeConditionalSupported } from "./firmwareRules";
+import { describeRuleConditions, runtimeConditionalSupported } from "./firmwareRules";
 import { describeEffect, effectRgb } from "./effect";
 import { EffectEditor } from "./EffectEditor";
 import { appendRule, moveRule, newRule, removeRule, replaceRule } from "./rules";
+import type { Rule, Rules } from "./rules";
 
 const CHARGE_STATES: LightingChargeCondition[] = ["Any", "Charging", "Discharging", "Unknown"];
+// LightingFeatureFlags::RUNTIME_EFFECTS_CONDITIONS.
+const RUNTIME_EFFECTS_CONDITIONS = 1 << 15;
 const OUTPUT_MODES: LightingOutputMode[] = ["AlwaysOn", "AlwaysOff", "PoweredOnly"];
+const TRANSPORTS: LightingActiveTransport[] = ["Usb", "Ble", "NoneActive"];
+const BLE_STATES: BleState[] = ["Advertising", "Connected", "Inactive"];
+const EMPTY_CONNECTION: LightingConnectionCondition = {
+  transport: undefined,
+  profile: undefined,
+  ble_state: undefined,
+  bonded: undefined,
+  usb_connected: undefined,
+};
 
 const DEFAULT_EFFECT = { Solid: { color: { r: 40, g: 160, b: 255 } } } as const;
 
@@ -96,11 +111,13 @@ export function ConditionalRulesPanel() {
   const full = rules.length >= status.capacity;
   const ledName = (id: number) => ledLabels.get(id) ?? `LED ${id}`;
 
-  const setRules = (cells: LightingConditionalSceneCell[]) =>
-    dispatch({ type: "conditionalDraft", cells });
+  const setRules = (cells: Rules) => dispatch({ type: "conditionalDraft", cells });
 
-  const edit = (index: number, cell: LightingConditionalSceneCell) =>
-    setRules(replaceRule(rules, index, cell));
+  const edit = (index: number, cell: Rule) => setRules(replaceRule(rules, index, cell));
+
+  /** Edit the base cell of a rule, leaving its extended predicates alone. */
+  const editCell = (index: number, rule: Rule, cell: LightingConditionalSceneCell) =>
+    edit(index, { ...rule, cell });
 
   const move = (index: number, to: number) => {
     const next = moveRule(rules, index, to);
@@ -123,7 +140,26 @@ export function ConditionalRulesPanel() {
   };
 
   const rule = selected === null ? undefined : rules[selected];
-  const conditions = rule?.conditions;
+  const conditions = rule?.cell.conditions;
+  const connection = rule?.connection;
+  // Gate on the encoding bit, not on the connection bit: firmware advertising
+  // only RUNTIME_CONNECTION_CONDITIONS speaks an earlier extended cell that
+  // this build does not write.
+  const predicatesSupported =
+    ((bundle.lightingCaps?.features ?? 0) & RUNTIME_EFFECTS_CONDITIONS) !== 0;
+
+  const setConnection = (target: Rule, next: LightingConnectionCondition) => {
+    if (selected === null) return;
+    // An empty condition matches every connection state, which is the same as
+    // naming none — collapse it so the rule reads honestly.
+    const empty =
+      next.transport === undefined &&
+      next.profile === undefined &&
+      next.ble_state === undefined &&
+      next.bonded === undefined &&
+      next.usb_connected === undefined;
+    edit(selected, { ...target, connection: empty ? undefined : next });
+  };
 
   return (
     <div>
@@ -138,7 +174,8 @@ export function ConditionalRulesPanel() {
 
       {rules.length > 0 && (
         <div className="mt-2 flex flex-col gap-1">
-          {rules.map((cell, index) => {
+          {rules.map((entry, index) => {
+            const cell = entry.cell;
             const open = index === selected;
             return (
               <div
@@ -157,7 +194,7 @@ export function ConditionalRulesPanel() {
                   <button
                     type="button"
                     onClick={() => setSelected(open ? null : index)}
-                    title={`${ledName(cell.led_id)} · ${describeConditions(cell)}`}
+                    title={`${ledName(cell.led_id)} · ${describeRuleConditions(entry)}`}
                     className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
                   >
                     <span
@@ -169,7 +206,7 @@ export function ConditionalRulesPanel() {
                         {ledName(cell.led_id)}
                       </span>
                       <span className="block truncate text-[10.5px] text-faint">
-                        {describeConditions(cell)} · {describeEffect(cell.effect)}
+                        {describeRuleConditions(entry)} · {describeEffect(cell.effect)}
                       </span>
                     </span>
                   </button>
@@ -237,8 +274,8 @@ export function ConditionalRulesPanel() {
           <label className="flex items-center justify-between gap-3 text-[12px] text-mute">
             Key
             <select
-              value={rule.led_id}
-              onChange={(e) => edit(selected, { ...rule, led_id: Number(e.target.value) })}
+              value={rule.cell.led_id}
+              onChange={(e) => editCell(selected, rule, { ...rule.cell, led_id: Number(e.target.value) })}
               className="min-w-0 max-w-[62%] rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
             >
               {ledOptions.map((id) => (
@@ -257,8 +294,8 @@ export function ConditionalRulesPanel() {
                 type="checkbox"
                 checked={conditions.layer !== undefined}
                 onChange={(e) =>
-                  edit(selected, {
-                    ...rule,
+                  editCell(selected, rule, {
+                    ...rule.cell,
                     conditions: {
                       ...conditions,
                       layer: e.target.checked ? { layer: 0, active: true } : undefined,
@@ -273,8 +310,8 @@ export function ConditionalRulesPanel() {
                 <select
                   value={conditions.layer.layer}
                   onChange={(e) =>
-                    edit(selected, {
-                      ...rule,
+                    editCell(selected, rule, {
+                      ...rule.cell,
                       conditions: {
                         ...conditions,
                         layer: { ...conditions.layer!, layer: Number(e.target.value) },
@@ -295,8 +332,8 @@ export function ConditionalRulesPanel() {
                       key={String(active)}
                       type="button"
                       onClick={() =>
-                        edit(selected, {
-                          ...rule,
+                        editCell(selected, rule, {
+                          ...rule.cell,
                           conditions: {
                             ...conditions,
                             layer: { ...conditions.layer!, active },
@@ -326,8 +363,8 @@ export function ConditionalRulesPanel() {
                 type="checkbox"
                 checked={conditions.output_mode !== undefined}
                 onChange={(e) =>
-                  edit(selected, {
-                    ...rule,
+                  editCell(selected, rule, {
+                    ...rule.cell,
                     conditions: {
                       ...conditions,
                       output_mode: e.target.checked ? "AlwaysOn" : undefined,
@@ -341,8 +378,8 @@ export function ConditionalRulesPanel() {
               <select
                 value={conditions.output_mode}
                 onChange={(e) =>
-                  edit(selected, {
-                    ...rule,
+                  editCell(selected, rule, {
+                    ...rule.cell,
                     conditions: {
                       ...conditions,
                       output_mode: e.target.value as LightingOutputMode,
@@ -372,8 +409,8 @@ export function ConditionalRulesPanel() {
                 type="checkbox"
                 checked={conditions.battery !== undefined}
                 onChange={(e) =>
-                  edit(selected, {
-                    ...rule,
+                  editCell(selected, rule, {
+                    ...rule.cell,
                     conditions: {
                       ...conditions,
                       battery: e.target.checked
@@ -397,8 +434,8 @@ export function ConditionalRulesPanel() {
                   <select
                     value={conditions.battery.node}
                     onChange={(e) =>
-                      edit(selected, {
-                        ...rule,
+                      editCell(selected, rule, {
+                        ...rule.cell,
                         conditions: {
                           ...conditions,
                           battery: { ...conditions.battery!, node: Number(e.target.value) },
@@ -418,8 +455,8 @@ export function ConditionalRulesPanel() {
                   label="At least"
                   value={conditions.battery.min_level}
                   onChange={(min_level) =>
-                    edit(selected, {
-                      ...rule,
+                    editCell(selected, rule, {
+                      ...rule.cell,
                       conditions: {
                         ...conditions,
                         battery: { ...conditions.battery!, min_level },
@@ -431,8 +468,8 @@ export function ConditionalRulesPanel() {
                   label="At most"
                   value={conditions.battery.max_level}
                   onChange={(max_level) =>
-                    edit(selected, {
-                      ...rule,
+                    editCell(selected, rule, {
+                      ...rule.cell,
                       conditions: {
                         ...conditions,
                         battery: { ...conditions.battery!, max_level },
@@ -445,8 +482,8 @@ export function ConditionalRulesPanel() {
                   <select
                     value={conditions.battery.charge}
                     onChange={(e) =>
-                      edit(selected, {
-                        ...rule,
+                      editCell(selected, rule, {
+                        ...rule.cell,
                         conditions: {
                           ...conditions,
                           battery: {
@@ -469,12 +506,165 @@ export function ConditionalRulesPanel() {
             )}
           </div>
 
+          {predicatesSupported && (
+            <>
+              {/* Effects-state condition — gates on whether the extension band
+                  is rendering, which is what RGB_TOG flips. */}
+              <div className="flex flex-col gap-1.5 border-t border-line-soft pt-2">
+                <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+                  Effects state
+                  <input
+                    type="checkbox"
+                    checked={rule.effects !== undefined}
+                    onChange={(e) =>
+                      edit(selected, {
+                        ...rule,
+                        effects: e.target.checked ? { enabled: true } : undefined,
+                      })
+                    }
+                    className="accent-(--color-accent)"
+                  />
+                </label>
+                {rule.effects !== undefined && (
+                  <select
+                    value={rule.effects.enabled ? "on" : "off"}
+                    onChange={(e) =>
+                      edit(selected, { ...rule, effects: { enabled: e.target.value === "on" } })
+                    }
+                    className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                  >
+                    <option value="on">effects on</option>
+                    <option value="off">effects off</option>
+                  </select>
+                )}
+              </div>
+
+              {/* Connection condition. Every named field must hold, so the
+                  sub-toggles compose as a conjunction. */}
+              <div className="flex flex-col gap-1.5 border-t border-line-soft pt-2">
+                <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+                  Connection
+                  <input
+                    type="checkbox"
+                    checked={connection !== undefined}
+                    onChange={(e) =>
+                      edit(selected, {
+                        ...rule,
+                        connection: e.target.checked ? { ...EMPTY_CONNECTION } : undefined,
+                      })
+                    }
+                    className="accent-(--color-accent)"
+                  />
+                </label>
+                {connection !== undefined && (
+                  <div className="flex flex-col gap-1.5 pl-2">
+                    <OptionalSelect
+                      label="Transport"
+                      value={connection.transport}
+                      options={TRANSPORTS}
+                      render={(transport) =>
+                        transport === "NoneActive" ? "none active" : transport.toLowerCase()
+                      }
+                      onChange={(transport) => setConnection(rule, { ...connection, transport })}
+                    />
+                    <OptionalSelect
+                      label="BLE state"
+                      value={connection.ble_state}
+                      options={BLE_STATES}
+                      render={(state) => state.toLowerCase()}
+                      onChange={(ble_state) => setConnection(rule, { ...connection, ble_state })}
+                    />
+                    <SlotField
+                      label="Profile"
+                      value={connection.profile}
+                      onChange={(profile) => setConnection(rule, { ...connection, profile })}
+                    />
+                    <label className="flex items-center justify-between gap-3 text-[12px] text-mute">
+                      USB
+                      <select
+                        value={
+                          connection.usb_connected === undefined
+                            ? "any"
+                            : connection.usb_connected
+                              ? "connected"
+                              : "disconnected"
+                        }
+                        onChange={(e) =>
+                          setConnection(rule, {
+                            ...connection,
+                            usb_connected:
+                              e.target.value === "any" ? undefined : e.target.value === "connected",
+                          })
+                        }
+                        className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                      >
+                        <option value="any">any</option>
+                        <option value="connected">connected</option>
+                        <option value="disconnected">disconnected</option>
+                      </select>
+                    </label>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+                        Bonded slot
+                        <input
+                          type="checkbox"
+                          checked={connection.bonded !== undefined}
+                          onChange={(e) =>
+                            setConnection(rule, {
+                              ...connection,
+                              bonded: e.target.checked ? { slot: 0, bonded: true } : undefined,
+                            })
+                          }
+                          className="accent-(--color-accent)"
+                        />
+                      </label>
+                      {connection.bonded !== undefined && (
+                        <div className="flex items-center gap-1.5">
+                          <SlotField
+                            label="Slot"
+                            value={connection.bonded.slot}
+                            onChange={(slot) =>
+                              setConnection(rule, {
+                                ...connection,
+                                bonded: { ...connection.bonded!, slot: slot ?? 0 },
+                              })
+                            }
+                          />
+                          <select
+                            value={connection.bonded.bonded ? "bonded" : "unbonded"}
+                            onChange={(e) =>
+                              setConnection(rule, {
+                                ...connection,
+                                bonded: {
+                                  ...connection.bonded!,
+                                  bonded: e.target.value === "bonded",
+                                },
+                              })
+                            }
+                            className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                          >
+                            <option value="bonded">bonded</option>
+                            <option value="unbonded">unbonded</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[10.5px] leading-relaxed text-faint">
+                      The keyboard does not report which slots hold a bond, so a bonded rule
+                      previews as unlit here even when it lights on the board.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
           <div className="border-t border-line-soft pt-2">
             <SectionLabel>Effect</SectionLabel>
             <div className="mt-1.5">
               <EffectEditor
-                value={rule.effect}
-                onChange={(effect) => edit(selected, { ...rule, effect })}
+                value={rule.cell.effect}
+                onChange={(effect) => editCell(selected, rule, { ...rule.cell, effect })}
               />
             </div>
           </div>
@@ -506,5 +696,63 @@ export function ConditionalRulesPanel() {
         </div>
       )}
     </div>
+  );
+}
+
+/** A select over an optional enum condition, where "any" clears it. */
+function OptionalSelect<T extends string>({
+  label,
+  value,
+  options,
+  render,
+  onChange,
+}: {
+  label: string;
+  value: T | undefined;
+  options: T[];
+  render: (value: T) => string;
+  onChange: (value: T | undefined) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3 text-[12px] text-mute">
+      {label}
+      <select
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value === "" ? undefined : (e.target.value as T))}
+        className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+      >
+        <option value="">any</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {render(option)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** A small non-negative slot number, blank when the condition is unset. */
+function SlotField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number | undefined;
+  onChange: (value: number | undefined) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3 text-[12px] text-mute">
+      {label}
+      <TextInput
+        type="number"
+        min={0}
+        placeholder="any"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+        className="w-[74px] py-1 text-right"
+      />
+    </label>
   );
 }

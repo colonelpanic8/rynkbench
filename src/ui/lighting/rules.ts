@@ -7,28 +7,33 @@
 // caller can stage it as a draft.
 
 import type {
-  LightingConditionalSceneCell,
   LightingEffect,
+  LightingExtendedConditionalSceneCell,
   LightingLedId,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 
-export type Rules = LightingConditionalSceneCell[];
+export type Rule = LightingExtendedConditionalSceneCell;
+export type Rules = Rule[];
 
 /** A fresh, unconditional rule — "always, on this LED". Conditions are added
  *  afterwards, so a new rule is immediately meaningful and previewable. */
-export function newRule(ledId: LightingLedId, effect: LightingEffect): LightingConditionalSceneCell {
+export function newRule(ledId: LightingLedId, effect: LightingEffect): Rule {
   return {
-    conditions: { layer: undefined, battery: undefined, output_mode: undefined },
-    led_id: ledId,
-    effect,
+    cell: {
+      conditions: { layer: undefined, battery: undefined, output_mode: undefined },
+      led_id: ledId,
+      effect,
+    },
+    connection: undefined,
+    effects: undefined,
   };
 }
 
-export function appendRule(rules: Rules, rule: LightingConditionalSceneCell): Rules {
+export function appendRule(rules: Rules, rule: Rule): Rules {
   return [...rules, rule];
 }
 
-export function replaceRule(rules: Rules, index: number, rule: LightingConditionalSceneCell): Rules {
+export function replaceRule(rules: Rules, index: number, rule: Rule): Rules {
   if (index < 0 || index >= rules.length) return rules;
   return rules.map((current, at) => (at === index ? rule : current));
 }

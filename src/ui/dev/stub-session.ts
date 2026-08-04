@@ -385,6 +385,9 @@ class StubSession implements RynkSession {
     clearBleProfile: async (): Promise<void> => {
       await lag();
     },
+    switchBleProfile: async (): Promise<void> => {
+      await lag();
+    },
     peripheralStatus: async (): Promise<PeripheralStatus> => {
       await lag();
       return { connected: true, battery: "Unavailable" };

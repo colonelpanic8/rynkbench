@@ -10,6 +10,7 @@ import type {
   LightingCapabilities,
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
+  LightingExtendedConditionalSceneCell,
   LightingControls,
   LightingExtension,
   LightingExtensionLayers,
@@ -98,7 +99,7 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     wake_layers: 0,
   };
   let runtimeConditionalStatus: LightingRuntimeConditionalSceneStatus | null = null;
-  let runtimeConditionalScenes: LightingConditionalSceneCell[] = [];
+  let runtimeConditionalScenes: LightingExtendedConditionalSceneCell[] = [];
   let lightingExtension: LightingExtension | null = null;
   let lightingExtensionLayers: LightingExtensionLayers | null = null;
   let extensionEffectNames: string[] = [];

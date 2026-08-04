@@ -23,6 +23,7 @@ import type {
   LightingCapabilities,
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
+  LightingExtendedConditionalSceneCell,
   LightingConditionalSceneStatus,
   LightingControls,
   LightingExtension,
@@ -110,7 +111,10 @@ export interface BoardSpec {
   runtimeConditionalCapacity?: number;
   /** Runtime conditional cells stored "in flash" when the session opens, in
    *  composition order. */
-  seedRuntimeConditionalScenes?: LightingConditionalSceneCell[];
+  seedRuntimeConditionalScenes?: LightingExtendedConditionalSceneCell[];
+  /** Advertise the extended conditional cell, so rules may carry connection
+   *  and effects predicates. Firmware without it stores the base cell only. */
+  runtimeConditionalPredicates?: boolean;
   /** Three-state output policy readback. Omit for older simulated firmware. */
   lightingOutputMode?: LightingOutputModeState;
   /** Host-selectable extension effect pack (static name lists plus the boot
@@ -296,6 +300,8 @@ export const OUTPUT_MODE = 1 << 10;
 export const EXTENSION_EFFECTS = 1 << 11;
 export const RUNTIME_CONDITIONAL_SCENES = 1 << 12;
 export const EXTENSION_LAYERING = 1 << 13;
+export const RUNTIME_CONNECTION_CONDITIONS = 1 << 14;
+export const RUNTIME_EFFECTS_CONDITIONS = 1 << 15;
 const SCENE_CHUNK_CAPACITY = 16;
 // Conditional cells are much wider on the wire than scene cells, so the
 // firmware pages them far more coarsely (LIGHTING_CONDITIONAL_SCENE_CHUNK_SIZE).
@@ -356,7 +362,7 @@ class MockSession implements RynkSession {
   private readonly sceneTable = new Map<string, LightingSceneCell>();
   /** Mutable conditional table. A list, not a map: rules compose in table
    *  order, later rules win shared slots, and duplicates are legitimate. */
-  private runtimeConditional: LightingConditionalSceneCell[] = [];
+  private runtimeConditional: LightingExtendedConditionalSceneCell[] = [];
   private layerPolicy: LightingLayerPolicy = "EffectiveOnly";
   private readonly comboTable: Combo[];
   private readonly morseTable: Morse[];
@@ -364,7 +370,7 @@ class MockSession implements RynkSession {
   private readonly macroBytes: Uint8Array;
   private behaviorConfig: BehaviorConfig;
   private readonly indicator: LedIndicator;
-  private readonly ble: BleStatus;
+  private ble: BleStatus;
   private readonly matrixBitmap: Uint8Array;
   private readonly modifiers = noModifiers();
   private splitLatency: SplitCentralLatencyState | null;
@@ -392,7 +398,7 @@ class MockSession implements RynkSession {
     }
     for (const cell of spec.compiledScenes ?? []) this.checkSceneCell(cell);
     this.runtimeConditional = (spec.seedRuntimeConditionalScenes ?? []).map((cell) => {
-      this.checkConditionalCell(cell);
+      this.checkExtendedConditionalCell(cell);
       return structuredClone(cell);
     });
     this.battery = spec.battery;
@@ -444,10 +450,13 @@ class MockSession implements RynkSession {
     bleStatus: () => latency(() => ({ ...this.ble })),
     clearBleProfile: (slot) =>
       latency(() => {
-        const { num_ble_profiles } = this.spec.capabilities;
-        if (!Number.isInteger(slot) || slot < 0 || slot >= num_ble_profiles) {
-          throw new Error(`BLE profile ${slot} out of range`);
-        }
+        this.checkBleProfile(slot);
+      }),
+    switchBleProfile: (slot) =>
+      latency(() => {
+        this.checkBleProfile(slot);
+        // Selecting a slot drops any live link and re-advertises on it.
+        this.ble = { profile: slot, state: "Advertising" };
       }),
     peripheralStatus: (slot) =>
       latency(() => {
@@ -620,7 +629,7 @@ class MockSession implements RynkSession {
           // Validate the whole batch before mutating, like the transactional
           // commit on real firmware: a bad cell leaves the table untouched.
           const next = cells.map((cell) => {
-            this.checkConditionalCell(cell);
+            this.checkExtendedConditionalCell(cell);
             return structuredClone(cell);
           });
           // Order is the meaning — the batch is stored exactly as given.
@@ -766,7 +775,10 @@ class MockSession implements RynkSession {
         (this.spec.lightingOutputMode !== undefined ? OUTPUT_MODE : 0) |
         (this.spec.extensionEffects !== undefined ? EXTENSION_EFFECTS : 0) |
         (this.spec.extensionEffects?.overlay !== undefined ? EXTENSION_LAYERING : 0) |
-        ((this.spec.runtimeConditionalCapacity ?? 0) > 0 ? RUNTIME_CONDITIONAL_SCENES : 0),
+        ((this.spec.runtimeConditionalCapacity ?? 0) > 0 ? RUNTIME_CONDITIONAL_SCENES : 0) |
+        ((this.spec.runtimeConditionalCapacity ?? 0) > 0 && this.spec.runtimeConditionalPredicates
+          ? RUNTIME_CONNECTION_CONDITIONS | RUNTIME_EFFECTS_CONDITIONS
+          : 0),
       effects: 0b111, // solid | blink | breathe
     };
   }
@@ -997,6 +1009,35 @@ class MockSession implements RynkSession {
   /** The firmware's per-cell bounds (handlers/lighting.rs): a real LED, a layer
    *  inside the keymap, a battery node that some output actually reports for,
    *  and sane percentage bounds. */
+  /** The extended cell's own bounds, on top of the base cell's. Firmware that
+   *  does not advertise the extended encoding cannot store these predicates,
+   *  and silently dropping them would leave the rule matching unconditionally,
+   *  so this rejects instead. */
+  private checkExtendedConditionalCell(cell: LightingExtendedConditionalSceneCell): void {
+    this.checkConditionalCell(cell.cell);
+    const gated = cell.connection !== undefined || cell.effects !== undefined;
+    if (gated && !this.spec.runtimeConditionalPredicates) {
+      throw new Error("this firmware cannot store connection or effects conditions");
+    }
+    const { connection } = cell;
+    if (connection === undefined) return;
+    for (const [label, slot] of [
+      ["profile", connection.profile],
+      ["bonded slot", connection.bonded?.slot],
+    ] as const) {
+      if (slot !== undefined && (!Number.isInteger(slot) || slot < 0)) {
+        throw new Error(`${label} ${slot} is not a slot number`);
+      }
+    }
+  }
+
+  private checkBleProfile(slot: number): void {
+    const { num_ble_profiles } = this.spec.capabilities;
+    if (!Number.isInteger(slot) || slot < 0 || slot >= num_ble_profiles) {
+      throw new Error(`BLE profile ${slot} out of range`);
+    }
+  }
+
   private checkConditionalCell(cell: LightingConditionalSceneCell): void {
     if (!this.knownLeds.has(cell.led_id)) throw new Error(`unknown LED ${cell.led_id}`);
     const { layer, battery } = cell.conditions;

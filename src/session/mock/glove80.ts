@@ -15,6 +15,7 @@ import type {
   Key,
   KeyAction,
   LightingConditionalSceneCell,
+  LightingExtendedConditionalSceneCell,
   LightingSceneCell,
   LightingZone,
   Morse,
@@ -339,70 +340,129 @@ conditionalScenes.push({
 // warning that outranks the compiled gauge on the same LED, and a layer-3
 // override that recolors one of the compiled gaming keys. Order is meaning —
 // the blink lands after the solid warning and wins the slot they share.
-const seedRuntimeConditionalScenes: LightingConditionalSceneCell[] = [
+const seedRuntimeConditionalScenes: LightingExtendedConditionalSceneCell[] = [
   {
-    conditions: {
-      layer: undefined,
-      battery: { node: 0, min_level: undefined, max_level: 20, charge: "Discharging" },
-      output_mode: undefined,
-    },
-    led_id: ledForLabel("Esc"),
-    effect: solid(200, 40, 0),
-  },
-  {
-    conditions: {
-      layer: undefined,
-      battery: { node: 0, min_level: undefined, max_level: 10, charge: "Discharging" },
-      output_mode: undefined,
-    },
-    led_id: ledForLabel("Esc"),
-    effect: { Blink: { color: { r: 255, g: 0, b: 0 }, period_ms: 600, phase_ms: 0, duty: 128 } },
-  },
-  {
-    conditions: {
-      layer: undefined,
-      battery: { node: 1, min_level: undefined, max_level: 20, charge: "Discharging" },
-      output_mode: undefined,
-    },
-    led_id: ledForLabel("Del"),
-    effect: solid(200, 40, 0),
-  },
-  {
-    conditions: {
-      layer: { layer: 0, active: true },
-      battery: {
-        node: 0,
-        min_level: undefined,
-        max_level: undefined,
-        charge: "Charging",
+    cell: {
+      conditions: {
+        layer: undefined,
+        battery: { node: 0, min_level: undefined, max_level: 20, charge: "Discharging" },
+        output_mode: undefined,
       },
-      output_mode: undefined,
+      led_id: ledForLabel("Esc"),
+      effect: solid(200, 40, 0),
     },
-    led_id: ledForLabel("Esc"),
-    effect: { Breathe: { color: { r: 0, g: 200, b: 90 }, period_ms: 2400, phase_ms: 0, step_ms: 16 } },
+    connection: undefined,
+    effects: undefined,
   },
   {
-    conditions: {
-      layer: { layer: 3, active: true },
-      battery: undefined,
-      output_mode: undefined,
+    cell: {
+      conditions: {
+        layer: undefined,
+        battery: { node: 0, min_level: undefined, max_level: 10, charge: "Discharging" },
+        output_mode: undefined,
+      },
+      led_id: ledForLabel("Esc"),
+      effect: { Blink: { color: { r: 255, g: 0, b: 0 }, period_ms: 600, phase_ms: 0, duty: 128 } },
     },
-    led_id: ledForLabel("W"),
-    effect: { Blink: { color: { r: 40, g: 120, b: 255 }, period_ms: 800, phase_ms: 0, duty: 160 } },
+    connection: undefined,
+    effects: undefined,
+  },
+  {
+    cell: {
+      conditions: {
+        layer: undefined,
+        battery: { node: 1, min_level: undefined, max_level: 20, charge: "Discharging" },
+        output_mode: undefined,
+      },
+      led_id: ledForLabel("Del"),
+      effect: solid(200, 40, 0),
+    },
+    connection: undefined,
+    effects: undefined,
+  },
+  {
+    cell: {
+      conditions: {
+        layer: { layer: 0, active: true },
+        battery: {
+          node: 0,
+          min_level: undefined,
+          max_level: undefined,
+          charge: "Charging",
+        },
+        output_mode: undefined,
+      },
+      led_id: ledForLabel("Esc"),
+      effect: { Breathe: { color: { r: 0, g: 200, b: 90 }, period_ms: 2400, phase_ms: 0, step_ms: 16 } },
+    },
+    connection: undefined,
+    effects: undefined,
+  },
+  {
+    cell: {
+      conditions: {
+        layer: { layer: 3, active: true },
+        battery: undefined,
+        output_mode: undefined,
+      },
+      led_id: ledForLabel("W"),
+      effect: { Blink: { color: { r: 40, g: 120, b: 255 }, period_ms: 800, phase_ms: 0, duty: 160 } },
+    },
+    connection: undefined,
+    effects: undefined,
   },
   ...([
     ["AlwaysOn", solid(0, 128, 0)],
     ["AlwaysOff", solid(128, 0, 0)],
     ["PoweredOnly", solid(0, 64, 160)],
   ] as const).map(([output_mode, effect]) => ({
-    conditions: {
-      layer: { layer: 2, active: true },
-      battery: undefined,
-      output_mode,
+    cell: {
+      conditions: {
+        layer: { layer: 2, active: true },
+        battery: undefined,
+        output_mode,
+      },
+      led_id: ledForLabel("A"),
+      effect,
     },
-    led_id: ledForLabel("A"),
-    effect,
+    connection: undefined,
+    effects: undefined,
   })),
+  // The extended predicates, so the mock exercises the same editors a current
+  // keyboard does: an effects-state indicator and a USB-presence indicator.
+  {
+    cell: {
+      conditions: { layer: { layer: 2, active: true }, battery: undefined, output_mode: undefined },
+      led_id: ledForLabel("Z"),
+      effect: solid(0, 128, 0),
+    },
+    connection: undefined,
+    effects: { enabled: true },
+  },
+  {
+    cell: {
+      conditions: { layer: { layer: 2, active: true }, battery: undefined, output_mode: undefined },
+      led_id: ledForLabel("Z"),
+      effect: solid(128, 0, 0),
+    },
+    connection: undefined,
+    effects: { enabled: false },
+  },
+  {
+    cell: {
+      conditions: { layer: { layer: 2, active: true }, battery: undefined, output_mode: undefined },
+      led_id: ledForLabel("X"),
+      effect: solid(0, 160, 64),
+    },
+    connection: {
+      transport: undefined,
+      profile: undefined,
+      ble_state: undefined,
+      bonded: undefined,
+      usb_connected: true,
+    },
+    effects: undefined,
+  },
 ];
 
 const info: DeviceInfo = {
@@ -457,6 +517,7 @@ export const glove80Board: BoardSpec = {
   conditionalScenes,
   lightingControls: { output_toggle_user_action: undefined, wake_layers: 1 << 2 },
   runtimeConditionalCapacity: 32,
+  runtimeConditionalPredicates: true,
   seedRuntimeConditionalScenes,
   // The real firmware's extension band: PaletteFX effects with its palette
   // pack (display names from rmk-palettefx/palettes/*.toml).

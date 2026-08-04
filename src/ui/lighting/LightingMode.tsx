@@ -382,7 +382,8 @@ export function LightingMode() {
         : new Set([state.defaultLayer, target]);
     return firmwarePreviewCells(
       [],
-      [...state.conditionalScenes, ...state.runtimeConditionalDraft],
+      state.conditionalScenes,
+      state.runtimeConditionalDraft,
       {
         activeLayers,
         batteries: new Map([
@@ -390,6 +391,10 @@ export function LightingMode() {
           [1, state.peripheralBattery],
         ]),
         outputMode: state.lightingOutputMode?.mode,
+        connection: state.connection ?? undefined,
+        effectsEnabled: state.lightingExtension
+          ? state.lightingExtension.state.value !== 0
+          : undefined,
       },
     );
   }, [
@@ -400,6 +405,8 @@ export function LightingMode() {
     state.peripheralBattery,
     state.runtimeConditionalDraft,
     state.lightingOutputMode,
+    state.connection,
+    state.lightingExtension,
     target,
   ]);
   const previewEffects = useMemo(() => {

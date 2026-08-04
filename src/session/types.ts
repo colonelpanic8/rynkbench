@@ -32,6 +32,7 @@ import type {
   LightingCapabilities,
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
+  LightingExtendedConditionalSceneCell,
   LightingConditionalSceneStatus,
   LightingExtension,
   LightingExtensionLayers,
@@ -158,10 +159,12 @@ export interface LightingRuntimeConditionalOps {
   status(): Promise<LightingRuntimeConditionalSceneStatus>;
   /** Read the whole ordered table (paging under one pinned revision, with a
    *  restart when the revision drifts, is the backend's job). */
-  read(): Promise<LightingConditionalSceneCell[]>;
+  read(): Promise<LightingExtendedConditionalSceneCell[]>;
   /** Atomically replace the whole table, in the order given (wraps the
-   *  begin/put-chunks/commit transaction and its revision handshake). */
-  replace(cells: LightingConditionalSceneCell[]): Promise<LightingState>;
+   *  begin/put-chunks/commit transaction and its revision handshake).
+   *  Rejects cells carrying predicates the connected firmware cannot store
+   *  rather than writing them away. */
+  replace(cells: LightingExtendedConditionalSceneCell[]): Promise<LightingState>;
 }
 
 export interface LightingSceneOps {
@@ -221,6 +224,9 @@ export interface DeviceOps {
   rebootToBootloader(): Promise<void>;
   bleStatus(): Promise<BleStatus>;
   clearBleProfile(slot: number): Promise<void>;
+  /** Make `slot` the active BLE profile. Drops any live link and
+   *  re-advertises, so the reported status settles a moment later. */
+  switchBleProfile(slot: number): Promise<void>;
   peripheralStatus(slot: number): Promise<PeripheralStatus>;
   /** Live pressed-key bitmap, for the matrix tester. */
   matrixState(): Promise<MatrixState>;

@@ -37,6 +37,7 @@ function BleCard() {
   const [peripherals, setPeripherals] = useState<Array<PeripheralStatus | null>>([]);
   const [arming, setArming] = useState<number | null>(null);
   const [clearing, setClearing] = useState<number | null>(null);
+  const [switching, setSwitching] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -65,6 +66,23 @@ function BleCard() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, caps.is_split, caps.num_split_peripherals]);
+
+  const switchSlot = async (slot: number) => {
+    setSwitching(slot);
+    setError(null);
+    try {
+      await session.device.switchBleProfile(slot);
+      // Selecting a slot drops any live link and re-advertises, so the status
+      // needs a beat to settle before it reflects the new slot.
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const s = await session.device.bleStatus().catch(() => status);
+      if (s) setStatus(s);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSwitching(null);
+    }
+  };
 
   const clearSlot = async (slot: number) => {
     setClearing(slot);
@@ -118,6 +136,17 @@ function BleCard() {
                 </span>
                 {active && <Chip tone="accent">active</Chip>}
                 <div className="flex-1" />
+                {!active && arming !== slot && (
+                  <button
+                    type="button"
+                    title={`Make profile ${slot} the active BLE connection`}
+                    disabled={switching !== null || clearing !== null}
+                    className="cursor-pointer text-[11.5px] text-faint underline underline-offset-2 transition-colors duration-120 hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+                    onClick={() => switchSlot(slot)}
+                  >
+                    {switching === slot ? "Switching…" : "Switch"}
+                  </button>
+                )}
                 {arming === slot ? (
                   <span className="flex items-center gap-1.5">
                     <Button

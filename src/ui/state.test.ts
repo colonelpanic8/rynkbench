@@ -4,7 +4,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type {
-  LightingConditionalSceneCell,
+  LightingExtendedConditionalSceneCell,
   LightingEffect,
   LightingExtensionParam,
   LightingSceneCell,
@@ -169,11 +169,15 @@ describe("per-target lighting drafts", () => {
 });
 
 describe("conditional rule tables", () => {
-  function rule(ledId: number, r: number): LightingConditionalSceneCell {
+  function rule(ledId: number, r: number): LightingExtendedConditionalSceneCell {
     return {
-      conditions: { layer: undefined, battery: undefined, output_mode: undefined },
-      led_id: ledId,
-      effect: solid(r),
+      cell: {
+        conditions: { layer: undefined, battery: undefined, output_mode: undefined },
+        led_id: ledId,
+        effect: solid(r),
+      },
+      connection: undefined,
+      effects: undefined,
     };
   }
 

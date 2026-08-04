@@ -1,6 +1,9 @@
 import type {
   BatteryStatus,
+  ConnectionStatus,
+  ConnectionType,
   LightingConditionalSceneCell,
+  LightingExtendedConditionalSceneCell,
   LightingOverlayCell,
   LightingOutputMode,
   LightingRuntimeConditionalSceneStatus,
@@ -22,6 +25,62 @@ export interface FirmwareLightingPreview {
   activeLayers: ReadonlySet<number>;
   batteries: ReadonlyMap<number, BatteryStatus>;
   outputMode: LightingOutputMode | undefined;
+  /** Live transport and BLE state, when the firmware reports it. */
+  connection?: ConnectionStatus;
+  /** Whether the extension band is rendering — its value is non-zero. */
+  effectsEnabled?: boolean;
+  /** Profile slots known to hold a bond. The firmware evaluates `bonded`
+   *  against its own bond table and does not publish it over Rynk, so this is
+   *  normally absent and such rules preview as unsatisfiable. */
+  bondedSlots?: ReadonlySet<number>;
+}
+
+/** Mirror of `ConnectionStatus::usb_ready`: plugged and routable, whether or
+ *  not USB is the transport actually carrying output. */
+function usbReady(status: ConnectionStatus): boolean {
+  return status.usb === "Configured" || status.usb === "Suspended";
+}
+
+/** Mirror of `ConnectionStatus::decide_active`. */
+function activeTransport(status: ConnectionStatus): ConnectionType | undefined {
+  const usb = usbReady(status);
+  const ble = status.ble.state === "Connected";
+  if (usb && ble) return status.preferred;
+  if (usb) return "Usb";
+  if (ble) return "Ble";
+  return undefined;
+}
+
+/** Predicates the host cannot evaluate are unsatisfiable rather than true —
+ *  the same rule the firmware applies to a source that cannot see the state.
+ *  Lighting a rule we cannot actually verify would be the worse error. */
+function connectionMatches(
+  cell: LightingExtendedConditionalSceneCell,
+  preview: FirmwareLightingPreview,
+): boolean {
+  if (cell.effects !== undefined) {
+    if (preview.effectsEnabled === undefined) return false;
+    if (preview.effectsEnabled !== cell.effects.enabled) return false;
+  }
+  const condition = cell.connection;
+  if (condition === undefined) return true;
+  const status = preview.connection;
+  if (status === undefined) return false;
+  if (condition.transport !== undefined) {
+    const active = activeTransport(status);
+    const named = active === undefined ? "NoneActive" : active === "Usb" ? "Usb" : "Ble";
+    if (named !== condition.transport) return false;
+  }
+  if (condition.profile !== undefined && status.ble.profile !== condition.profile) return false;
+  if (condition.ble_state !== undefined && status.ble.state !== condition.ble_state) return false;
+  if (condition.usb_connected !== undefined && usbReady(status) !== condition.usb_connected) {
+    return false;
+  }
+  if (condition.bonded !== undefined) {
+    if (preview.bondedSlots === undefined) return false;
+    if (preview.bondedSlots.has(condition.bonded.slot) !== condition.bonded.bonded) return false;
+  }
+  return true;
 }
 
 export function conditionalRuleMatches(
@@ -44,10 +103,22 @@ export function conditionalRuleMatches(
   );
 }
 
-/** Compose immutable firmware sources in their device order; later cells win. */
+/** Whether a runtime rule matches: the base conditions plus the connection and
+ *  effects predicates only the extended cell carries. */
+export function runtimeConditionalRuleMatches(
+  rule: LightingExtendedConditionalSceneCell,
+  preview: FirmwareLightingPreview,
+): boolean {
+  return conditionalRuleMatches(rule.cell, preview) && connectionMatches(rule, preview);
+}
+
+/** Compose immutable firmware sources in their device order; later cells win.
+ *  Compiled rules come before runtime ones because that is the order the
+ *  firmware composes them, and runtime cells override the slots they share. */
 export function firmwarePreviewCells(
   layerScenes: LightingSceneCell[],
   conditionalScenes: LightingConditionalSceneCell[],
+  runtimeConditionalScenes: LightingExtendedConditionalSceneCell[],
   preview: FirmwareLightingPreview,
 ): Map<number, LightingOverlayCell> {
   const result = new Map<number, LightingOverlayCell>();
@@ -61,7 +132,45 @@ export function firmwarePreviewCells(
       result.set(cell.led_id, { led_id: cell.led_id, effect: cell.effect, ttl_ms: undefined });
     }
   }
+  for (const rule of runtimeConditionalScenes) {
+    if (runtimeConditionalRuleMatches(rule, preview)) {
+      const { led_id, effect } = rule.cell;
+      result.set(led_id, { led_id, effect, ttl_ms: undefined });
+    }
+  }
   return result;
+}
+
+/** Human summary of a runtime rule, including the predicates only the
+ *  extended cell carries. */
+export function describeRuleConditions(rule: LightingExtendedConditionalSceneCell): string {
+  const parts: string[] = [];
+  const base = describeConditions(rule.cell);
+  if (base !== "always") parts.push(base);
+  if (rule.effects !== undefined) {
+    parts.push(rule.effects.enabled ? "effects on" : "effects off");
+  }
+  const connection = rule.connection;
+  if (connection !== undefined) {
+    if (connection.transport !== undefined) {
+      parts.push(
+        connection.transport === "NoneActive"
+          ? "no active transport"
+          : `${connection.transport.toLowerCase()} active`,
+      );
+    }
+    if (connection.profile !== undefined) parts.push(`profile ${connection.profile}`);
+    if (connection.ble_state !== undefined) parts.push(connection.ble_state.toLowerCase());
+    if (connection.usb_connected !== undefined) {
+      parts.push(connection.usb_connected ? "usb connected" : "usb disconnected");
+    }
+    if (connection.bonded !== undefined) {
+      parts.push(
+        `slot ${connection.bonded.slot} ${connection.bonded.bonded ? "bonded" : "unbonded"}`,
+      );
+    }
+  }
+  return parts.length > 0 ? parts.join(" + ") : "always";
 }
 
 export function describeConditions(cell: LightingConditionalSceneCell): string {
