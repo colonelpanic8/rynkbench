@@ -1,7 +1,15 @@
 // First impression: the connect screen. One card per session provider.
 
 import type { SessionProvider } from "../session/types";
-import { Wordmark, UsbIcon, FlaskIcon, ChevronRightIcon, SpinnerIcon, WarningIcon } from "./icons";
+import {
+  Wordmark,
+  UsbIcon,
+  BluetoothIcon,
+  FlaskIcon,
+  ChevronRightIcon,
+  SpinnerIcon,
+  WarningIcon,
+} from "./icons";
 import { cx } from "./kit";
 
 export interface ConnectAttempt {
@@ -11,7 +19,12 @@ export interface ConnectAttempt {
 }
 
 function ProviderGlyph({ kind }: { kind: SessionProvider["kind"] }) {
-  const Icon = kind === "mock" ? FlaskIcon : UsbIcon;
+  const Icon =
+    kind === "mock"
+      ? FlaskIcon
+      : kind === "nativeble" || kind === "webbluetooth"
+        ? BluetoothIcon
+        : UsbIcon;
   return (
     <div className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-line bg-raised text-mute transition-colors duration-150 group-hover:border-accent-deep group-hover:text-accent">
       <Icon size={20} />

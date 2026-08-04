@@ -1,7 +1,7 @@
 [package]
 name = "rynkbench-desktop"
 version = "0.1.0"
-description = "Rynkbench desktop shell: the web configurator in a Tauri window with a native hidapi transport"
+description = "Rynkbench desktop shell: the web configurator in a Tauri window with native hidapi and BLE GATT transports"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
@@ -12,6 +12,10 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 hidapi = "2"
+# BLE GATT transport. Same crate and version the rmk fork's `rynk-ble` uses.
+bluest = "0.6"
+futures-util = "0.3"
+tokio = { version = "1", features = ["macros", "sync", "time"] }
 
 [profile.release]
 strip = true

@@ -1,6 +1,7 @@
 // Rynkbench desktop shell: serves the built web UI in a Tauri window and
-// provides the raw-HID transport that WebKit lacks (no WebHID outside
-// Chromium). The webview's native session backend drives it via:
+// provides the transports WebKit lacks (no WebHID or Web Bluetooth outside
+// Chromium). The raw-HID transport lives here; the BLE GATT one lives in
+// `ble.rs`. The webview's native session backend drives HID via:
 //
 //   invoke("rynk_open")  -> { label }   open the device, start the reader
 //   invoke("rynk_send")  { bytes }      write one frame (split into reports)
@@ -12,6 +13,8 @@
 // 32-byte reports. One device at a time: rynk_open replaces any open link.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod ble;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Sender, TryRecvError};
@@ -205,7 +208,17 @@ fn rynk_close(state: State<'_, LinkState>) {
 fn main() {
     tauri::Builder::default()
         .manage(LinkState::default())
-        .invoke_handler(tauri::generate_handler![rynk_list, rynk_open, rynk_send, rynk_close])
+        .manage(ble::BleState::default())
+        .invoke_handler(tauri::generate_handler![
+            rynk_list,
+            rynk_open,
+            rynk_send,
+            rynk_close,
+            ble::rynk_ble_list,
+            ble::rynk_ble_open,
+            ble::rynk_ble_send,
+            ble::rynk_ble_close,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Rynkbench");
 }

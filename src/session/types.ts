@@ -64,7 +64,13 @@ import type {
 } from "../vendor/rynk-wasm/rynk_wasm";
 
 /** Which backend produced a session. Drives labels, never behavior. */
-export type SessionKind = "mock" | "webhid" | "webserial" | "webbluetooth" | "native";
+export type SessionKind =
+  | "mock"
+  | "webhid"
+  | "webserial"
+  | "webbluetooth"
+  | "native"
+  | "nativeble";
 
 /** A fully-assembled lighting topology (all pages, one revision). */
 export interface LightingTopology {

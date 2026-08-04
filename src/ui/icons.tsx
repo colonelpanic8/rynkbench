@@ -106,6 +106,14 @@ export function UsbIcon(props: IconProps) {
   );
 }
 
+export function BluetoothIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4.6 4.9L11.4 11.1 8 14V2l3.4 2.9L4.6 11.1" />
+    </svg>
+  );
+}
+
 export function FlaskIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

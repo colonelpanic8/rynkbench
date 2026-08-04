@@ -21,6 +21,7 @@ export const KIND_LABEL: Record<string, string> = {
   webserial: "USB · Serial",
   webbluetooth: "Bluetooth",
   native: "Native",
+  nativeble: "Bluetooth · Native",
 };
 
 function BatteryReadout({ battery, split }: { battery: BatteryStatus; split: boolean }) {

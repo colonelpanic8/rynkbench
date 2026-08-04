@@ -5,6 +5,7 @@ describe("default session providers", () => {
   it("registers hardware backends only", () => {
     expect(sessionProviders().map((provider) => provider.kind)).toEqual([
       "native",
+      "nativeble",
       "webhid",
       "webserial",
     ]);
