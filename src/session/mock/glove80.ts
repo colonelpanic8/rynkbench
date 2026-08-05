@@ -534,6 +534,7 @@ export const glove80Board: BoardSpec = {
       "Tracer",
       "Keyfall",
       "Shockwave",
+      "Comet",
     ],
     palettes: [
       "Afterburn",
@@ -573,6 +574,14 @@ export const glove80Board: BoardSpec = {
         { name: "Crosses", min: 1, max: 16, default: 4 },
         { name: "Arm hue", min: 0, max: 255, default: 172 },
         { name: "Key hue", min: 0, max: 255, default: 16 },
+      ],
+      11: [
+        { name: "Lag x10ms", min: 4, max: 120, default: 32 },
+        { name: "Distance pace", min: 0, max: 255, default: 200 },
+        { name: "Momentum", min: 0, max: 255, default: 168 },
+        { name: "Trail x10ms", min: 0, max: 80, default: 20 },
+        { name: "Head size", min: 4, max: 40, default: 14 },
+        { name: "Linger x10ms", min: 4, max: 255, default: 80 },
       ],
     },
   },

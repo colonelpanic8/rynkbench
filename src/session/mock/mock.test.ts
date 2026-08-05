@@ -513,6 +513,7 @@ describe("lighting extension effects", () => {
         "Tracer",
         "Keyfall",
         "Shockwave",
+        "Comet",
       ]);
       const palettes = await session.lighting.extensionNames("Palettes");
       expect(palettes).toHaveLength(16);
