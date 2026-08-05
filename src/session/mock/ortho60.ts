@@ -119,6 +119,7 @@ export const ortho60Board: BoardSpec = {
   info,
   capabilities,
   protocol: { major: 1, minor: 0 },
+  build: { label: "ortho60-rmk v0.3.1 (mockbuil) / RMK rmk-v0.8.2-992-gmockbuil" },
   connection: {
     usb: "Configured",
     ble: { profile: 0, state: "Inactive" },

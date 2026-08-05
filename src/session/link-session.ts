@@ -531,6 +531,7 @@ export class LinkSession implements RynkSession {
       info: () => this.run(() => client.get_device_info()),
       capabilities: () => this.run(() => client.get_capabilities()),
       protocolVersion: () => this.run(() => client.get_version()),
+      buildInfo: () => this.run(() => client.get_build_info()),
       layout: () => this.run(() => client.get_layout()),
       battery: () => this.run(() => client.get_battery_status()),
       connectionStatus: () => this.run(() => client.get_connection_status()),

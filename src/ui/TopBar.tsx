@@ -13,6 +13,8 @@ import { exportDocument, importDocument } from "../config/transfer";
 import type { BatteryStatus } from "../vendor/rynk-wasm/rynk_wasm";
 import { useWorkbench } from "./state";
 import { Chip, Button } from "./kit";
+import { errorReport, TransferReportPanel } from "./TransferReport";
+import type { TransferReport } from "./TransferReport";
 import { BatteryGlyph, PowerIcon, Wordmark } from "./icons";
 
 export const KIND_LABEL: Record<string, string> = {
@@ -53,7 +55,7 @@ export function TopBar() {
    *  template carrying the editor-owned sections Rynk never sees. */
   const imported = useRef<string | null>(null);
   const [transfer, setTransfer] = useState<"importing" | "exporting" | null>(null);
-  const [fileNotice, setFileNotice] = useState<string | null>(null);
+  const [report, setReport] = useState<TransferReport | null>(null);
   const split = bundle.caps.is_split;
   const activeLabel = [...new Set([state.defaultLayer, ...state.activeLayers])]
     .sort((a, b) => a - b)
@@ -74,7 +76,7 @@ export function TopBar() {
     event.target.value = "";
     if (!file) return;
     setTransfer("importing");
-    setFileNotice(null);
+    setReport(null);
     try {
       const text = await file.text();
       const result = await importDocument({
@@ -92,15 +94,25 @@ export function TopBar() {
           : null,
         ...result.applied,
       ].filter((part) => part !== null);
-      const summary =
+      const headline =
         parts.length === 0
           ? `${file.name} already matches the keyboard`
           : `Imported ${parts.join(", ")} from ${file.name}`;
-      setFileNotice(
-        result.skipped.length === 0 ? summary : `${summary} — not applied: ${result.skipped.join(", ")}`,
-      );
+      // Anything the document asked for that could not be written, and anything
+      // the import had to approximate, is a caveat on an otherwise clean result
+      // — so say so in the headline rather than only in the detail below it.
+      const caveats = result.skipped.length > 0 || result.notes.length > 0;
+      setReport({
+        outcome: caveats ? "warning" : "ok",
+        headline,
+        detail:
+          result.skipped.length > 0
+            ? `Not applied:\n  ${result.skipped.join("\n  ")}`
+            : undefined,
+        notes: result.notes,
+      });
     } catch (error) {
-      setFileNotice(error instanceof Error ? error.message : String(error));
+      setReport(errorReport(`Could not import ${file.name}`, error));
     } finally {
       setTransfer(null);
     }
@@ -108,7 +120,7 @@ export function TopBar() {
 
   const exportFile = async (format: ConfigFormat) => {
     setTransfer("exporting");
-    setFileNotice(null);
+    setReport(null);
     try {
       const text = exportDocument(
         state,
@@ -125,16 +137,16 @@ export function TopBar() {
       link.download = `${stem}-rynkbench.${FORMAT_EXTENSION[format]}`;
       link.click();
       URL.revokeObjectURL(url);
-      setFileNotice(`Exported ${FORMAT_LABEL[format]}`);
+      setReport({ outcome: "ok", headline: `Exported ${FORMAT_LABEL[format]}` });
     } catch (error) {
-      setFileNotice(error instanceof Error ? error.message : String(error));
+      setReport(errorReport(`Could not export ${FORMAT_LABEL[format]}`, error));
     } finally {
       setTransfer(null);
     }
   };
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-4 border-b border-line-soft bg-panel px-4">
+    <header className="relative flex h-14 shrink-0 items-center gap-4 border-b border-line-soft bg-panel px-4">
       <div className="flex items-center gap-3">
         <Wordmark size={26} />
         <div className="flex flex-col leading-tight">
@@ -168,11 +180,6 @@ export function TopBar() {
         className="hidden"
         onChange={importFile}
       />
-      {fileNotice && (
-        <span className="max-w-64 truncate text-[11px] text-mute" title={fileNotice}>
-          {fileNotice}
-        </span>
-      )}
       <Button
         variant="ghost"
         disabled={transfer !== null}
@@ -204,6 +211,10 @@ export function TopBar() {
         <PowerIcon size={15} />
         Disconnect
       </Button>
+
+      {report && (
+        <TransferReportPanel report={report} onDismiss={() => setReport(null)} />
+      )}
     </header>
   );
 }

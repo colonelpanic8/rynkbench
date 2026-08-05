@@ -81,6 +81,10 @@
             runHook preInstall
             mkdir -p "$out"
             cp -r rynk/rynk-wasm/pkg/. "$out/"
+            # wasm-pack writes the crate's own semver, which never moves on the
+            # fork. Record the pin instead: it is the only thing that identifies
+            # which protocol encoding this client speaks.
+            echo '{"input":"rmk","rev":"${rmkRev}"}' > "$out/build-rev.json"
             runHook postInstall
           '';
 
@@ -123,6 +127,7 @@
             runHook preInstall
             mkdir -p "$out"
             cp -r crates/glove80-config-wasm/pkg/. "$out/"
+            echo '{"input":"glove80-rmk","rev":"${glove80RmkRev}"}' > "$out/build-rev.json"
             runHook postInstall
           '';
 

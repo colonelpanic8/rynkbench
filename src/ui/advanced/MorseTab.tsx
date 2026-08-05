@@ -22,12 +22,16 @@ const EMPTY_PROFILE: MorseProfile = {
   hold_timeout_ms: undefined,
   gap_timeout_ms: undefined,
   quick_tap_timeout_ms: undefined,
+  retro_tap: undefined,
+  prior_idle_time_ms: undefined,
+  hold_trigger_on_release: undefined,
 };
 
 const MODES: Array<{ id: MorseMode; label: string }> = [
   { id: "Normal", label: "Normal" },
   { id: "PermissiveHold", label: "Permissive hold" },
   { id: "HoldOnOtherPress", label: "Hold on other press" },
+  { id: "TapUnlessInterrupted", label: "Tap unless interrupted" },
 ];
 
 function PatternBuilder({
@@ -117,7 +121,7 @@ function ProfileEditor({
 }) {
   const numOrDefault = (
     label: string,
-    key: "hold_timeout_ms" | "gap_timeout_ms",
+    key: "hold_timeout_ms" | "gap_timeout_ms" | "prior_idle_time_ms",
   ) => (
     <label className="flex items-center justify-between gap-3 text-[12.5px] text-mute">
       {label}
@@ -143,7 +147,7 @@ function ProfileEditor({
 
   const triState = (
     label: string,
-    key: "unilateral_tap" | "enable_flow_tap",
+    key: "unilateral_tap" | "enable_flow_tap" | "retro_tap" | "hold_trigger_on_release",
   ) => (
     <label className="flex items-center justify-between gap-3 text-[12.5px] text-mute">
       {label}
@@ -190,6 +194,9 @@ function ProfileEditor({
       {numOrDefault("Gap timeout", "gap_timeout_ms")}
       {triState("Unilateral tap", "unilateral_tap")}
       {triState("Flow tap", "enable_flow_tap")}
+      {numOrDefault("Flow-tap prior idle", "prior_idle_time_ms")}
+      {triState("Retro tap", "retro_tap")}
+      {triState("Hold trigger on release", "hold_trigger_on_release")}
       <div className="text-[11px] leading-relaxed text-faint">
         Blank fields fall back to the global defaults.
       </div>

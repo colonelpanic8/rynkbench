@@ -844,6 +844,9 @@ describe("morse slots", () => {
           hold_timeout_ms: 180,
           gap_timeout_ms: undefined,
           quick_tap_timeout_ms: undefined,
+          retro_tap: true,
+          prior_idle_time_ms: 120,
+          hold_trigger_on_release: undefined,
         },
         actions: [[0b10, { Key: { Hid: "A" } }]],
       };

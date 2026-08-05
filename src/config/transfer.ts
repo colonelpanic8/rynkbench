@@ -9,17 +9,23 @@
 import type { Dispatch } from "react";
 import type { RynkSession } from "../session/types";
 import type { ConnectedBundle, WorkbenchAction, WorkbenchState } from "../ui/state";
+import { errorMessage } from "../ui/state";
+import type { Combo, Morse } from "../vendor/rynk-wasm/rynk_wasm";
 import {
   assertSupportedMatrix,
   parseDocument,
   renderDocument,
   snapshotFromState,
 } from "./document";
-import type { ConfigFormat, ExtensionCatalog, RuntimeSnapshot } from "./document";
+import type { ConfigFormat, ExtensionCatalog, ImportNote, RuntimeSnapshot } from "./document";
 
 export interface ImportResult {
   format: ConfigFormat;
   changedKeys: number;
+  /** How the imported layout differs from its source document. An editor export
+   *  describes a keyboard that expresses some things differently, and the parse
+   *  says which; showing nothing would make the import look lossless. */
+  notes: ImportNote[];
   /** What the document changed on the keyboard, in the order it was written. */
   applied: string[];
   /** What the document asked for that this seam has no way to write. Reported
@@ -44,16 +50,102 @@ export async function importDocument(args: ImportArgs): Promise<ImportResult> {
   const { text, session, bundle, state, dispatch, catalog } = args;
   assertSupportedMatrix(bundle.caps.num_rows, bundle.caps.num_cols);
 
-  const { format, snapshot } = parseDocument(text, catalog);
+  const { format, snapshot, notes } = parseDocument(text, catalog);
   if (snapshot.layers.length > bundle.caps.num_layers) {
     throw new Error(
       `Layout has ${snapshot.layers.length} layers; this keyboard supports ${bundle.caps.num_layers}`,
     );
   }
 
+  // Behaviors go first. A `TD(n)` or `TriggerMacro(n)` cell resolves through its
+  // slot as soon as the key is written, so writing the keymap first would leave
+  // those cells pointing at whatever the previous layout left behind.
+  const behaviors = await writeBehaviors(snapshot, session, bundle, state, dispatch);
   const changedKeys = await writeChangedKeys(snapshot, session, bundle, state, dispatch);
-  const { applied, skipped } = await writeLighting(snapshot, session, state, dispatch);
-  return { format, changedKeys, applied, skipped };
+  const lighting = await writeLighting(snapshot, session, state, dispatch);
+  return {
+    format,
+    changedKeys,
+    notes,
+    applied: [...behaviors.applied, ...lighting.applied],
+    skipped: [...behaviors.skipped, ...lighting.skipped],
+  };
+}
+
+/** Write the tables a keymap cell addresses by index.
+ *
+ *  Each table is written only when the document describes it: `undefined` means
+ *  the file is silent, and a file that predates these sections must leave what
+ *  the keyboard holds alone rather than clearing it. A table too large for the
+ *  firmware is reported instead of being written truncated, because a
+ *  half-written morse table is a keymap full of cells resolving to the wrong
+ *  behavior. */
+async function writeBehaviors(
+  snapshot: RuntimeSnapshot,
+  session: RynkSession,
+  bundle: ConnectedBundle,
+  state: WorkbenchState,
+  dispatch: Dispatch<WorkbenchAction>,
+): Promise<{ applied: string[]; skipped: string[] }> {
+  const applied: string[] = [];
+  const skipped: string[] = [];
+  // A document parsed by an older wasm build carries no `behaviors` at all,
+  // which means the same thing as a document that describes none of the tables.
+  const { morses, combos, macros } = snapshot.behaviors ?? {};
+
+  if (macros !== undefined) {
+    const bytes = new Uint8Array(macros);
+    if (bytes.length > bundle.caps.macro_space_size) {
+      skipped.push(
+        `macros (${bytes.length} B; this keyboard holds ${bundle.caps.macro_space_size} B)`,
+      );
+    } else if (!same([...bytes], [...state.macroBytes])) {
+      const prev = state.macroBytes;
+      dispatch({ type: "macrosWriteStart", bytes });
+      try {
+        await session.macros.write(bytes);
+        dispatch({ type: "macrosWriteOk" });
+        applied.push(`${bytes.length} B of macro space`);
+      } catch (error) {
+        dispatch({ type: "macrosWriteErr", prev, message: errorMessage(error) });
+        throw new Error(`Writing macro space: ${errorMessage(error)}`);
+      }
+    }
+  }
+
+  const table = async (
+    kind: "morse" | "combos",
+    wanted: Morse[] | Combo[] | undefined,
+    capacity: number,
+    noun: string,
+  ) => {
+    if (wanted === undefined) return;
+    if (wanted.length > capacity) {
+      skipped.push(`${noun} (${wanted.length}; this keyboard holds ${capacity})`);
+      return;
+    }
+    let changed = 0;
+    for (let index = 0; index < wanted.length; index += 1) {
+      const value = wanted[index];
+      const prev = state[kind][index];
+      if (same(value, prev)) continue;
+      dispatch({ type: "slotWriteStart", kind, index, value });
+      try {
+        if (kind === "morse") await session.morse.set(index, value as Morse);
+        else await session.combos.set(index, value as Combo);
+        dispatch({ type: "slotWriteOk", kind, index });
+        changed += 1;
+      } catch (error) {
+        dispatch({ type: "slotWriteErr", kind, index, prev, message: errorMessage(error) });
+        throw new Error(`Writing ${noun} slot ${index}: ${errorMessage(error)}`);
+      }
+    }
+    if (changed > 0) applied.push(`${changed} ${noun} slot${changed === 1 ? "" : "s"}`);
+  };
+
+  await table("morse", morses, bundle.caps.max_morse, "morse");
+  await table("combos", combos, bundle.caps.max_combos, "combo");
+  return { applied, skipped };
 }
 
 /** Write only the cells that differ, one key at a time with the same optimistic

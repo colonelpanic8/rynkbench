@@ -9,6 +9,7 @@ import type {
   BatteryStatus,
   BehaviorConfig,
   BleStatus,
+  BuildInfo,
   Combo,
   ConnectionStatus,
   DeviceCapabilities,
@@ -73,6 +74,7 @@ export interface BoardSpec {
   info: DeviceInfo;
   capabilities: DeviceCapabilities;
   protocol: ProtocolVersion;
+  build: BuildInfo;
   connection: ConnectionStatus;
   layout: LayoutInfo;
   topology: LightingTopology;
@@ -201,6 +203,9 @@ export function emptyMorse(): Morse {
       hold_timeout_ms: undefined,
       gap_timeout_ms: undefined,
       quick_tap_timeout_ms: undefined,
+      retro_tap: undefined,
+      prior_idle_time_ms: undefined,
+      hold_trigger_on_release: undefined,
     },
     actions: [],
   };
@@ -437,6 +442,7 @@ class MockSession implements RynkSession {
     info: () => latency(() => this.spec.info),
     capabilities: () => latency(() => this.spec.capabilities),
     protocolVersion: () => latency(() => this.spec.protocol),
+    buildInfo: () => latency(() => this.spec.build),
     layout: () => latency(() => this.spec.layout),
     battery: () => latency(() => this.battery),
     connectionStatus: () => latency(() => this.spec.connection),

@@ -16,13 +16,14 @@ import type {
   ConfigFormat,
   EffectParamSet,
   ExtensionCatalog,
+  ImportNote,
   ParsedConfig,
   RuntimeSnapshot,
 } from "../vendor/glove80-config-wasm/glove80_config_wasm";
 import type { RynkSession } from "../session/types";
 import type { WorkbenchState } from "../ui/state";
 
-export type { ConfigFormat, ExtensionCatalog, ParsedConfig, RuntimeSnapshot };
+export type { ConfigFormat, ExtensionCatalog, ImportNote, ParsedConfig, RuntimeSnapshot };
 
 /** The matrix the document formats describe. Both are Glove80-specific: the
  *  TOML schema and the editor's 80-key walk are written against this exact
@@ -100,7 +101,18 @@ export function snapshotFromState(state: WorkbenchState): RuntimeSnapshot {
           // file naming rules conflicts with the former and not the latter.
           conditional_scenes: state.runtimeConditionalScenes,
         };
-  return { default_layer: state.defaultLayer, layers: state.layers, lighting };
+  return {
+    default_layer: state.defaultLayer,
+    layers: state.layers,
+    lighting,
+    // Live state always describes all three, so an export never renders a file
+    // that would read as "leave them alone" when it meant to record them.
+    behaviors: {
+      morses: state.morse,
+      combos: state.combos,
+      macros: [...state.macroBytes],
+    },
+  };
 }
 
 export function detectFormat(text: string): ConfigFormat {

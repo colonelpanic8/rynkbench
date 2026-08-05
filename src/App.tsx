@@ -83,6 +83,10 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     session.device.layout(),
   ]);
 
+  // Firmware predating GetBuildInfo answers UnknownCmd. That is a missing
+  // diagnostic, never a reason to refuse the connection.
+  const build = await session.device.buildInfo().catch(() => null);
+
   let topology = EMPTY_TOPOLOGY;
   let lightingCaps: LightingCapabilities | null = null;
   let lightingState: LightingState | null = null;
@@ -229,6 +233,7 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     info,
     caps,
     protocol,
+    build,
     lightingCaps,
     overlayReadSupported,
     layers,

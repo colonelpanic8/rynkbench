@@ -19,7 +19,10 @@ keymap and per-key lighting live — no install, nothing leaves your machine.
   for firmware that reports support for them.
 - **Configuration files** — import `glove80.toml` or a MoErgo Layout Editor JSON
   backup, write only runtime differences, and export either format through the
-  same validation and conversion model as `glove80-control`.
+  same validation and conversion model as `glove80-control`. Morse, combo and
+  macro tables travel with the keymap, so an editor layout that leans on them
+  survives a round trip. An import reports what it could not represent exactly,
+  naming the layer and key it came from.
 - **Split tuning** — inspect and adjust the volatile powered/battery BLE latency
   policy on compatible split centrals.
 - **Simulated boards** — demo a split ergo, an ortholinear 60, and a dev stub

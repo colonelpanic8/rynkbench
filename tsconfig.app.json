@@ -9,6 +9,9 @@
     // test runner cannot serve.
     "types": ["vite/client", "node"],
     "allowArbitraryExtensions": true,
+    // The flake records each vendored wasm package's source pin as JSON beside
+    // it; `src/session/build-identity.ts` imports those directly.
+    "resolveJsonModule": true,
     "skipLibCheck": true,
 
     /* Bundler mode */

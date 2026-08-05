@@ -8,6 +8,7 @@ import type {
   BatteryStatus,
   BehaviorConfig,
   BleStatus,
+  BuildInfo,
   Combo,
   ConnectionStatus,
   DeviceCapabilities,
@@ -298,6 +299,9 @@ class StubSession implements RynkSession {
       hold_timeout_ms: undefined,
       gap_timeout_ms: undefined,
       quick_tap_timeout_ms: undefined,
+      retro_tap: undefined,
+      prior_idle_time_ms: undefined,
+      hold_trigger_on_release: undefined,
     },
     actions: [],
   }));
@@ -358,6 +362,10 @@ class StubSession implements RynkSession {
     protocolVersion: async (): Promise<ProtocolVersion> => {
       await lag();
       return PROTOCOL;
+    },
+    buildInfo: async (): Promise<BuildInfo> => {
+      await lag();
+      return { label: "stub-rmk v0.0.0 (stubbuil) / RMK rmk-v0.8.2-992-gstubbuil" };
     },
     layout: async (): Promise<LayoutInfo> => {
       await lag();

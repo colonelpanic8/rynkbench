@@ -4,6 +4,7 @@ import { initSync } from "../vendor/glove80-config-wasm/glove80_config_wasm";
 import type { ExtensionCatalog } from "./document";
 import { detectFormat, parseDocument, renderDocument, snapshotFromState } from "./document";
 import type { WorkbenchState } from "../ui/state";
+import type { Morse } from "../vendor/rynk-wasm/rynk_wasm";
 
 // The document module is a wasm binding, so the tests load the same package the
 // app does. `--target web` init wants a fetch; under Node the bytes are handed
@@ -134,6 +135,41 @@ describe("parseDocument", () => {
   });
 });
 
+const LIVE_MORSE = [
+  {
+    profile: {
+      unilateral_tap: true,
+      enable_flow_tap: undefined,
+      mode: "Normal" as const,
+      hold_timeout_ms: 210,
+      gap_timeout_ms: undefined,
+      quick_tap_timeout_ms: undefined,
+      retro_tap: undefined,
+      prior_idle_time_ms: undefined,
+      hold_trigger_on_release: undefined,
+    },
+    // A bilateral home row mod: tap A, hold Gui, on the ring finger's window.
+    actions: [
+      [0b10, { Key: { Hid: "A" as const } }],
+      [
+        0b11,
+        {
+          Modifier: {
+            left_ctrl: false,
+            left_shift: false,
+            left_alt: false,
+            left_gui: true,
+            right_ctrl: false,
+            right_shift: false,
+            right_alt: false,
+            right_gui: false,
+          },
+        },
+      ],
+    ] as Array<[number, unknown]>,
+  },
+] as unknown as Morse[];
+
 describe("snapshotFromState", () => {
   it("round-trips live state through a rendered document", () => {
     const parsed = parseDocument(MINIMAL, CATALOG);
@@ -156,6 +192,12 @@ describe("snapshotFromState", () => {
       runtimeConditionalScenes: lighting.conditional_scenes ?? [],
       lightingExtension: { revision: 1, effect_count: 2, palette_count: 2, state: lighting.effects! },
       lightingExtensionLayers: { overlay: lighting.overlay },
+      // The behavior tables a `TD(n)` cell resolves through. A document
+      // describes these too, so an export that dropped them would make an
+      // import a one-way door.
+      morse: LIVE_MORSE,
+      combos: [],
+      macroBytes: new Uint8Array(),
     } as unknown as WorkbenchState;
 
     const text = renderDocument(snapshotFromState(state), CATALOG, "toml", MINIMAL);
@@ -166,5 +208,8 @@ describe("snapshotFromState", () => {
     // The user's own layer labels survive, because the document being replaced
     // is what supplies them — the firmware stores none.
     expect(text).toContain('id = "base"');
+    // The morse survives with its timing intact, which is the whole point of
+    // rendering the table rather than only the keymap that indexes it.
+    expect(again.snapshot.behaviors?.morses).toEqual(LIVE_MORSE);
   });
 });

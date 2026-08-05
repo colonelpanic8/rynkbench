@@ -33,6 +33,7 @@ import type {
   LightingState,
   ModifierCombination,
   Morse,
+  BuildInfo,
   ProtocolVersion,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import type { RynkSession } from "../session/types";
@@ -55,6 +56,9 @@ export interface ConnectedBundle {
   info: DeviceInfo;
   caps: DeviceCapabilities;
   protocol: ProtocolVersion;
+  /** Application-defined build identity. null on firmware that has no
+   *  `GetBuildInfo`, which is not a fault — it just cannot be compared. */
+  build: BuildInfo | null;
   lightingCaps: LightingCapabilities | null;
   overlayReadSupported: boolean;
   layers: KeyAction[][];

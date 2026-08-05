@@ -482,6 +482,7 @@ export const glove80Board: BoardSpec = {
   info,
   capabilities,
   protocol: { major: 1, minor: 0 },
+  build: { label: "config 0e70aaf9 / glove80-rmk v0.1.0 (mockbuil) / RMK rmk-v0.8.2-992-gmockbuil" },
   connection: {
     usb: "Suspended",
     ble: { profile: 0, state: "Connected" },

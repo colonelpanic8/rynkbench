@@ -20,6 +20,7 @@ import type {
   BatteryStatus,
   BehaviorConfig,
   BleStatus,
+  BuildInfo,
   Combo,
   ConnectionStatus,
   DeviceCapabilities,
@@ -224,6 +225,9 @@ export interface DeviceOps {
   info(): Promise<DeviceInfo>;
   capabilities(): Promise<DeviceCapabilities>;
   protocolVersion(): Promise<ProtocolVersion>;
+  /** Application-defined build identity. Diagnostics only — the label names
+   *  the firmware's source revisions, which no version number does. */
+  buildInfo(): Promise<BuildInfo>;
   layout(): Promise<LayoutInfo>;
   battery(): Promise<BatteryStatus>;
   connectionStatus(): Promise<ConnectionStatus>;
