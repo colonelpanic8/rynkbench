@@ -100,6 +100,103 @@ describe("parseDocument", () => {
     );
   });
 
+  /** A MoErgo document of `layerCount` transparent layers, plus whatever
+   *  behavior tables the case under test needs. The importer's own correctness
+   *  is covered against the real TailorKey export in glove80-config; what
+   *  matters here is that the results cross the wasm ABI intact. */
+  const moergo = (extra: Record<string, unknown>, layerCount = 1) =>
+    JSON.stringify({
+      keyboard: "glove80",
+      layer_names: Array.from({ length: layerCount }, (_, i) => `Layer ${i}`),
+      layers: Array.from({ length: layerCount }, () =>
+        Array.from({ length: 80 }, () => ({ value: "&trans" })),
+      ),
+      ...extra,
+    });
+
+  it("carries the behavior tables a keymap cell addresses by index", () => {
+    // One bilateral home row mod: hold Gui, tap A, hold reachable only from the
+    // opposite hand. It has to arrive as a morse, or the `TD(0)` cell that
+    // indexes it would resolve through whatever the keyboard already held.
+    const doc = JSON.parse(moergo({}));
+    doc.holdTaps = [
+      {
+        name: "&hrm_ring",
+        bindings: ["&kp", "&kp"],
+        tappingTermMs: 240,
+        flavor: "tap-preferred",
+        quickTapMs: 300,
+        holdTriggerOnRelease: true,
+        holdTriggerKeyPositions: [40, 41, 42],
+      },
+    ];
+    doc.layers[0][0] = {
+      value: "&hrm_ring",
+      params: [{ value: "LGUI" }, { value: "A" }],
+    };
+
+    const { snapshot } = parseDocument(JSON.stringify(doc), CATALOG);
+    const morses = snapshot.behaviors?.morses;
+    expect(morses).toHaveLength(1);
+    expect(morses?.[0].profile.hold_timeout_ms).toBe(240);
+    expect(morses?.[0].profile.unilateral_tap).toBe(true);
+    // And the key resolves through the table rather than carrying the action.
+    expect(snapshot.layers[0][0]).toEqual({ Morse: 0 });
+  });
+
+  it("reports what it imported but could not reproduce exactly", () => {
+    // Per-layer pointer scaling has no Rynk equivalent — the mouse speed is one
+    // global interval — so the import approximates it and has to say so.
+    const text = moergo(
+      {
+        inputListeners: [
+          {
+            code: "&mmv_input_listener",
+            nodes: [
+              {
+                code: "warp",
+                layers: [1],
+                inputProcessors: [{ code: "&zip_xy_scaler", params: [{ value: "12" }] }],
+              },
+            ],
+          },
+        ],
+      },
+      2,
+    );
+
+    const { notes } = parseDocument(text, CATALOG);
+    expect(notes).toHaveLength(1);
+    expect(notes[0].approximated).toBe(true);
+    // The note names where it came from, which is what makes it actionable.
+    // Some diagnostics carry that in `location` and some name it inline, so
+    // assert on what a reader actually sees.
+    const shown = [notes[0].location, notes[0].message].filter(Boolean).join(" ");
+    expect(shown).toContain("layer 1");
+    expect(shown).toMatch(/pointer|mouse/i);
+  });
+
+  it("names every binding it cannot import, not just the first", () => {
+    const doc = JSON.parse(moergo({}));
+    doc.layers[0][0] = { value: "&no_such_behavior" };
+    doc.layers[0][1] = { value: "&also_missing" };
+
+    // Reporting one at a time would send the reader back around the import loop
+    // once per unportable key, and hide how much of the layout is portable.
+    expect(() => parseDocument(JSON.stringify(doc), CATALOG)).toThrow(
+      /2 bindings cannot be imported/,
+    );
+  });
+
+  it("says nothing about the behavior tables when the document does not", () => {
+    // A TOML file predating those sections must not read as "clear them".
+    const { snapshot, notes } = parseDocument(MINIMAL, CATALOG);
+    expect(snapshot.behaviors?.morses).toBeUndefined();
+    expect(snapshot.behaviors?.combos).toBeUndefined();
+    expect(snapshot.behaviors?.macros).toBeUndefined();
+    expect(notes).toEqual([]);
+  });
+
   it("accepts the nested modifier objects emitted by the MoErgo editor", () => {
     const keys = Array.from({ length: 80 }, () => ({ value: "&trans" }));
     keys[0] = {
