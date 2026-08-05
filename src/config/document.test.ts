@@ -27,8 +27,10 @@ const CATALOG: ExtensionCatalog = {
   ],
 };
 
-/** A minimal document of transparent layers, plus whatever behavior tables the
- * case under test needs. */
+/** A MoErgo document of `layerCount` transparent layers, plus whatever behavior
+ *  tables the case under test needs. The importer's own correctness is covered
+ *  against the real editor exports in glove80-config; what matters here is that
+ *  the results cross the wasm ABI intact. */
 const moergo = (extra: Record<string, unknown>, layerCount = 1) =>
   JSON.stringify({
     keyboard: "glove80",
