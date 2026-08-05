@@ -1,16 +1,20 @@
 // Effects mode: the firmware's animated effect pack as a first-class view.
 // The gallery picks the base effect (and, where the firmware carries a second
 // slot, the overlay); the inspector carries palette, brightness, speed and
-// whatever generic per-effect parameters the device advertises for the staged
-// effect. Everything is staged locally and applied via
+// whatever generic per-effect parameters the device advertises for each staged
+// effect — parameters live per effect on the device, so the base and overlay
+// slots each get their own block. Everything is staged locally and applied via
 // lighting.setExtensionState; the device's returned state is the source of
 // truth. Nothing here is named or bounded locally — every label and range
 // comes from the connected firmware.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { LightingExtensionState } from "../../vendor/rynk-wasm/rynk_wasm";
+import type {
+  LightingExtensionParam,
+  LightingExtensionState,
+} from "../../vendor/rynk-wasm/rynk_wasm";
 import type { ExtensionParamWrite } from "../state";
-import { useWorkbench } from "../state";
+import { paramEffects, useWorkbench } from "../state";
 import { Button, Chip, InspectorShell, SectionLabel, TextInput, cx } from "../kit";
 import { SpinnerIcon, WarningIcon } from "../icons";
 import { Slider } from "../lighting/BackgroundPanel";
@@ -20,9 +24,14 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 /** Which slot the gallery is assigning to. */
 type Slot = "base" | "overlay";
 
-/** Staged parameter values, pinned to the effect whose list they describe. */
-interface ParamDraft {
+/** Staged parameter values, keyed by the effect whose list they describe. */
+type ParamDrafts = Record<number, number[]>;
+
+/** One effect's parameter block as rendered in the inspector. */
+interface ParamBlock {
   effect: number;
+  slots: Slot[];
+  items: LightingExtensionParam[];
   values: number[];
 }
 
@@ -124,40 +133,52 @@ export function EffectsMode() {
     overlayDeviceRef.current = next;
   }, [extensionLayers, overlayDraft]);
 
-  // Parameters belong to the *staged* effect: the protocol serves any effect's
+  // Parameters belong to the *staged* effects: the protocol serves any effect's
   // list, so picking one in the gallery previews its parameters before Apply.
+  // Both slots are tracked, since each names its own effect on the device.
   const stagedEffect = draft?.effect ?? null;
+  const stagedOverlay = extensionLayers === null ? undefined : overlayDraft;
+  const staged = useMemo(
+    () => (stagedEffect === null ? [] : paramEffects(stagedEffect, stagedOverlay)),
+    [stagedEffect, stagedOverlay],
+  );
+
   const loadParams = io.loadExtensionParams;
   useEffect(() => {
-    if (stagedEffect === null) return;
-    loadParams(stagedEffect);
-  }, [stagedEffect, loadParams]);
+    for (const effect of staged) loadParams(effect);
+  }, [staged, loadParams]);
 
-  const loaded =
-    state.extensionParams !== null && state.extensionParams.effect === stagedEffect
-      ? state.extensionParams.items
-      : null;
+  const store = state.extensionParams;
 
-  // The parameter draft mirrors the selection draft's follow-when-clean rule,
-  // and is pinned to its effect so switching effects never carries values over.
-  const [paramDraft, setParamDraft] = useState<ParamDraft | null>(null);
-  const loadedRef = useRef<ParamDraft | null>(null);
+  // Parameter drafts mirror the selection draft's follow-when-clean rule, and
+  // are keyed by effect so switching effects never carries values over.
+  const [paramDrafts, setParamDrafts] = useState<ParamDrafts>({});
+  const loadedRef = useRef<ParamDrafts>({});
   useEffect(() => {
-    if (stagedEffect === null || loaded === null) return;
-    const values = loaded.map((param) => param.value);
     const previous = loadedRef.current;
-    loadedRef.current = { effect: stagedEffect, values };
-    setParamDraft((current) =>
-      current !== null &&
-      current.effect === stagedEffect &&
-      previous !== null &&
-      previous.effect === stagedEffect &&
-      !same(current.values, previous.values)
-        ? current // staged edits survive a device push, like the selection draft
-        : { effect: stagedEffect, values },
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, stagedEffect]);
+    const fresh: ParamDrafts = { ...previous };
+    for (const effect of staged) {
+      const items = store[effect];
+      if (items !== undefined) fresh[effect] = items.map((param) => param.value);
+    }
+    loadedRef.current = fresh;
+    setParamDrafts((current) => {
+      let next = current;
+      for (const effect of staged) {
+        const values = fresh[effect];
+        if (values === undefined) continue;
+        const held = current[effect];
+        // Staged edits survive a device push, like the selection draft.
+        if (held !== undefined && previous[effect] !== undefined) {
+          if (!same(held, previous[effect])) continue;
+          if (same(held, values)) continue;
+        }
+        if (next === current) next = { ...current };
+        next[effect] = values;
+      }
+      return next;
+    });
+  }, [store, staged]);
 
   const effects = bundle.extensionEffectNames;
   const visible = useMemo(() => {
@@ -177,45 +198,6 @@ export function EffectsMode() {
   const palettes = bundle.extensionPaletteNames;
   const clean = toDraft();
 
-  // Render parameters only when the device advertised some for this effect and
-  // the draft has caught up with them.
-  const paramValues =
-    loaded !== null &&
-    loaded.length > 0 &&
-    paramDraft !== null &&
-    paramDraft.effect === draft.effect &&
-    paramDraft.values.length === loaded.length
-      ? paramDraft.values
-      : null;
-  const params = paramValues === null ? null : loaded;
-  const paramWrites: ExtensionParamWrite[] =
-    params === null || paramValues === null
-      ? []
-      : params.flatMap((param, index) =>
-          paramValues[index] === param.value ? [] : [{ index, value: paramValues[index] }],
-        );
-  const atDefaults =
-    params === null || paramValues === null
-      ? true
-      : params.every((param, index) => paramValues[index] === param.default);
-
-  const setParam = (index: number, value: number) =>
-    setParamDraft((current) =>
-      current === null
-        ? current
-        : { effect: current.effect, values: current.values.map((v, i) => (i === index ? value : v)) },
-    );
-
-  const revertParams = () =>
-    setParamDraft(
-      loaded === null ? null : { effect: draft.effect, values: loaded.map((p) => p.value) },
-    );
-
-  const dirty =
-    !same(draft, clean) ||
-    overlayDraft !== extensionLayers?.overlay ||
-    paramWrites.length > 0;
-
   const hasOverlaySlot = extensionLayers !== null;
   const activeSlot = hasOverlaySlot ? slot : "base";
   const pick = (index: number | null) => {
@@ -232,6 +214,46 @@ export function EffectsMode() {
     if (hasOverlaySlot && overlayDraft === index) slots.push("overlay");
     return slots;
   };
+
+  // One block per staged effect, but only where the device advertised
+  // parameters for it and the draft has caught up with them.
+  const blocks: ParamBlock[] = staged.flatMap((effect) => {
+    const items = store[effect];
+    const values = paramDrafts[effect];
+    if (items === undefined || items.length === 0) return [];
+    if (values === undefined || values.length !== items.length) return [];
+    return [{ effect, slots: assignedFor(effect), items, values }];
+  });
+
+  const paramWrites: ExtensionParamWrite[] = blocks.flatMap((block) =>
+    block.items.flatMap((param, index) =>
+      block.values[index] === param.value
+        ? []
+        : [{ effect: block.effect, index, value: block.values[index] }],
+    ),
+  );
+
+  const setParam = (effect: number, index: number, value: number) =>
+    setParamDrafts((current) => {
+      const values = current[effect];
+      if (values === undefined) return current;
+      return { ...current, [effect]: values.map((v, i) => (i === index ? value : v)) };
+    });
+
+  const revertParams = () =>
+    setParamDrafts((current) => {
+      const next = { ...current };
+      for (const effect of staged) {
+        const items = store[effect];
+        if (items !== undefined) next[effect] = items.map((param) => param.value);
+      }
+      return next;
+    });
+
+  const dirty =
+    !same(draft, clean) ||
+    overlayDraft !== extensionLayers?.overlay ||
+    paramWrites.length > 0;
 
   const effectName = (index: number | undefined) =>
     index === undefined ? "None" : (effects[index] ?? `Effect ${index}`);
@@ -361,36 +383,49 @@ export function EffectsMode() {
             />
           </div>
 
-          {params !== null && paramValues !== null && (
-            <div className="flex flex-col gap-2 border-t border-line-soft pt-4">
+          {blocks.map((block) => (
+            <div
+              key={block.effect}
+              className="flex flex-col gap-2 border-t border-line-soft pt-4"
+            >
               <div className="flex items-center justify-between gap-2">
-                <SectionLabel>{effectName(draft.effect)} parameters</SectionLabel>
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <SectionLabel>{effectName(block.effect)} parameters</SectionLabel>
+                  {hasOverlaySlot &&
+                    block.slots.map((s) => (
+                      <Chip key={s} tone={s === "base" ? "accent" : "neutral"}>
+                        {s}
+                      </Chip>
+                    ))}
+                </div>
                 <Button
                   variant="ghost"
                   className="px-1.5 py-0 text-[10.5px]"
-                  disabled={atDefaults}
+                  disabled={block.items.every(
+                    (param, index) => block.values[index] === param.default,
+                  )}
                   onClick={() =>
-                    setParamDraft({
-                      effect: draft.effect,
-                      values: params.map((param) => param.default),
-                    })
+                    setParamDrafts((current) => ({
+                      ...current,
+                      [block.effect]: block.items.map((param) => param.default),
+                    }))
                   }
                 >
                   Defaults
                 </Button>
               </div>
-              {params.map((param, index) => (
+              {block.items.map((param, index) => (
                 <Slider
-                  key={`${draft.effect}:${index}:${param.name}`}
+                  key={`${block.effect}:${index}:${param.name}`}
                   label={param.name}
                   min={param.min}
                   max={param.max}
-                  value={paramValues[index]}
-                  onChange={(value) => setParam(index, value)}
+                  value={block.values[index]}
+                  onChange={(value) => setParam(block.effect, index, value)}
                 />
               ))}
             </div>
-          )}
+          ))}
         </div>
 
         <div className="mt-4 border-t border-line-soft pt-3">

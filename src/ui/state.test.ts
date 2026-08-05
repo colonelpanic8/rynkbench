@@ -64,7 +64,7 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     runtimeConditionalDraft: [],
     lightingExtension: null,
     lightingExtensionLayers: null,
-    extensionParams: null,
+    extensionParams: {},
     scenePolicy: "EffectiveOnly",
     compiledScenePolicy: "EffectiveOnly",
     selection: null,
@@ -252,7 +252,18 @@ describe("extension parameters", () => {
 
   it("records a loaded list against the effect it describes", () => {
     const next = reducer(baseState(), { type: "extensionParamsLoaded", effect: 6, items: params });
-    expect(next.extensionParams).toEqual({ effect: 6, items: params });
+    expect(next.extensionParams).toEqual({ 6: params });
+  });
+
+  it("keeps every effect's list, so base and overlay parameters coexist", () => {
+    const overlayParams: LightingExtensionParam[] = [
+      { name: "Width", min: 0, max: 10, default: 3, value: 4 },
+    ];
+    const next = reducer(
+      reducer(baseState(), { type: "extensionParamsLoaded", effect: 6, items: params }),
+      { type: "extensionParamsLoaded", effect: 2, items: overlayParams },
+    );
+    expect(next.extensionParams).toEqual({ 6: params, 2: overlayParams });
   });
 
   /** A session stub with just the extension surface the io facade touches. */
@@ -315,8 +326,8 @@ describe("extension parameters", () => {
     });
 
     io.setExtensionState(selection, [
-      { index: 0, value: 20 },
-      { index: 2, value: 3 },
+      { effect: 6, index: 0, value: 20 },
+      { effect: 6, index: 2, value: 3 },
     ]);
     await vi.waitFor(() => expect(calls).toHaveLength(6));
     expect(calls).toEqual([
@@ -343,7 +354,9 @@ describe("extension parameters", () => {
         throw new Error("parameter 99 is outside 1..=32");
       },
     });
-    io.setExtensionState({ effect: 6, palette: 0, value: 0, speed: 0 }, [{ index: 0, value: 99 }]);
+    io.setExtensionState({ effect: 6, palette: 0, value: 0, speed: 0 }, [
+      { effect: 6, index: 0, value: 99 },
+    ]);
     await vi.waitFor(() => expect(actions).toHaveLength(2));
     expect(actions[1]).toEqual({
       type: "lightingBusy",
@@ -377,8 +390,8 @@ describe("extension parameters", () => {
           calls.push("readback overlay");
           return { revision: 3, overlay: 2 };
         },
-        extensionParams: async () => {
-          calls.push("reload");
+        extensionParams: async (effect) => {
+          calls.push(`reload ${effect}`);
           return [];
         },
       },
@@ -386,14 +399,15 @@ describe("extension parameters", () => {
     );
 
     io.setExtensionState(selection, [], 2);
-    await vi.waitFor(() => expect(calls).toHaveLength(6));
+    await vi.waitFor(() => expect(calls).toHaveLength(7));
     expect(calls).toEqual([
       "primary",
       "overlay 2",
       "readback state",
       "readback primary",
       "readback overlay",
-      "reload",
+      "reload 5",
+      "reload 2",
     ]);
     expect(actions).toContainEqual({
       type: "extensionStateSet",
@@ -428,8 +442,8 @@ describe("extension parameters", () => {
           calls.push("readback overlay");
           return { revision: 5, overlay: 2 };
         },
-        extensionParams: async () => {
-          calls.push("reload");
+        extensionParams: async (effect) => {
+          calls.push(`reload ${effect}`);
           return [];
         },
       },
@@ -445,13 +459,14 @@ describe("extension parameters", () => {
     );
 
     io.setExtensionState(selection, [], 2);
-    await vi.waitFor(() => expect(calls).toHaveLength(5));
+    await vi.waitFor(() => expect(calls).toHaveLength(6));
     expect(calls).toEqual([
       "primary",
       "readback state",
       "readback primary",
       "readback overlay",
-      "reload",
+      "reload 5",
+      "reload 2",
     ]);
   });
 
@@ -483,8 +498,8 @@ describe("extension parameters", () => {
           calls.push("readback overlay");
           return { revision: 5, overlay: 2 };
         },
-        extensionParams: async () => {
-          calls.push("reload");
+        extensionParams: async (effect) => {
+          calls.push(`reload ${effect}`);
           return params;
         },
       },
@@ -499,14 +514,25 @@ describe("extension parameters", () => {
       }),
     );
 
-    io.setExtensionState(selection, [{ index: 0, value: 20 }], 2);
-    await vi.waitFor(() => expect(calls).toHaveLength(5));
+    // A write names its own effect, so the overlay slot's parameters are
+    // editable alongside the base slot's, and both slots reload afterwards.
+    io.setExtensionState(
+      selection,
+      [
+        { effect: 5, index: 0, value: 20 },
+        { effect: 2, index: 0, value: 7 },
+      ],
+      2,
+    );
+    await vi.waitFor(() => expect(calls).toHaveLength(7));
     expect(calls).toEqual([
       "param 5:0=20",
+      "param 2:0=7",
       "readback state",
       "readback primary",
       "readback overlay",
-      "reload",
+      "reload 5",
+      "reload 2",
     ]);
     expect(actions).toContainEqual({
       type: "extensionStateSet",

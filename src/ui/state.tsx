@@ -161,11 +161,12 @@ export interface WorkbenchState {
   /** Extension-effects discovery + live selection; null when unsupported. */
   lightingExtension: LightingExtension | null;
   lightingExtensionLayers: LightingExtensionLayers | null;
-  /** The generic parameter list last read, and which effect it describes.
-   *  null before the first read; an empty `items` means "this effect has no
-   *  parameters", which is also how firmware without the parameter surface
-   *  at all is recorded (the read simply failed). */
-  extensionParams: ExtensionParamSet | null;
+  /** Generic parameter lists by effect index. An effect is absent until its
+   *  first read; an empty list means "this effect has no parameters", which is
+   *  also how firmware without the parameter surface at all is recorded (the
+   *  read simply failed). Several effects are held at once because the pack can
+   *  render a base and an overlay effect, each with its own parameters. */
+  extensionParams: ExtensionParamSet;
   /** Layer-composition policy; null when scenes are unsupported. */
   scenePolicy: LightingLayerPolicy | null;
   compiledScenePolicy: LightingLayerPolicy | null;
@@ -191,16 +192,20 @@ export interface WorkbenchState {
   modifierState: ModifierCombination | null;
 }
 
-/** One effect's parameter list as last read from the device. */
-export interface ExtensionParamSet {
-  effect: number;
-  items: LightingExtensionParam[];
-}
+/** Parameter lists as last read from the device, keyed by effect index. */
+export type ExtensionParamSet = Record<number, LightingExtensionParam[]>;
 
-/** One staged parameter write: an ordinal within an effect's list. */
+/** One staged parameter write: an ordinal within one effect's list. */
 export interface ExtensionParamWrite {
+  effect: number;
   index: number;
   value: number;
+}
+
+/** The effects whose parameters are in play, base first and deduplicated —
+ *  both slots may point at the same effect, which has one parameter set. */
+export function paramEffects(base: number, overlay: number | undefined): number[] {
+  return overlay === undefined || overlay === base ? [base] : [base, overlay];
 }
 
 export function keyPendingId(layer: number, row: number, col: number): string {
@@ -297,7 +302,7 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     runtimeConditionalDraft: bundle.runtimeConditionalScenes,
     lightingExtension: bundle.lightingExtension,
     lightingExtensionLayers: bundle.lightingExtensionLayers,
-    extensionParams: null,
+    extensionParams: {},
     scenePolicy: bundle.sceneStatus?.policy ?? null,
     compiledScenePolicy: bundle.compiledSceneStatus?.policy ?? null,
     selection: null,
@@ -647,7 +652,10 @@ export function makeWorkbenchReducer(cols: number) {
           lightingError: null,
         };
       case "extensionParamsLoaded":
-        return { ...state, extensionParams: { effect: act.effect, items: act.items } };
+        return {
+          ...state,
+          extensionParams: { ...state.extensionParams, [act.effect]: act.items },
+        };
       case "hoverLeds":
         return { ...state, hoverLeds: act.leds };
       case "lightingSelect": {
@@ -1040,12 +1048,10 @@ export function makeIo(
         if (currentLayers !== null && currentLayers.overlay !== overlay) {
           await session.lighting.setExtensionLayers(overlay);
         }
+        // Parameters are stored per effect, so a write names its own effect:
+        // the overlay slot's effect is edited alongside the base slot's.
         for (const write of params) {
-          await session.lighting.setExtensionParam(
-            extension.effect,
-            write.index,
-            write.value,
-          );
+          await session.lighting.setExtensionParam(write.effect, write.index, write.value);
         }
         const [lightingState, appliedExtension, extensionLayers] = await Promise.all([
           session.lighting.state(),
@@ -1058,7 +1064,9 @@ export function makeIo(
           extension: appliedExtension.state,
           extensionLayers,
         });
-        loadParams(appliedExtension.state.effect);
+        for (const effect of paramEffects(appliedExtension.state.effect, extensionLayers?.overlay)) {
+          loadParams(effect);
+        }
       })().catch((err) =>
         dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
       );
