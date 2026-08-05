@@ -1,14 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { RYNK_USAGE, RYNK_USAGE_PAGE } from "../rynk-link";
+import { RYNK_USAGE, RYNK_USAGE_PAGES } from "../rynk-link";
 import { grantedRynkDevices, rejectRynkDevice } from "./link";
 
-function device(name: string, rynk = true): HIDDevice {
+function device(name: string, rynk: boolean | number = true): HIDDevice {
+  const usagePage = typeof rynk === "number" ? rynk : rynk ? RYNK_USAGE_PAGES[0] : 0x01;
   return {
     productName: name,
     opened: false,
-    collections: [
-      { usagePage: rynk ? RYNK_USAGE_PAGE : 0x01, usage: rynk ? RYNK_USAGE : 0x06 },
-    ],
+    collections: [{ usagePage, usage: rynk === false ? 0x06 : RYNK_USAGE }],
   } as unknown as HIDDevice;
 }
 
@@ -53,5 +52,18 @@ describe("granted Rynk device enumeration", () => {
   it("treats an unavailable permission store as no grants", async () => {
     grant([], true);
     expect(await grantedRynkDevices()).toEqual([]);
+  });
+
+  /// The bug this guards: firmware built with RMK's `rynk` feature moved the
+  /// protocol off the Via page (0xff60) onto its own (0xff14), and discovery
+  /// that knew only the old page reported "no keyboard found" for a board
+  /// sitting right there. Both pages stay reachable, so neither firmware
+  /// vintage goes dark.
+  it("finds Rynk on every usage page firmware has shipped it on", async () => {
+    const current = device("Glove80", 0xff14);
+    const legacy = device("Glove80", 0xff60);
+    grant([device("Some Keyboard", false), current, legacy]);
+
+    expect(await grantedRynkDevices()).toEqual([current, legacy]);
   });
 });

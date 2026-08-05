@@ -26,12 +26,23 @@ use hidapi::HidApi;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-const RYNK_USAGE_PAGE: u16 = 0xff60;
+/// Vendor usage pages that can carry Rynk, newest first. Firmware built with
+/// RMK's `rynk` feature puts the protocol on its own interface; before that it
+/// rode on the Via report, which older boards still expose. Matching on a
+/// single page silently finds nothing the moment firmware moves, so discovery
+/// accepts every page here.
+const RYNK_USAGE_PAGES: [u16; 2] = [0xff14, 0xff60];
 const RYNK_USAGE: u16 = 0x61;
 const RYNK_HID_REPORT_SIZE: usize = 32;
 /// How long the reader blocks in read_timeout before checking for outbound
 /// reports and shutdown; bounds the added request latency.
 const IO_POLL: Duration = Duration::from_millis(5);
+
+/// The one place discovery decides whether an interface carries Rynk; both the
+/// enumeration and the open path go through it so they cannot drift apart.
+fn carries_rynk(device: &hidapi::DeviceInfo) -> bool {
+    device.usage() == RYNK_USAGE && RYNK_USAGE_PAGES.contains(&device.usage_page())
+}
 
 struct Link {
     outbound: Sender<Vec<u8>>,
@@ -112,7 +123,7 @@ struct Candidate {
 
 fn candidates(api: &HidApi) -> Vec<Candidate> {
     api.device_list()
-        .filter(|d| d.usage_page() == RYNK_USAGE_PAGE && d.usage() == RYNK_USAGE)
+        .filter(|d| carries_rynk(d))
         .map(|d| Candidate {
             path: d.path().to_string_lossy().into_owned(),
             label: d
@@ -151,14 +162,23 @@ fn rynk_open(
     let api = HidApi::new().map_err(|e| format!("HID subsystem unavailable: {e}"))?;
     let info = api
         .device_list()
-        .filter(|d| d.usage_page() == RYNK_USAGE_PAGE && d.usage() == RYNK_USAGE)
+        .filter(|d| carries_rynk(d))
         .find(|d| match &path {
             Some(wanted) => d.path().to_string_lossy() == wanted.as_str(),
             None => true,
         })
         .ok_or_else(|| match &path {
             Some(wanted) => format!("Rynk interface {wanted} is no longer present"),
-            None => "No Rynk keyboard found (raw-HID usage 0xFF60/0x61)".to_string(),
+            None => {
+                let pages: Vec<String> = RYNK_USAGE_PAGES
+                    .iter()
+                    .map(|page| format!("{page:#06x}"))
+                    .collect();
+                format!(
+                    "No Rynk keyboard found (raw-HID usage {}/{RYNK_USAGE:#04x})",
+                    pages.join(" or ")
+                )
+            }
         })?;
     let label = info
         .product_string()

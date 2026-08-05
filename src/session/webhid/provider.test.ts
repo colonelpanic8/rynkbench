@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { RYNK_USAGE, RYNK_USAGE_PAGE } from "../rynk-link";
+import { RYNK_USAGE, RYNK_USAGE_PAGES } from "../rynk-link";
 
 // The handshake is what distinguishes two keyboards of the same model, so the
 // wasm client stands in for it: `handshakes` decides which links connect.
@@ -33,7 +33,7 @@ function device(productName: string): HIDDevice {
   return {
     productName,
     opened: false,
-    collections: [{ usagePage: RYNK_USAGE_PAGE, usage: RYNK_USAGE }],
+    collections: [{ usagePage: RYNK_USAGE_PAGES[0], usage: RYNK_USAGE }],
     open() {
       (this as { opened: boolean }).opened = true;
       return Promise.resolve();

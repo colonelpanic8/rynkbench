@@ -4,8 +4,9 @@
 
 import {
   RYNK_USAGE,
-  RYNK_USAGE_PAGE,
+  RYNK_USAGE_PAGES,
   RynkFrameBuffer,
+  isRynkUsage,
   toReports,
   type RynkByteLink,
 } from "../rynk-link";
@@ -13,7 +14,7 @@ import {
 export type { RynkByteLink } from "../rynk-link";
 
 function isRynkInterface(device: HIDDevice): boolean {
-  return device.collections.some((c) => c.usagePage === RYNK_USAGE_PAGE && c.usage === RYNK_USAGE);
+  return device.collections.some((c) => isRynkUsage(c.usagePage ?? -1, c.usage ?? -1));
 }
 
 /// Grants that failed to speak Rynk this page session. WebHID hands out
@@ -41,7 +42,7 @@ export function rejectRynkDevice(device: HIDDevice): void {
 /** Show the browser device picker and return the chosen Rynk interface. */
 export async function requestRynkDevice(): Promise<HIDDevice> {
   const devices = await navigator.hid.requestDevice({
-    filters: [{ usagePage: RYNK_USAGE_PAGE, usage: RYNK_USAGE }],
+    filters: RYNK_USAGE_PAGES.map((usagePage) => ({ usagePage, usage: RYNK_USAGE })),
   });
   // Chromium returns every HID interface of the chosen physical device; pick
   // the Rynk collection, not a look-alike raw interface.

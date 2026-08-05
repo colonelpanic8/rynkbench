@@ -7,9 +7,21 @@
 // receives, so reports must reach it whole — including the zero padding,
 // which the deframer reads as the inter-frame delimiter it resyncs on.
 
-export const RYNK_USAGE_PAGE = 0xff60;
+/**
+ * Vendor usage pages that can carry Rynk, newest first. Firmware built with
+ * RMK's `rynk` feature puts the protocol on its own interface; before that it
+ * rode on the Via report, which older boards still expose. Discovery must
+ * accept every page here — matching on one silently finds nothing when the
+ * firmware moves, which is exactly how this broke before.
+ */
+export const RYNK_USAGE_PAGES = [0xff14, 0xff60] as const;
 export const RYNK_USAGE = 0x61;
 export const RYNK_HID_REPORT_SIZE = 32;
+
+/** Whether a HID collection's page/usage pair belongs to a Rynk interface. */
+export function isRynkUsage(usagePage: number, usage: number): boolean {
+  return usage === RYNK_USAGE && RYNK_USAGE_PAGES.includes(usagePage as never);
+}
 
 /**
  * The byte link handed to the wasm `connect()` — the web transport's
