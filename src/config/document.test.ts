@@ -27,6 +27,18 @@ const CATALOG: ExtensionCatalog = {
   ],
 };
 
+/** A minimal document of transparent layers, plus whatever behavior tables the
+ * case under test needs. */
+const moergo = (extra: Record<string, unknown>, layerCount = 1) =>
+  JSON.stringify({
+    keyboard: "glove80",
+    layer_names: Array.from({ length: layerCount }, (_, i) => `Layer ${i}`),
+    layers: Array.from({ length: layerCount }, () =>
+      Array.from({ length: 80 }, () => ({ value: "&trans" })),
+    ),
+    ...extra,
+  });
+
 /** A minimal document: one layer of the 6x14 grid, holes where the board has
  *  no switch, and the lighting a `glove80.toml` always carries. */
 const MINIMAL = `default_layer = 0
@@ -99,20 +111,6 @@ describe("parseDocument", () => {
       /KC_NOPE/,
     );
   });
-
-  /** A MoErgo document of `layerCount` transparent layers, plus whatever
-   *  behavior tables the case under test needs. The importer's own correctness
-   *  is covered against the real TailorKey export in glove80-config; what
-   *  matters here is that the results cross the wasm ABI intact. */
-  const moergo = (extra: Record<string, unknown>, layerCount = 1) =>
-    JSON.stringify({
-      keyboard: "glove80",
-      layer_names: Array.from({ length: layerCount }, (_, i) => `Layer ${i}`),
-      layers: Array.from({ length: layerCount }, () =>
-        Array.from({ length: 80 }, () => ({ value: "&trans" })),
-      ),
-      ...extra,
-    });
 
   it("carries the behavior tables a keymap cell addresses by index", () => {
     // One bilateral home row mod: hold Gui, tap A, hold reachable only from the
@@ -194,7 +192,36 @@ describe("parseDocument", () => {
     expect(snapshot.behaviors?.morses).toBeUndefined();
     expect(snapshot.behaviors?.combos).toBeUndefined();
     expect(snapshot.behaviors?.macros).toBeUndefined();
+    expect(snapshot.behaviors?.forks).toBeUndefined();
     expect(notes).toEqual([]);
+  });
+
+  it("imports MoErgo mod-morphs as forks", () => {
+    const doc = JSON.parse(
+      moergo({
+        modMorphs: [
+          {
+            name: "&parang_left",
+            cases: [
+              {
+                binding: { value: "&kp", params: [{ value: "LS", params: [{ value: "N9" }] }] },
+                mods: [],
+                keepMods: [],
+              },
+              {
+                binding: { value: "&kp", params: [{ value: "LS", params: [{ value: "COMMA" }] }] },
+                mods: ["MOD_RSFT"],
+                keepMods: [],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    doc.layers[0][0] = { value: "&parang_left" };
+
+    const { snapshot } = parseDocument(JSON.stringify(doc), CATALOG);
+    expect(snapshot.behaviors?.forks).toHaveLength(1);
   });
 
   it("accepts the nested modifier objects emitted by the MoErgo editor", () => {
@@ -273,6 +300,29 @@ describe("snapshotFromState", () => {
     const lighting = parsed.snapshot.lighting!;
     // The workbench holds these values across several slots; only the ones a
     // document describes matter here.
+    const forkDocument = JSON.parse(
+      moergo({
+        modMorphs: [
+          {
+            name: "&parang_left",
+            cases: [
+              {
+                binding: { value: "&kp", params: [{ value: "LS", params: [{ value: "N9" }] }] },
+                mods: [],
+                keepMods: [],
+              },
+              {
+                binding: { value: "&kp", params: [{ value: "LS", params: [{ value: "COMMA" }] }] },
+                mods: ["MOD_RSFT"],
+                keepMods: [],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    forkDocument.layers[0][0] = { value: "&parang_left" };
+    const liveForks = parseDocument(JSON.stringify(forkDocument), CATALOG).snapshot.behaviors!.forks!;
     const state = {
       defaultLayer: parsed.snapshot.default_layer,
       layers: parsed.snapshot.layers,
@@ -294,6 +344,7 @@ describe("snapshotFromState", () => {
       // import a one-way door.
       morse: LIVE_MORSE,
       combos: [],
+      forks: liveForks,
       macroBytes: new Uint8Array(),
     } as unknown as WorkbenchState;
 
@@ -308,5 +359,7 @@ describe("snapshotFromState", () => {
     // The morse survives with its timing intact, which is the whole point of
     // rendering the table rather than only the keymap that indexes it.
     expect(again.snapshot.behaviors?.morses).toEqual(LIVE_MORSE);
+    expect(again.snapshot.behaviors?.forks).toEqual(liveForks);
+    expect(text).toContain("[[fork]]");
   });
 });

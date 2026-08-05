@@ -110,6 +110,7 @@ export function snapshotFromState(state: WorkbenchState): RuntimeSnapshot {
     behaviors: {
       morses: state.morse,
       combos: state.combos,
+      forks: state.forks,
       macros: [...state.macroBytes],
     },
   };

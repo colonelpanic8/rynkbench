@@ -42,11 +42,11 @@
     "glove80-rmk": {
       "flake": false,
       "locked": {
-        "lastModified": 1785940919,
-        "narHash": "sha256-+7tN2uNNSB/YneOof6Vh9f211bAhiiDW1DU6AdhNRho=",
+        "lastModified": 1785954929,
+        "narHash": "sha256-e/rZljUgvyGA/F1jBsSSJl9+1RszcC87o/xHhl+sEMM=",
         "owner": "colonelpanic8",
         "repo": "glove80-rmk",
-        "rev": "03608dbb7719d822da5faade254de2887f6a0c1f",
+        "rev": "d3ffda04b58f2c5e82fc08c97150bbaa3a85d1de",
         "type": "github"
       },
       "original": {

@@ -10,7 +10,7 @@ import type { Dispatch } from "react";
 import type { RynkSession } from "../session/types";
 import type { ConnectedBundle, WorkbenchAction, WorkbenchState } from "../ui/state";
 import { errorMessage } from "../ui/state";
-import type { Combo, Morse } from "../vendor/rynk-wasm/rynk_wasm";
+import type { Combo, Fork, Morse } from "../vendor/rynk-wasm/rynk_wasm";
 import {
   assertSupportedMatrix,
   parseDocument,
@@ -91,7 +91,7 @@ async function writeBehaviors(
   const skipped: string[] = [];
   // A document parsed by an older wasm build carries no `behaviors` at all,
   // which means the same thing as a document that describes none of the tables.
-  const { morses, combos, macros } = snapshot.behaviors ?? {};
+  const { morses, combos, forks, macros } = snapshot.behaviors ?? {};
 
   if (macros !== undefined) {
     const bytes = new Uint8Array(macros);
@@ -114,8 +114,8 @@ async function writeBehaviors(
   }
 
   const table = async (
-    kind: "morse" | "combos",
-    wanted: Morse[] | Combo[] | undefined,
+    kind: "morse" | "combos" | "forks",
+    wanted: Morse[] | Combo[] | Fork[] | undefined,
     capacity: number,
     noun: string,
   ) => {
@@ -132,7 +132,8 @@ async function writeBehaviors(
       dispatch({ type: "slotWriteStart", kind, index, value });
       try {
         if (kind === "morse") await session.morse.set(index, value as Morse);
-        else await session.combos.set(index, value as Combo);
+        else if (kind === "combos") await session.combos.set(index, value as Combo);
+        else await session.forks.set(index, value as Fork);
         dispatch({ type: "slotWriteOk", kind, index });
         changed += 1;
       } catch (error) {
@@ -145,6 +146,7 @@ async function writeBehaviors(
 
   await table("morse", morses, bundle.caps.max_morse, "morse");
   await table("combos", combos, bundle.caps.max_combos, "combo");
+  await table("forks", forks, bundle.caps.max_forks, "fork");
   return { applied, skipped };
 }
 

@@ -102,6 +102,7 @@ export function liveKeyActionGlyph(action: KeyAction, shift: boolean): KeyGlyph 
   if ("Tap" in action) {
     return { text: printableActionLabel(action.Tap, shift) ?? actionLabel(action.Tap) };
   }
+  if ("LayerModTap" in action) return keyActionGlyph(action);
   const [tap, hold] = action.TapHold;
   return {
     text: printableActionLabel(tap, shift) ?? actionLabel(tap),
