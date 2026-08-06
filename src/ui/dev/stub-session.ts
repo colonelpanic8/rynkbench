@@ -555,6 +555,9 @@ class StubSession implements RynkSession {
     outputMode: async (): Promise<never> => {
       throw new Error("this firmware does not support lighting output-mode readback");
     },
+    setOutputMode: async (): Promise<never> => {
+      throw new Error("this firmware does not support setting the lighting output mode");
+    },
     topology: async (): Promise<LightingTopology> => {
       await sleep(120);
       return buildTopology();

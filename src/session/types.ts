@@ -44,6 +44,7 @@ import type {
   LightingMatrixPosition,
   LightingMutableState,
   LightingOverlayCell,
+  LightingOutputMode,
   LightingOutputModeState,
   LightingLayerPolicy,
   LightingPhysicalKey,
@@ -116,6 +117,12 @@ export interface LightingOps {
   state(): Promise<LightingState>;
   /** Configured three-state output policy and its live effective state. */
   outputMode(): Promise<LightingOutputModeState>;
+  /** Set the three-state output policy; revision handshake is the backend's
+   *  job. The keyboard also cycles this from a key, so the mode is shared
+   *  state rather than host-owned: the write returns the state that resulted.
+   *  Supported iff the firmware advertises OUTPUT_MODE, which the standard
+   *  engine always does — a board that binds no cycle key still has a policy. */
+  setOutputMode(mode: LightingOutputMode): Promise<LightingOutputModeState>;
   topology(): Promise<LightingTopology>;
   /** Atomically replace the whole overlay (wraps the chunked transaction). */
   replaceOverlay(cells: LightingOverlayCell[]): Promise<LightingState>;

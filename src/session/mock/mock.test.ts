@@ -334,6 +334,30 @@ describe("compiled firmware lighting", () => {
       expect((await session.lighting.capabilities()).features & (1 << 10)).not.toBe(0);
     });
   });
+
+  // The keyboard cycles this mode from a key of its own, but a host that can
+  // only read it cannot honour a document that names one — which is what an
+  // imported `always-on` used to run into.
+  it("sets the output mode and reads back the mode it produced", async () => {
+    await withSession(glove80Board, async (session) => {
+      const written = await session.lighting.setOutputMode("AlwaysOn");
+      expect(written).toMatchObject({ mode: "AlwaysOn", effective_enabled: true });
+      expect(await session.lighting.outputMode()).toMatchObject({ mode: "AlwaysOn" });
+
+      const off = await session.lighting.setOutputMode("AlwaysOff");
+      expect(off).toMatchObject({ mode: "AlwaysOff", effective_enabled: false });
+      // The policy is the only thing a mode change owns: the key that cycles it
+      // and the layers that wake it belong to the board.
+      expect(off).toMatchObject({ cycle_user_action: 13, wake_layers: 1 << 2 });
+    });
+  });
+
+  it("refuses to set an output mode the firmware has no policy for", async () => {
+    await withSession(ortho60Board, async (session) => {
+      expect((await session.lighting.capabilities()).features & (1 << 10)).toBe(0);
+      await expect(session.lighting.setOutputMode("AlwaysOn")).rejects.toThrow(/does not support/);
+    });
+  });
 });
 
 describe("runtime conditional scenes", () => {

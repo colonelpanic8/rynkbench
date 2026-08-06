@@ -25,6 +25,7 @@ import type {
   LightingExtensionNameKind,
   LightingExtensionParam,
   LightingExtensionState,
+  LightingOutputMode,
   LightingOutputModeState,
   LightingLayerPolicy,
   LightingMutableState,
@@ -564,6 +565,7 @@ export class LinkSession implements RynkSession {
       capabilities: () => this.run(() => client.get_lighting_capabilities()),
       state: () => this.run(() => client.get_lighting_state()),
       outputMode: () => this.run(() => this.readOutputMode()),
+      setOutputMode: (mode) => this.run(() => this.writeOutputMode(mode)),
       topology: () => this.run(() => this.readTopology()),
       replaceOverlay: (cells) => this.run(() => this.replaceOverlayCells(cells)),
       clearOverlay: () =>
@@ -1018,6 +1020,27 @@ export class LinkSession implements RynkSession {
       throw new Error("this firmware does not support lighting output-mode readback");
     }
     return this.client.get_lighting_output_mode();
+  }
+
+  private async writeOutputMode(mode: LightingOutputMode): Promise<LightingOutputModeState> {
+    const caps = await this.client.get_lighting_capabilities();
+    if ((caps.features & OUTPUT_MODE) === 0) {
+      throw new Error("this firmware does not support setting the lighting output mode");
+    }
+    // Same revision handshake and single retry as setLightingState. The
+    // keyboard cycles this mode from a key of its own, so losing the race to a
+    // keypress is ordinary rather than exceptional here.
+    const current = await this.client.get_lighting_state();
+    try {
+      return await this.client.set_lighting_output_mode({
+        expected_revision: current.revision,
+        mode,
+      });
+    } catch (error) {
+      if (!String(error).includes("RevisionConflict")) throw error;
+      const fresh = await this.client.get_lighting_state();
+      return this.client.set_lighting_output_mode({ expected_revision: fresh.revision, mode });
+    }
   }
 
   private async readExtension(): Promise<LightingExtension> {

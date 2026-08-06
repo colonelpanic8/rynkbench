@@ -216,11 +216,18 @@ async function writeLighting(
     applied.push("background");
   }
 
-  // The three-state output policy is owned by the keyboard: it is cycled from
-  // the Magic layer, and this session seam exposes no setter for it. Reporting
-  // the difference is the honest alternative to writing it.
-  if (state.lightingOutputMode !== null && desired.output_mode !== state.lightingOutputMode.mode) {
-    skipped.push(`output mode (${desired.output_mode}; set it from the keyboard)`);
+  // The keyboard also cycles the three-state output policy from a key of its
+  // own, so this is shared state rather than host-owned — but a document that
+  // names a mode means it, and leaving it to the user was why an imported
+  // `always-on` looked like it had been applied and then did nothing. Firmware
+  // that does not advertise the policy at all reports no mode to compare
+  // against, and that stays a skip: there is nothing to write it to.
+  if (state.lightingOutputMode === null) {
+    skipped.push(`output mode (${desired.output_mode}; this firmware has no output-mode policy)`);
+  } else if (desired.output_mode !== state.lightingOutputMode.mode) {
+    const outputMode = await session.lighting.setOutputMode(desired.output_mode);
+    dispatch({ type: "outputModeSet", outputMode });
+    applied.push(`output mode (${desired.output_mode})`);
   }
 
   if (state.scenePolicy !== null && desired.scene_policy !== state.scenePolicy) {

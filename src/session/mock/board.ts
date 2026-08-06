@@ -35,6 +35,7 @@ import type {
   LightingLed,
   LightingLedId,
   LightingOverlayCell,
+  LightingOutputMode,
   LightingOutputModeState,
   LightingPhysicalKey,
   LightingRoute,
@@ -317,6 +318,23 @@ const sceneKey = (cell: { layer: number; led_id: LightingLedId }): string =>
 
 const cloneScene = (cell: LightingSceneCell): LightingSceneCell => structuredClone(cell);
 
+/** What a mode change does to the live half of the output-mode state. A board
+ *  that is lit only while plugged in follows its power and its wake layers;
+ *  the other two modes answer for themselves. */
+function effectiveOutput(
+  mode: LightingOutputMode,
+  current: LightingOutputModeState,
+): Pick<LightingOutputModeState, "effective_enabled"> {
+  switch (mode) {
+    case "AlwaysOn":
+      return { effective_enabled: true };
+    case "AlwaysOff":
+      return { effective_enabled: false };
+    default:
+      return { effective_enabled: current.powered || current.wake_active };
+  }
+}
+
 const BATTERY_PUSH_MS = 30_000;
 // While the matrix tester polls, a few random keys toggle every couple of
 // seconds; the simulation stops itself once polling goes quiet.
@@ -356,6 +374,8 @@ class MockSession implements RynkSession {
   private battery: BatteryStatus;
   private revision = 1;
   private outputEnabled = true;
+  /** null for simulated firmware with no output-mode policy at all. */
+  private outputMode: LightingOutputModeState | null;
   private brightness: number;
   private background: LightingBackgroundState;
   private overlay = new Map<LightingLedId, OverlayEntry>();
@@ -407,6 +427,7 @@ class MockSession implements RynkSession {
       return structuredClone(cell);
     });
     this.battery = spec.battery;
+    this.outputMode = spec.lightingOutputMode ? structuredClone(spec.lightingOutputMode) : null;
     this.brightness = spec.brightness;
     this.background = { ...spec.background };
     this.extensionState = spec.extensionEffects ? { ...spec.extensionEffects.initial } : null;
@@ -519,10 +540,19 @@ class MockSession implements RynkSession {
     state: () => latency(() => this.lightingState()),
     outputMode: () =>
       latency(() => {
-        if (this.spec.lightingOutputMode === undefined) {
+        if (this.outputMode === null) {
           throw new Error("this firmware does not support lighting output-mode readback");
         }
-        return structuredClone(this.spec.lightingOutputMode);
+        return structuredClone(this.outputMode);
+      }),
+    setOutputMode: (mode) =>
+      latency(() => {
+        if (this.outputMode === null) {
+          throw new Error("this firmware does not support setting the lighting output mode");
+        }
+        this.outputMode = { ...this.outputMode, mode, ...effectiveOutput(mode, this.outputMode) };
+        this.touchLighting();
+        return structuredClone(this.outputMode);
       }),
     topology: () => latency(() => this.spec.topology),
     replaceOverlay: (cells) =>

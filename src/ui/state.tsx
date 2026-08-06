@@ -389,6 +389,7 @@ export type WorkbenchAction =
       cells: LightingExtendedConditionalSceneCell[];
     }
   | { type: "scenePolicySet"; state: LightingState; policy: LightingLayerPolicy }
+  | { type: "outputModeSet"; outputMode: LightingOutputModeState }
   | {
       type: "extensionStateSet";
       state: LightingState;
@@ -644,6 +645,11 @@ export function makeWorkbenchReducer(cols: number) {
           lightingBusy: false,
           lightingError: null,
         };
+      // The write answers with the whole output-mode state, live fields
+      // included, so this takes that answer rather than patching the mode into
+      // the state the last read left behind.
+      case "outputModeSet":
+        return { ...state, lightingOutputMode: act.outputMode };
       case "extensionStateSet":
         return {
           ...state,
