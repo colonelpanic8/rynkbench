@@ -42,11 +42,11 @@
     "glove80-rmk": {
       "flake": false,
       "locked": {
-        "lastModified": 1785954929,
-        "narHash": "sha256-e/rZljUgvyGA/F1jBsSSJl9+1RszcC87o/xHhl+sEMM=",
+        "lastModified": 1785973525,
+        "narHash": "sha256-giM8CJX34Gfvzs9rT/qhKVfq7gdldWRZ6OQJsNBnreU=",
         "owner": "colonelpanic8",
         "repo": "glove80-rmk",
-        "rev": "d3ffda04b58f2c5e82fc08c97150bbaa3a85d1de",
+        "rev": "a87cd08e0c62301d692bcba720aba653e73aa57c",
         "type": "github"
       },
       "original": {
@@ -74,11 +74,11 @@
     "rmk": {
       "flake": false,
       "locked": {
-        "lastModified": 1785945628,
-        "narHash": "sha256-vEPFn+ulADqq/I55EgYrI9+esUA4OaO67D+9DMS5qGQ=",
+        "lastModified": 1785972389,
+        "narHash": "sha256-Ehf7+sjmb4lQHH5xeHdOPiM31r5fl7dsqGYkfsKGcJc=",
         "owner": "colonelpanic8",
         "repo": "rmk",
-        "rev": "2f25d5a72034b962dfec7973352c0c5eb0323af1",
+        "rev": "59fd18e1ba0935d55988c5c32951fd7e0b37169b",
         "type": "github"
       },
       "original": {
