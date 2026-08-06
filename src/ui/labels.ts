@@ -7,6 +7,7 @@ import type {
   KeyCode,
   ModifierCombination,
 } from "../vendor/rynk-wasm/rynk_wasm";
+import { DEFAULT_TAP_HOLD_PROFILE } from "./morse";
 
 /** Compact keycap symbols for HID codes that deserve better than their name. */
 const HID_SYMBOLS: Partial<Record<HidKeyCode, string>> = {
@@ -273,8 +274,10 @@ export function keyActionDescription(action: KeyAction): string {
   if ("Single" in action) return actionDescription(action.Single);
   if ("Tap" in action) return `Tap: ${actionDescription(action.Tap)}`;
   if ("TapHold" in action) {
-    const [tap, hold, timeout] = action.TapHold;
-    return `Tap ${actionLabel(tap) || "·"} / hold ${actionLabel(hold) || "·"} · ${timeout}ms`;
+    const [tap, hold, profile] = action.TapHold;
+    const timing =
+      profile === DEFAULT_TAP_HOLD_PROFILE ? "default timing" : `timing profile ${profile}`;
+    return `Tap ${actionLabel(tap) || "·"} / hold ${actionLabel(hold) || "·"} · ${timing}`;
   }
   if ("Morse" in action) return `Morse pattern slot ${action.Morse}`;
   return "Unknown action";

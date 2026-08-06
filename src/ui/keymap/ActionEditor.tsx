@@ -14,7 +14,7 @@ import type {
 import { searchKeycodes } from "../hid";
 import { EMPTY_MODS, actionLabel, anyModifier, hidName, modifierSymbols } from "../labels";
 import { decodeMacros, macroPreview } from "../macros";
-import { morsePatternGlyph } from "../morse";
+import { DEFAULT_TAP_HOLD_PROFILE, morsePatternGlyph } from "../morse";
 import { useWorkbench } from "../state";
 import { Button, SectionLabel, TextInput, cx } from "../kit";
 
@@ -273,8 +273,18 @@ function TapHoldEditor({
     typeof current === "object" && "TapHold" in current ? current.TapHold : null;
   const [tap, setTap] = useState<Action>(initial?.[0] ?? "No");
   const [hold, setHold] = useState<Action>(initial?.[1] ?? "No");
-  const [timeout_, setTimeout_] = useState<number>(initial?.[2] ?? 200);
+  // Third wire field is a morse-profile-table index (u8); 255 means "use the
+  // board's default tap-hold timing". The table itself is flashed with the
+  // firmware and is not readable over HID, so all we can offer is the slot.
+  const [profileText, setProfileText] = useState<string>(
+    initial != null && initial[2] !== DEFAULT_TAP_HOLD_PROFILE ? String(initial[2]) : "",
+  );
   const [slot, setSlot] = useState<"tap" | "hold">("tap");
+
+  const parsedProfile = profileText.trim() === "" ? DEFAULT_TAP_HOLD_PROFILE : Number(profileText);
+  const profileValid =
+    parsedProfile === DEFAULT_TAP_HOLD_PROFILE ||
+    (Number.isInteger(parsedProfile) && parsedProfile >= 0 && parsedProfile < DEFAULT_TAP_HOLD_PROFILE);
 
   const slotButton = (which: "tap" | "hold", value: Action) => (
     <button
@@ -310,23 +320,26 @@ function TapHoldEditor({
         onPick={(a) => (slot === "tap" ? setTap(a) : setHold(a))}
       />
       <label className="flex items-center justify-between gap-3 text-[12.5px] text-mute">
-        Hold timeout
-        <span className="flex items-center gap-1.5">
-          <TextInput
-            type="number"
-            min={50}
-            max={2000}
-            value={timeout_}
-            onChange={(e) => setTimeout_(Number(e.target.value))}
-            className="w-20 text-right"
-          />
-          <span className="text-faint">ms</span>
-        </span>
+        Timing profile slot
+        <TextInput
+          type="number"
+          min={0}
+          max={DEFAULT_TAP_HOLD_PROFILE - 1}
+          placeholder="default"
+          value={profileText}
+          onChange={(e) => setProfileText(e.target.value)}
+          className="w-24 text-right"
+        />
       </label>
+      <div className="text-[11.5px] leading-relaxed text-faint">
+        Timing (hold timeout, permissive hold, …) comes from the firmware&apos;s morse profile
+        table, which is set at flash time. Leave the slot empty to use the board&apos;s default
+        timing; a slot with no table entry also falls back to the default.
+      </div>
       <Button
         variant="primary"
-        disabled={tap === "No" && hold === "No"}
-        onClick={() => onCommit({ TapHold: [tap, hold, timeout_] })}
+        disabled={(tap === "No" && hold === "No") || !profileValid}
+        onClick={() => onCommit({ TapHold: [tap, hold, parsedProfile] })}
       >
         Bind tap-hold
       </Button>

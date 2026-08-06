@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { ModifierCombination } from "../vendor/rynk-wasm/rynk_wasm";
-import { actionLabel, EMPTY_MODS, hidLabel, modifierSymbols } from "./labels";
+import {
+  actionLabel,
+  EMPTY_MODS,
+  hidLabel,
+  keyActionDescription,
+  modifierSymbols,
+} from "./labels";
+import { DEFAULT_TAP_HOLD_PROFILE } from "./morse";
 
 function mods(fields: Partial<ModifierCombination>): ModifierCombination {
   return { ...EMPTY_MODS, ...fields };
@@ -22,6 +29,19 @@ describe("modifier labels", () => {
     expect(modifierSymbols(mods({ left_alt: true }))).toBe("L⌥");
     expect(modifierSymbols(mods({ right_alt: true }))).toBe("R⌥");
     expect(modifierSymbols(mods({ left_gui: true, right_gui: true }))).toBe("L⌘R⌘");
+  });
+});
+
+describe("tap-hold descriptions", () => {
+  it("reads the third field as a profile slot, not a timeout", () => {
+    const tap = { Key: { Hid: "A" as const } };
+    const hold = { LayerOn: 1 };
+    expect(keyActionDescription({ TapHold: [tap, hold, DEFAULT_TAP_HOLD_PROFILE] })).toBe(
+      "Tap A / hold L1 · default timing",
+    );
+    expect(keyActionDescription({ TapHold: [tap, hold, 0] })).toBe(
+      "Tap A / hold L1 · timing profile 0",
+    );
   });
 });
 

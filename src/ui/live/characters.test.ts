@@ -60,7 +60,7 @@ describe("held Shift detection", () => {
 
   it("uses the hold side of tap-hold bindings", () => {
     expect(
-      keyActionHoldsShift({ TapHold: [{ Key: { Hid: "A" } }, { Modifier: mods(true) }, 200] }),
+      keyActionHoldsShift({ TapHold: [{ Key: { Hid: "A" } }, { Modifier: mods(true) }, 255] }),
     ).toBe(true);
   });
 });

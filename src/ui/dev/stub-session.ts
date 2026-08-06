@@ -93,7 +93,7 @@ function buildLayer0(): KeyAction[] {
     ],
     [
       mod("ctrl"), mod("gui"), mod("alt"),
-      { TapHold: [{ Key: { Hid: "Escape" as never } }, { LayerOn: 1 }, 200] },
+      { TapHold: [{ Key: { Hid: "Escape" as never } }, { LayerOn: 1 }, 255] },
       layerOn(1), key("Space"), key("Space"), layerOn(2),
       key("Left"), key("Down"), key("Up"), key("Right"),
     ],

@@ -7,6 +7,11 @@ export type MorseElement = "tap" | "hold";
 
 export const MAX_MORSE_ELEMENTS = 15;
 
+// KeyAction::TapHold's third field indexes the firmware's morse profile
+// table; u8::MAX (and any slot with no table entry) selects the default
+// profile.
+export const DEFAULT_TAP_HOLD_PROFILE = 255;
+
 export function patternElements(pattern: number): MorseElement[] {
   if (pattern <= 1) return [];
   const bits = 31 - Math.clz32(pattern); // position of the sentinel bit
