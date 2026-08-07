@@ -6,7 +6,10 @@
 
 import type {
   BatteryStatus,
+  AutoMouseLayerConfig,
+  AutoMouseLayerConfigState,
   BehaviorConfig,
+  BehaviorOptions,
   BleStatus,
   BuildInfo,
   Combo,
@@ -29,6 +32,7 @@ import type {
   LightingZoneId,
   MatrixState,
   Morse,
+  MorseProfile,
   PeripheralStatus,
   ProtocolVersion,
   TopicEvent,
@@ -46,6 +50,20 @@ const LAYERS = 4;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function emptyMorseProfile(): MorseProfile {
+  return {
+    unilateral_tap: undefined,
+    enable_flow_tap: undefined,
+    mode: undefined,
+    hold_timeout_ms: undefined,
+    gap_timeout_ms: undefined,
+    quick_tap_timeout_ms: undefined,
+    retro_tap: undefined,
+    prior_idle_time_ms: undefined,
+    hold_trigger_on_release: undefined,
+  };
 }
 
 async function lag(): Promise<void> {
@@ -321,6 +339,17 @@ class StubSession implements RynkSession {
     tap_interval_ms: 200,
     tap_capslock_interval_ms: 350,
   };
+  private behaviorOptions: BehaviorOptions = {
+    tri_layer: undefined,
+    combo_prior_idle_ms: undefined,
+    oneshot_activate_on_keypress: false,
+    oneshot_quick_release: false,
+    morse_enable_flow_tap: false,
+    morse_prior_idle_ms: 120,
+    morse_default_profile: emptyMorseProfile(),
+  };
+  private morseProfiles: MorseProfile[] = Array.from({ length: 8 }, emptyMorseProfile);
+  private autoMouseConfigs: AutoMouseLayerConfig[] = [];
   private topicHandler: ((event: TopicEvent) => void) | null = null;
   private disconnectHandler: (() => void) | null = null;
   private batteryTimer: ReturnType<typeof setInterval>;
@@ -476,6 +505,30 @@ class StubSession implements RynkSession {
     set: async (config: BehaviorConfig): Promise<void> => {
       await lag();
       this.behaviorConfig = { ...config };
+    },
+    options: async (): Promise<BehaviorOptions> => {
+      await lag();
+      return structuredClone(this.behaviorOptions);
+    },
+    setOptions: async (options: BehaviorOptions): Promise<void> => {
+      await lag();
+      this.behaviorOptions = structuredClone(options);
+    },
+    profiles: async (): Promise<MorseProfile[]> => {
+      await lag();
+      return structuredClone(this.morseProfiles);
+    },
+    setProfile: async (index: number, profile: MorseProfile): Promise<void> => {
+      await lag();
+      this.morseProfiles[index] = structuredClone(profile);
+    },
+    autoMouseLayers: async (): Promise<AutoMouseLayerConfigState> => {
+      await lag();
+      return { capacity: 0, configs: structuredClone(this.autoMouseConfigs) };
+    },
+    setAutoMouseLayers: async (configs: AutoMouseLayerConfig[]): Promise<void> => {
+      await lag();
+      this.autoMouseConfigs = structuredClone(configs);
     },
   };
 

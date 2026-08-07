@@ -345,6 +345,25 @@ describe("snapshotFromState", () => {
       // describes these too, so an export that dropped them would make an
       // import a one-way door.
       morse: LIVE_MORSE,
+      behavior: {
+        combo_timeout_ms: 50,
+        oneshot_timeout_ms: 1000,
+        tap_interval_ms: 200,
+        tap_capslock_interval_ms: 350,
+      },
+      behaviorOptions: {
+        tri_layer: undefined,
+        combo_prior_idle_ms: 90,
+        oneshot_activate_on_keypress: false,
+        oneshot_quick_release: true,
+        morse_enable_flow_tap: true,
+        morse_prior_idle_ms: 120,
+        morse_default_profile: LIVE_MORSE[0].profile,
+      },
+      morseProfiles: [
+        { ...LIVE_MORSE[0].profile, hold_timeout_ms: 175, prior_idle_time_ms: 110 },
+      ],
+      autoMouseLayers: [],
       combos: [],
       forks: liveForks,
       macroBytes: new Uint8Array(),
@@ -362,6 +381,10 @@ describe("snapshotFromState", () => {
     // rendering the table rather than only the keymap that indexes it.
     expect(again.snapshot.behaviors?.morses).toEqual(LIVE_MORSE);
     expect(again.snapshot.behaviors?.forks).toEqual(liveForks);
+    expect(again.snapshot.behaviors?.morse_profiles).toEqual(state.morseProfiles);
+    expect(again.snapshot.behaviors?.options).toEqual(state.behaviorOptions);
+    expect(again.snapshot.behaviors?.config).toEqual(state.behavior);
+    expect(text).toContain("[behavior.morse.profiles.profile_000]");
     expect(text).toContain("[[fork]]");
   });
 });

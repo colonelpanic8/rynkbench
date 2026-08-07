@@ -10,7 +10,7 @@ import type { Dispatch } from "react";
 import type { RynkSession } from "../session/types";
 import type { ConnectedBundle, WorkbenchAction, WorkbenchState } from "../ui/state";
 import { errorMessage } from "../ui/state";
-import type { Combo, Fork, Morse } from "../vendor/rynk-wasm/rynk_wasm";
+import type { Combo, Fork, Morse, MorseProfile } from "../vendor/rynk-wasm/rynk_wasm";
 import {
   assertSupportedMatrix,
   parseDocument,
@@ -91,7 +91,87 @@ async function writeBehaviors(
   const skipped: string[] = [];
   // A document parsed by an older wasm build carries no `behaviors` at all,
   // which means the same thing as a document that describes none of the tables.
-  const { morses, combos, forks, macros } = snapshot.behaviors ?? {};
+  const { config, options, morse_profiles, auto_mouse_layers, morses, combos, forks, macros } =
+    snapshot.behaviors ?? {};
+
+  if (config !== undefined && !same(config, state.behavior)) {
+    const prev = state.behavior;
+    dispatch({ type: "behaviorWriteStart", config });
+    try {
+      await session.behavior.set(config);
+      dispatch({ type: "behaviorWriteOk" });
+      applied.push("global behavior timing");
+    } catch (error) {
+      dispatch({ type: "behaviorWriteErr", prev, message: errorMessage(error) });
+      throw new Error(`Writing global behavior timing: ${errorMessage(error)}`);
+    }
+  }
+
+  if (options !== undefined && !same(options, state.behaviorOptions)) {
+    const prev = state.behaviorOptions;
+    dispatch({ type: "behaviorOptionsWriteStart", options });
+    try {
+      await session.behavior.setOptions(options);
+      dispatch({ type: "behaviorOptionsWriteOk" });
+      applied.push("behavior options");
+    } catch (error) {
+      dispatch({ type: "behaviorOptionsWriteErr", prev, message: errorMessage(error) });
+      throw new Error(`Writing behavior options: ${errorMessage(error)}`);
+    }
+  }
+
+  if (morse_profiles !== undefined) {
+    if (morse_profiles.length > state.morseProfiles.length) {
+      skipped.push(
+        `morse profiles (${morse_profiles.length}; this keyboard holds ${state.morseProfiles.length})`,
+      );
+    } else {
+      const fallback = options?.morse_default_profile ?? state.behaviorOptions?.morse_default_profile;
+      const wanted: MorseProfile[] = state.morseProfiles.map(
+        (profile, index) => morse_profiles[index] ?? fallback ?? profile,
+      );
+      let changed = 0;
+      for (let index = 0; index < wanted.length; index += 1) {
+        const profile = wanted[index];
+        const prev = state.morseProfiles[index];
+        if (same(profile, prev)) continue;
+        dispatch({ type: "morseProfileWriteStart", index, profile });
+        try {
+          await session.behavior.setProfile(index, profile);
+          dispatch({ type: "morseProfileWriteOk", index });
+          changed += 1;
+        } catch (error) {
+          dispatch({
+            type: "morseProfileWriteErr",
+            index,
+            prev,
+            message: errorMessage(error),
+          });
+          throw new Error(`Writing morse profile ${index}: ${errorMessage(error)}`);
+        }
+      }
+      if (changed > 0) applied.push(`${changed} morse profile${changed === 1 ? "" : "s"}`);
+    }
+  }
+
+  if (auto_mouse_layers !== undefined) {
+    if (auto_mouse_layers.length > state.autoMouseLayerCapacity) {
+      skipped.push(
+        `auto-mouse layers (${auto_mouse_layers.length}; this keyboard holds ${state.autoMouseLayerCapacity})`,
+      );
+    } else if (!same(auto_mouse_layers, state.autoMouseLayers)) {
+      const prev = state.autoMouseLayers;
+      dispatch({ type: "autoMouseWriteStart", configs: auto_mouse_layers });
+      try {
+        await session.behavior.setAutoMouseLayers(auto_mouse_layers);
+        dispatch({ type: "autoMouseWriteOk" });
+        applied.push(`${auto_mouse_layers.length} auto-mouse layer${auto_mouse_layers.length === 1 ? "" : "s"}`);
+      } catch (error) {
+        dispatch({ type: "autoMouseWriteErr", prev, message: errorMessage(error) });
+        throw new Error(`Writing auto-mouse layers: ${errorMessage(error)}`);
+      }
+    }
+  }
 
   if (macros !== undefined) {
     const bytes = new Uint8Array(macros);

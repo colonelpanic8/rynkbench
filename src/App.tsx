@@ -214,7 +214,18 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
 
   // Advanced tables — every read is capability-gated and failure-tolerant so
   // sparse firmware degrades to hidden features, never a failed connect.
-  const [combos, morse, forks, macroBytes, behavior, ledIndicator, modifierState] =
+  const [
+    combos,
+    morse,
+    forks,
+    macroBytes,
+    behavior,
+    behaviorOptions,
+    morseProfiles,
+    autoMouse,
+    ledIndicator,
+    modifierState,
+  ] =
     await Promise.all([
       caps.max_combos > 0 ? session.combos.readAll().catch(() => []) : [],
       caps.max_morse > 0 ? session.morse.readAll().catch(() => []) : [],
@@ -223,6 +234,9 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
         ? session.macros.read().catch(() => new Uint8Array(0))
         : new Uint8Array(0),
       session.behavior.get().catch(() => null),
+      session.behavior.options().catch(() => null),
+      session.behavior.profiles().catch(() => []),
+      session.behavior.autoMouseLayers().catch(() => null),
       session.device.ledIndicator().catch(() => null),
       session.device.modifierState().catch((): ModifierCombination | null => null),
     ]);
@@ -264,6 +278,10 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     forks,
     macroBytes,
     behavior,
+    behaviorOptions,
+    morseProfiles,
+    autoMouseLayerCapacity: autoMouse?.capacity ?? 0,
+    autoMouseLayers: autoMouse?.configs ?? [],
     ledIndicator,
     modifierState,
   };

@@ -6,8 +6,11 @@
 
 import type {
   Action,
+  AutoMouseLayerConfig,
+  AutoMouseLayerConfigState,
   BatteryStatus,
   BehaviorConfig,
+  BehaviorOptions,
   BleStatus,
   BuildInfo,
   Combo,
@@ -46,6 +49,7 @@ import type {
   LightingZoneId,
   ModifierCombination,
   Morse,
+  MorseProfile,
   MouseButtons,
   ProtocolVersion,
   SplitCentralLatencyPolicy,
@@ -90,6 +94,12 @@ export interface BoardSpec {
   brightness: number;
   background: LightingBackgroundState;
   behavior: BehaviorConfig;
+  behaviorOptions?: BehaviorOptions;
+  /** Runtime tap-hold timing slots. Defaults to eight empty profiles. */
+  morseProfileCount?: number;
+  seedMorseProfiles?: MorseProfile[];
+  autoMouseLayerCapacity?: number;
+  seedAutoMouseLayers?: AutoMouseLayerConfig[];
   ledIndicator: LedIndicator;
   /** Battery each split peripheral reports; wired halves say `"Unavailable"`. */
   peripheralBattery?: BatteryStatus;
@@ -209,6 +219,10 @@ export function emptyMorse(): Morse {
     },
     actions: [],
   };
+}
+
+export function emptyMorseProfile(): MorseProfile {
+  return { ...emptyMorse().profile };
 }
 
 export function emptyFork(): Fork {
@@ -374,6 +388,9 @@ class MockSession implements RynkSession {
   private readonly forkTable: Fork[];
   private readonly macroBytes: Uint8Array;
   private behaviorConfig: BehaviorConfig;
+  private behaviorOptions: BehaviorOptions;
+  private readonly morseProfiles: MorseProfile[];
+  private autoMouseLayers: AutoMouseLayerConfig[];
   private readonly indicator: LedIndicator;
   private ble: BleStatus;
   private readonly matrixBitmap: Uint8Array;
@@ -422,6 +439,24 @@ class MockSession implements RynkSession {
     this.forkTable = buildSlots(caps.max_forks, emptyFork, cloneFork, spec.seedForks);
     this.macroBytes = new Uint8Array(caps.macro_space_size);
     this.behaviorConfig = { ...spec.behavior };
+    this.behaviorOptions = structuredClone(
+      spec.behaviorOptions ?? {
+        tri_layer: undefined,
+        combo_prior_idle_ms: undefined,
+        oneshot_activate_on_keypress: false,
+        oneshot_quick_release: false,
+        morse_enable_flow_tap: false,
+        morse_prior_idle_ms: 120,
+        morse_default_profile: emptyMorseProfile(),
+      },
+    );
+    this.morseProfiles = buildSlots(
+      spec.morseProfileCount ?? 8,
+      emptyMorseProfile,
+      (profile) => ({ ...profile }),
+      spec.seedMorseProfiles,
+    );
+    this.autoMouseLayers = structuredClone(spec.seedAutoMouseLayers ?? []);
     this.indicator = { ...spec.ledIndicator };
     this.ble = { ...spec.connection.ble };
     this.matrixBitmap = new Uint8Array(caps.num_rows * Math.ceil(caps.num_cols / 8));
@@ -694,6 +729,33 @@ class MockSession implements RynkSession {
     set: (config) =>
       latency(() => {
         this.behaviorConfig = { ...config };
+      }),
+    options: () => latency(() => structuredClone(this.behaviorOptions)),
+    setOptions: (options) =>
+      latency(() => {
+        this.behaviorOptions = structuredClone(options);
+      }),
+    profiles: () => latency(() => this.morseProfiles.map((profile) => ({ ...profile }))),
+    setProfile: (index, profile) =>
+      latency(() => {
+        this.morseProfiles[this.checkSlot(index, this.morseProfiles.length, "morse profile")] = {
+          ...profile,
+        };
+      }),
+    autoMouseLayers: () =>
+      latency(
+        (): AutoMouseLayerConfigState => ({
+          capacity: this.spec.autoMouseLayerCapacity ?? 0,
+          configs: structuredClone(this.autoMouseLayers),
+        }),
+      ),
+    setAutoMouseLayers: (configs) =>
+      latency(() => {
+        const capacity = this.spec.autoMouseLayerCapacity ?? 0;
+        if (configs.length > capacity) {
+          throw new Error(`auto mouse has ${configs.length} layers, capacity ${capacity}`);
+        }
+        this.autoMouseLayers = structuredClone(configs);
       }),
   };
 

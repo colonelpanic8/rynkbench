@@ -108,6 +108,10 @@ export function snapshotFromState(state: WorkbenchState): RuntimeSnapshot {
     // Live state always describes all three, so an export never renders a file
     // that would read as "leave them alone" when it meant to record them.
     behaviors: {
+      config: state.behavior ?? undefined,
+      options: state.behaviorOptions ?? undefined,
+      morse_profiles: state.morseProfiles,
+      auto_mouse_layers: state.autoMouseLayers,
       morses: state.morse,
       combos: state.combos,
       forks: state.forks,

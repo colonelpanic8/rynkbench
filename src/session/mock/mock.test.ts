@@ -943,6 +943,21 @@ describe("behavior", () => {
       expect(await session.behavior.get()).toEqual(next);
     });
   });
+
+  it("reads and writes runtime morse profiles and behavior options", async () => {
+    await withSession(glove80Board, async (session) => {
+      const profiles = await session.behavior.profiles();
+      expect(profiles).toHaveLength(8);
+      const profile = { ...profiles[0], hold_timeout_ms: 172, mode: "PermissiveHold" as const };
+      await session.behavior.setProfile(2, profile);
+      expect((await session.behavior.profiles())[2]).toEqual(profile);
+
+      const options = await session.behavior.options();
+      const next = { ...options, combo_prior_idle_ms: 85, oneshot_quick_release: true };
+      await session.behavior.setOptions(next);
+      expect(await session.behavior.options()).toEqual(next);
+    });
+  });
 });
 
 describe.each(boards)("%s device status", (_name, spec) => {

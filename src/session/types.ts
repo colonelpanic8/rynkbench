@@ -17,8 +17,11 @@
 //   morse exist in the protocol and can be added to this seam later.
 
 import type {
+  AutoMouseLayerConfig,
+  AutoMouseLayerConfigState,
   BatteryStatus,
   BehaviorConfig,
+  BehaviorOptions,
   BleStatus,
   BuildInfo,
   Combo,
@@ -57,6 +60,7 @@ import type {
   MatrixState,
   ModifierCombination,
   Morse,
+  MorseProfile,
   PeripheralStatus,
   ProtocolVersion,
   SplitCentralLatencyPolicy,
@@ -219,6 +223,12 @@ export interface MacroOps {
 export interface BehaviorOps {
   get(): Promise<BehaviorConfig>;
   set(config: BehaviorConfig): Promise<void>;
+  options(): Promise<BehaviorOptions>;
+  setOptions(options: BehaviorOptions): Promise<void>;
+  profiles(): Promise<MorseProfile[]>;
+  setProfile(index: number, profile: MorseProfile): Promise<void>;
+  autoMouseLayers(): Promise<AutoMouseLayerConfigState>;
+  setAutoMouseLayers(configs: AutoMouseLayerConfig[]): Promise<void>;
 }
 
 export interface DeviceOps {

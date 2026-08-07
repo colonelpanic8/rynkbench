@@ -4,8 +4,10 @@
 import { createContext, useContext } from "react";
 import type { Dispatch } from "react";
 import type {
+  AutoMouseLayerConfig,
   BatteryStatus,
   BehaviorConfig,
+  BehaviorOptions,
   Combo,
   ConnectionStatus,
   DeviceCapabilities,
@@ -33,6 +35,7 @@ import type {
   LightingState,
   ModifierCombination,
   Morse,
+  MorseProfile,
   BuildInfo,
   ProtocolVersion,
 } from "../vendor/rynk-wasm/rynk_wasm";
@@ -98,6 +101,10 @@ export interface ConnectedBundle {
   macroBytes: Uint8Array;
   /** null when the device rejected the read (feature-gated out). */
   behavior: BehaviorConfig | null;
+  behaviorOptions: BehaviorOptions | null;
+  morseProfiles: MorseProfile[];
+  autoMouseLayerCapacity: number;
+  autoMouseLayers: AutoMouseLayerConfig[];
   ledIndicator: LedIndicator | null;
   /** null only when legacy firmware lacks GetModifierState. */
   modifierState: ModifierCombination | null;
@@ -191,6 +198,10 @@ export interface WorkbenchState {
   forks: Fork[];
   macroBytes: Uint8Array;
   behavior: BehaviorConfig | null;
+  behaviorOptions: BehaviorOptions | null;
+  morseProfiles: MorseProfile[];
+  autoMouseLayerCapacity: number;
+  autoMouseLayers: AutoMouseLayerConfig[];
   ledIndicator: LedIndicator | null;
   /** Authoritative resolved HID modifiers; null enables the legacy matrix fallback. */
   modifierState: ModifierCombination | null;
@@ -321,6 +332,10 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     forks: bundle.forks,
     macroBytes: bundle.macroBytes,
     behavior: bundle.behavior,
+    behaviorOptions: bundle.behaviorOptions,
+    morseProfiles: bundle.morseProfiles,
+    autoMouseLayerCapacity: bundle.autoMouseLayerCapacity,
+    autoMouseLayers: bundle.autoMouseLayers,
     ledIndicator: bundle.ledIndicator,
     modifierState: bundle.modifierState,
   };
@@ -417,6 +432,15 @@ export type WorkbenchAction =
   | { type: "behaviorWriteOk" }
   | { type: "behaviorWriteErr"; prev: BehaviorConfig | null; message: string }
   | { type: "behaviorErrDismiss" }
+  | { type: "behaviorOptionsWriteStart"; options: BehaviorOptions }
+  | { type: "behaviorOptionsWriteOk" }
+  | { type: "behaviorOptionsWriteErr"; prev: BehaviorOptions | null; message: string }
+  | { type: "morseProfileWriteStart"; index: number; profile: MorseProfile }
+  | { type: "morseProfileWriteOk"; index: number }
+  | { type: "morseProfileWriteErr"; index: number; prev: MorseProfile; message: string }
+  | { type: "autoMouseWriteStart"; configs: AutoMouseLayerConfig[] }
+  | { type: "autoMouseWriteOk" }
+  | { type: "autoMouseWriteErr"; prev: AutoMouseLayerConfig[]; message: string }
   | { type: "topicLedIndicator"; indicator: LedIndicator }
   | { type: "topicModifier"; modifiers: ModifierCombination };
 
@@ -754,6 +778,69 @@ export function makeWorkbenchReducer(cols: number) {
         const { behavior: _gone, ...pending } = state.pending;
         return { ...state, pending };
       }
+      case "behaviorOptionsWriteStart":
+        return {
+          ...state,
+          behaviorOptions: act.options,
+          pending: { ...state.pending, behaviorOptions: { status: "pending" } },
+        };
+      case "behaviorOptionsWriteOk": {
+        const { behaviorOptions: _done, ...pending } = state.pending;
+        return { ...state, pending };
+      }
+      case "behaviorOptionsWriteErr":
+        return {
+          ...state,
+          behaviorOptions: act.prev,
+          pending: {
+            ...state.pending,
+            behaviorOptions: { status: "error", message: act.message },
+          },
+        };
+      case "morseProfileWriteStart": {
+        const morseProfiles = state.morseProfiles.slice();
+        morseProfiles[act.index] = act.profile;
+        return {
+          ...state,
+          morseProfiles,
+          pending: { ...state.pending, [`morseProfile:${act.index}`]: { status: "pending" } },
+        };
+      }
+      case "morseProfileWriteOk": {
+        const { [`morseProfile:${act.index}`]: _done, ...pending } = state.pending;
+        return { ...state, pending };
+      }
+      case "morseProfileWriteErr": {
+        const morseProfiles = state.morseProfiles.slice();
+        morseProfiles[act.index] = act.prev;
+        return {
+          ...state,
+          morseProfiles,
+          pending: {
+            ...state.pending,
+            [`morseProfile:${act.index}`]: { status: "error", message: act.message },
+          },
+        };
+      }
+      case "autoMouseWriteStart":
+        return {
+          ...state,
+          autoMouseLayers: act.configs,
+          pending: { ...state.pending, autoMouseLayers: { status: "pending" } },
+        };
+      case "autoMouseWriteOk": {
+        const { autoMouseLayers: _done, ...pending } = state.pending;
+        return { ...state, pending };
+      }
+      case "autoMouseWriteErr":
+        return {
+          ...state,
+          autoMouseLayers: act.prev,
+          pending: {
+            ...state.pending,
+            autoMouseLayers: { status: "error", message: act.message },
+          },
+        };
       case "topicLedIndicator":
         return { ...state, ledIndicator: act.indicator };
       case "topicModifier":
@@ -855,6 +942,9 @@ export interface WorkbenchIo {
   setSlot<K extends SlotKind>(kind: K, index: number, value: SlotValueOf<K>): void;
   writeMacros(bytes: Uint8Array): void;
   setBehavior(config: BehaviorConfig): void;
+  setBehaviorOptions(options: BehaviorOptions): void;
+  setMorseProfile(index: number, profile: MorseProfile): void;
+  setAutoMouseLayers(configs: AutoMouseLayerConfig[]): void;
   disconnect(): void;
   rebootToBootloader(): Promise<void>;
 }
@@ -1105,6 +1195,37 @@ export function makeIo(
       session.behavior.set(config).then(
         () => dispatch({ type: "behaviorWriteOk" }),
         (err) => dispatch({ type: "behaviorWriteErr", prev, message: errorMessage(err) }),
+      );
+    },
+    setBehaviorOptions(options) {
+      const prev = getState().behaviorOptions;
+      dispatch({ type: "behaviorOptionsWriteStart", options });
+      session.behavior.setOptions(options).then(
+        () => dispatch({ type: "behaviorOptionsWriteOk" }),
+        (err) =>
+          dispatch({ type: "behaviorOptionsWriteErr", prev, message: errorMessage(err) }),
+      );
+    },
+    setMorseProfile(index, profile) {
+      const prev = getState().morseProfiles[index];
+      dispatch({ type: "morseProfileWriteStart", index, profile });
+      session.behavior.setProfile(index, profile).then(
+        () => dispatch({ type: "morseProfileWriteOk", index }),
+        (err) =>
+          dispatch({
+            type: "morseProfileWriteErr",
+            index,
+            prev,
+            message: errorMessage(err),
+          }),
+      );
+    },
+    setAutoMouseLayers(configs) {
+      const prev = getState().autoMouseLayers;
+      dispatch({ type: "autoMouseWriteStart", configs });
+      session.behavior.setAutoMouseLayers(configs).then(
+        () => dispatch({ type: "autoMouseWriteOk" }),
+        (err) => dispatch({ type: "autoMouseWriteErr", prev, message: errorMessage(err) }),
       );
     },
     disconnect() {
