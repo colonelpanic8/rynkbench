@@ -3,7 +3,7 @@
 // the lighting topology (LED identity/routes/zones). Rynkbench has no
 // board-specific code above this module; a "Glove80" is just whatever a
 // session reports. Optional enrichment (static labels, display names) may be
-// layered on top when known, but must never be required to render.
+// layered on top when known, but never replaces device-reported geometry.
 
 import type { Key, LayoutInfo, Variant } from "../vendor/rynk-wasm/rynk_wasm";
 import type { LightingLedId } from "../vendor/rynk-wasm/rynk_wasm";
@@ -40,13 +40,6 @@ export interface KeyboardModel {
 export interface BoardEnrichment {
   displayName?: string;
   labels?: Record<string, string>;
-  /**
-   * Known-good physical placement overriding what the device reports —
-   * for boards whose firmware still serves a flat schematic layout.
-   * Centers in key-units, r in clockwise degrees about the key's center
-   * (the wire semantics). Device w/h are kept.
-   */
-  geometry?: Record<string, { x: number; y: number; r: number }>;
 }
 
 // Wire semantics (rmk-config layout.rs walk()): rect.x/y is the key's final
@@ -97,22 +90,12 @@ export function buildKeyboardModel(
   }
 
   const labels = options?.enrichment?.labels ?? {};
-  const geometry = options?.enrichment?.geometry;
-  const keys: KeyView[] = variant.keys.map((deviceShape) => {
-    const at = `${deviceShape.row},${deviceShape.col}`;
+  const keys: KeyView[] = variant.keys.map((shape) => {
+    const at = `${shape.row},${shape.col}`;
     const led = ledByMatrix.get(at);
-    const place = geometry?.[at];
-    const shape = place
-      ? {
-          ...deviceShape,
-          rect: { ...deviceShape.rect, x: place.x, y: place.y },
-          r: place.r,
-          rect2: undefined,
-        }
-      : deviceShape;
     return {
-      row: deviceShape.row,
-      col: deviceShape.col,
+      row: shape.row,
+      col: shape.col,
       shape,
       ledId: led?.ledId,
       zoneIds: led?.zoneIds ?? [],

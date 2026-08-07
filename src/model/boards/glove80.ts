@@ -44,12 +44,11 @@ function buildLabels(): Record<string, string> {
 
 // --- physical geometry -----------------------------------------------------
 //
-// Traced from the official MoErgo Layout Editor (my.glove80.com): main-grid
-// columns span cells 0-5 (left) and 12-17 (right); the two outermost columns
-// of each half sit 0.5u lower than the finger columns; the thumb clusters are
-// 2x3 fans angled inward. Shipping firmware still reports the flat schematic
-// grid from keyboard.toml, so this doubles as the enrichment geometry
-// override until the firmware carries the real shape itself.
+// Main-grid columns span cells 0-5 (left) and 12-17 (right); the two outermost
+// columns of each half sit 0.5u lower than the finger columns; the thumb
+// clusters are 2x3 fans angled inward. This copy exists only to build the
+// simulated Glove80 device; real keyboards supply their geometry through
+// GetLayout.
 
 /** Per-logical-key placement plus its LED-chain index and thumb membership. */
 export interface Glove80Key {
@@ -135,24 +134,10 @@ function buildBoardKeys(): Map<number, Glove80Key> {
   return keys;
 }
 
-/** Logical key index → real placement + LED chain, shared by the mock device
- *  and the enrichment geometry override. */
+/** Logical key index → real placement + LED chain for the mock device. */
 export const GLOVE80_BOARD_KEYS: Map<number, Glove80Key> = buildBoardKeys();
-
-function buildGeometry(): Record<string, { x: number; y: number; r: number }> {
-  const geometry: Record<string, { x: number; y: number; r: number }> = {};
-  GLOVE80_GRID.forEach((logical, grid) => {
-    if (logical === null) return;
-    const key = GLOVE80_BOARD_KEYS.get(logical);
-    if (!key) return;
-    const at = `${Math.floor(grid / GLOVE80_COLS)},${grid % GLOVE80_COLS}`;
-    geometry[at] = { x: key.x, y: key.y, r: key.rot };
-  });
-  return geometry;
-}
 
 export const glove80Enrichment: BoardEnrichment = {
   displayName: "Glove80",
   labels: buildLabels(),
-  geometry: buildGeometry(),
 };

@@ -1079,6 +1079,9 @@ describe("keyboard model assembly", () => {
       expect(q?.label).toBe("Q");
       const thumbZones = model.keys.find((key) => key.row === 0 && key.col === 6)?.zoneIds;
       expect(thumbZones).toContain(2);
+      const reportedThumb = layout.variants[0].keys.find((key) => key.row === 0 && key.col === 6);
+      const renderedThumb = model.keys.find((key) => key.row === 0 && key.col === 6);
+      expect(renderedThumb?.shape).toEqual(reportedThumb);
     });
   });
 

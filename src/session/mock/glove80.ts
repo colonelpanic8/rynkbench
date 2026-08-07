@@ -1,9 +1,8 @@
 // Simulated Glove80: split ergo, 80 keys on a 6x14 matrix (with 4 holes),
 // per-key RGB mirroring the real LED-chain order. Physical geometry (column
-// stagger, thumb-cluster fans) is traced from the official MoErgo Layout
-// Editor; chain indices are ported from ui/src/lib/glove80-layout.ts; legends
-// come from the shared enrichment tables so the default keymap and the
-// rendered labels agree.
+// stagger, thumb-cluster fans) is representative mock data; chain indices are
+// ported from ui/src/lib/glove80-layout.ts; legends come from the shared
+// enrichment tables so the default keymap and rendered labels agree.
 
 import type {
   Combo,
@@ -41,7 +40,7 @@ import {
 } from "./board";
 
 // Placement + LED-chain data is the shared board table in model/boards —
-// the same real geometry the enrichment override serves for actual hardware.
+// the same real geometry current firmware serves through GetLayout.
 type BoardKey = Glove80Key;
 
 const boardKeys = GLOVE80_BOARD_KEYS;
