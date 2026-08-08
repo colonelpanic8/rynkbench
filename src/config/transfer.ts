@@ -91,8 +91,17 @@ async function writeBehaviors(
   const skipped: string[] = [];
   // A document parsed by an older wasm build carries no `behaviors` at all,
   // which means the same thing as a document that describes none of the tables.
-  const { config, options, morse_profiles, auto_mouse_layers, morses, combos, forks, macros } =
-    snapshot.behaviors ?? {};
+  const {
+    config,
+    options,
+    morse_profiles,
+    hold_trigger_positions,
+    auto_mouse_layers,
+    morses,
+    combos,
+    forks,
+    macros,
+  } = snapshot.behaviors ?? {};
 
   if (config !== undefined && !same(config, state.behavior)) {
     const prev = state.behavior;
@@ -151,6 +160,42 @@ async function writeBehaviors(
         }
       }
       if (changed > 0) applied.push(`${changed} morse profile${changed === 1 ? "" : "s"}`);
+    }
+  }
+
+  if (hold_trigger_positions !== undefined) {
+    const capacity = state.morseHoldTriggerPositionCapacity;
+    const invalidProfile = hold_trigger_positions.find(
+      (position) =>
+        position.profile !== 255 && position.profile >= state.morseProfiles.length,
+    );
+    if (capacity === null) {
+      skipped.push("morse hold trigger positions (unsupported by this keyboard)");
+    } else if (hold_trigger_positions.length > capacity) {
+      skipped.push(
+        `morse hold trigger positions (${hold_trigger_positions.length}; this keyboard holds ${capacity})`,
+      );
+    } else if (invalidProfile !== undefined) {
+      skipped.push(
+        `morse hold trigger positions (profile ${invalidProfile.profile}; this keyboard holds ${state.morseProfiles.length} profiles)`,
+      );
+    } else if (!same(hold_trigger_positions, state.morseHoldTriggerPositions)) {
+      const prev = state.morseHoldTriggerPositions;
+      dispatch({ type: "holdTriggerPositionsWriteStart", positions: hold_trigger_positions });
+      try {
+        await session.behavior.setHoldTriggerPositions(hold_trigger_positions);
+        dispatch({ type: "holdTriggerPositionsWriteOk" });
+        applied.push(
+          `${hold_trigger_positions.length} morse hold trigger position${hold_trigger_positions.length === 1 ? "" : "s"}`,
+        );
+      } catch (error) {
+        dispatch({
+          type: "holdTriggerPositionsWriteErr",
+          prev,
+          message: errorMessage(error),
+        });
+        throw new Error(`Writing morse hold trigger positions: ${errorMessage(error)}`);
+      }
     }
   }
 

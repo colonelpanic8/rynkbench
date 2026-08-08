@@ -1,7 +1,14 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import type { MorseMode, MorseProfile } from "../../vendor/rynk-wasm/rynk_wasm";
-import { Button, Panel, SectionLabel, TextInput } from "../kit";
+import type {
+  MorseHoldTriggerPosition,
+  MorseMode,
+  MorseProfile,
+} from "../../vendor/rynk-wasm/rynk_wasm";
+import type { KeyView } from "../../model/keyboard";
+import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
+import type { KeyDecor } from "../KeyboardCanvas";
+import { Button, Chip, Panel, SectionLabel, TextInput } from "../kit";
 import { morseProfileSummary } from "../morse-profile";
 import { useWorkbench } from "../state";
 
@@ -31,6 +38,141 @@ function optionalNumber(value: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+const DEFAULT_PROFILE = 255;
+
+type MatrixPosition = Pick<MorseHoldTriggerPosition, "row" | "col">;
+
+function positionKey(position: MatrixPosition): string {
+  return `${position.row},${position.col}`;
+}
+
+function HoldTriggerPositionsPanel() {
+  const { bundle, state, io } = useWorkbench();
+  const capacity = state.morseHoldTriggerPositionCapacity;
+  const [profile, setProfile] = useState(DEFAULT_PROFILE);
+  const saved = useMemo(
+    () =>
+      state.morseHoldTriggerPositions
+        .filter((position) => position.profile === profile)
+        .map(({ row, col }) => ({ row, col })),
+    [profile, state.morseHoldTriggerPositions],
+  );
+  const [draft, setDraft] = useState<MatrixPosition[]>(saved);
+
+  useEffect(() => setDraft(saved), [saved]);
+
+  const selected = useMemo(() => new Set(draft.map(positionKey)), [draft]);
+  const otherCount = state.morseHoldTriggerPositions.length - saved.length;
+  const full = capacity !== null && otherCount + draft.length >= capacity;
+  const dirty = !same(saved, draft);
+  const pending = state.pending.morseHoldTriggerPositions;
+
+  const toggle = useCallback(
+    (key: KeyView) => {
+      const id = positionKey(key);
+      setDraft((current) => {
+        if (current.some((position) => positionKey(position) === id)) {
+          return current.filter((position) => positionKey(position) !== id);
+        }
+        if (capacity === null || otherCount + current.length >= capacity) return current;
+        return [...current, { row: key.row, col: key.col }];
+      });
+    },
+    [capacity, otherCount],
+  );
+
+  const decorFor = useCallback(
+    (key: KeyView): KeyDecor => ({
+      glyph: key.label ? { text: key.label, dim: true } : undefined,
+      inSelection: selected.has(positionKey(key)),
+    }),
+    [selected],
+  );
+
+  if (capacity === null) {
+    return (
+      <Panel className="p-5">
+        <SectionLabel>Positional hold triggers</SectionLabel>
+        <p className="mt-1.5 text-[12px] leading-relaxed text-faint">
+          This firmware does not expose runtime hold-trigger positions.
+        </p>
+      </Panel>
+    );
+  }
+
+  const apply = () => {
+    const positions = state.morseHoldTriggerPositions
+      .filter((position) => position.profile !== profile)
+      .concat(draft.map(({ row, col }) => ({ profile, row, col })));
+    io.setMorseHoldTriggerPositions(positions);
+  };
+
+  return (
+    <Panel className="p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <SectionLabel>Positional hold triggers</SectionLabel>
+          <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-faint">
+            Select the keys allowed to turn a pending tap-hold into a hold. A profile with no
+            entries inherits the global default; an empty global default allows every key.
+          </p>
+        </div>
+        <Chip tone={full ? "accent" : "neutral"} className="tnum">
+          {otherCount + draft.length} / {capacity} entries
+        </Chip>
+      </div>
+
+      <label className="mt-4 flex items-center justify-between gap-4 text-[13px] text-ink">
+        Position list
+        <select
+          value={profile}
+          onChange={(event) => setProfile(Number(event.target.value))}
+          className="rounded-md border border-line bg-raised px-2 py-1.5 text-[12px] text-ink"
+        >
+          <option value={DEFAULT_PROFILE}>Global default</option>
+          {state.morseProfiles.map((_, index) => (
+            <option key={index} value={index}>Profile {index}</option>
+          ))}
+        </select>
+      </label>
+
+      <div className="mt-4 h-[390px] min-h-[260px]">
+        <BoardWell model={bundle.model}>
+          <KeyboardCanvas
+            model={bundle.model}
+            className="h-full w-full"
+            decorFor={decorFor}
+            onKeyPointerDown={toggle}
+          />
+        </BoardWell>
+      </div>
+
+      <div className="mt-2 text-[11.5px] text-faint">
+        {draft.length === 0
+          ? profile === DEFAULT_PROFILE
+            ? "No global restriction: any key may trigger a hold."
+            : "No profile-specific list: this profile inherits the global default."
+          : `${draft.length} key${draft.length === 1 ? "" : "s"} selected for this list.`}
+      </div>
+      {pending?.status === "error" && (
+        <div className="mt-3 text-[12px] text-danger">Write failed: {pending.message}</div>
+      )}
+      <div className="mt-4 flex gap-2 border-t border-line-soft pt-4">
+        <Button
+          variant="primary"
+          disabled={!dirty || pending?.status === "pending"}
+          onClick={apply}
+        >
+          {pending?.status === "pending" ? "Writing…" : "Save positions"}
+        </Button>
+        <Button variant="ghost" disabled={!dirty} onClick={() => setDraft(saved)}>
+          Reset
+        </Button>
+      </div>
+    </Panel>
+  );
+}
+
 export function ProfilesTab({ nav }: { nav: ReactNode }) {
   const { state, io } = useWorkbench();
   const [index, setIndex] = useState(0);
@@ -56,7 +198,7 @@ export function ProfilesTab({ nav }: { nav: ReactNode }) {
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       {nav}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-xl flex-col gap-4 pb-8">
+        <div className="mx-auto flex max-w-5xl flex-col gap-4 pb-8">
           <Panel className="p-5">
             <SectionLabel>Runtime morse profiles</SectionLabel>
             <p className="mt-1.5 text-[12px] leading-relaxed text-faint">
@@ -145,6 +287,7 @@ export function ProfilesTab({ nav }: { nav: ReactNode }) {
               </Button>
             </div>
           </Panel>
+          <HoldTriggerPositionsPanel />
         </div>
       </div>
     </div>

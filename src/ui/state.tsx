@@ -35,6 +35,7 @@ import type {
   LightingState,
   ModifierCombination,
   Morse,
+  MorseHoldTriggerPosition,
   MorseProfile,
   BuildInfo,
   ProtocolVersion,
@@ -103,6 +104,9 @@ export interface ConnectedBundle {
   behavior: BehaviorConfig | null;
   behaviorOptions: BehaviorOptions | null;
   morseProfiles: MorseProfile[];
+  /** null when firmware predates runtime positional hold triggers. */
+  morseHoldTriggerPositionCapacity: number | null;
+  morseHoldTriggerPositions: MorseHoldTriggerPosition[];
   autoMouseLayerCapacity: number;
   autoMouseLayers: AutoMouseLayerConfig[];
   ledIndicator: LedIndicator | null;
@@ -200,6 +204,8 @@ export interface WorkbenchState {
   behavior: BehaviorConfig | null;
   behaviorOptions: BehaviorOptions | null;
   morseProfiles: MorseProfile[];
+  morseHoldTriggerPositionCapacity: number | null;
+  morseHoldTriggerPositions: MorseHoldTriggerPosition[];
   autoMouseLayerCapacity: number;
   autoMouseLayers: AutoMouseLayerConfig[];
   ledIndicator: LedIndicator | null;
@@ -334,6 +340,8 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     behavior: bundle.behavior,
     behaviorOptions: bundle.behaviorOptions,
     morseProfiles: bundle.morseProfiles,
+    morseHoldTriggerPositionCapacity: bundle.morseHoldTriggerPositionCapacity,
+    morseHoldTriggerPositions: bundle.morseHoldTriggerPositions,
     autoMouseLayerCapacity: bundle.autoMouseLayerCapacity,
     autoMouseLayers: bundle.autoMouseLayers,
     ledIndicator: bundle.ledIndicator,
@@ -438,6 +446,13 @@ export type WorkbenchAction =
   | { type: "morseProfileWriteStart"; index: number; profile: MorseProfile }
   | { type: "morseProfileWriteOk"; index: number }
   | { type: "morseProfileWriteErr"; index: number; prev: MorseProfile; message: string }
+  | { type: "holdTriggerPositionsWriteStart"; positions: MorseHoldTriggerPosition[] }
+  | { type: "holdTriggerPositionsWriteOk" }
+  | {
+      type: "holdTriggerPositionsWriteErr";
+      prev: MorseHoldTriggerPosition[];
+      message: string;
+    }
   | { type: "autoMouseWriteStart"; configs: AutoMouseLayerConfig[] }
   | { type: "autoMouseWriteOk" }
   | { type: "autoMouseWriteErr"; prev: AutoMouseLayerConfig[]; message: string }
@@ -822,6 +837,25 @@ export function makeWorkbenchReducer(cols: number) {
           },
         };
       }
+      case "holdTriggerPositionsWriteStart":
+        return {
+          ...state,
+          morseHoldTriggerPositions: act.positions,
+          pending: { ...state.pending, morseHoldTriggerPositions: { status: "pending" } },
+        };
+      case "holdTriggerPositionsWriteOk": {
+        const { morseHoldTriggerPositions: _done, ...pending } = state.pending;
+        return { ...state, pending };
+      }
+      case "holdTriggerPositionsWriteErr":
+        return {
+          ...state,
+          morseHoldTriggerPositions: act.prev,
+          pending: {
+            ...state.pending,
+            morseHoldTriggerPositions: { status: "error", message: act.message },
+          },
+        };
       case "autoMouseWriteStart":
         return {
           ...state,
@@ -944,6 +978,7 @@ export interface WorkbenchIo {
   setBehavior(config: BehaviorConfig): void;
   setBehaviorOptions(options: BehaviorOptions): void;
   setMorseProfile(index: number, profile: MorseProfile): void;
+  setMorseHoldTriggerPositions(positions: MorseHoldTriggerPosition[]): void;
   setAutoMouseLayers(configs: AutoMouseLayerConfig[]): void;
   disconnect(): void;
   rebootToBootloader(): Promise<void>;
@@ -1215,6 +1250,19 @@ export function makeIo(
           dispatch({
             type: "morseProfileWriteErr",
             index,
+            prev,
+            message: errorMessage(err),
+          }),
+      );
+    },
+    setMorseHoldTriggerPositions(positions) {
+      const prev = getState().morseHoldTriggerPositions;
+      dispatch({ type: "holdTriggerPositionsWriteStart", positions });
+      session.behavior.setHoldTriggerPositions(positions).then(
+        () => dispatch({ type: "holdTriggerPositionsWriteOk" }),
+        (err) =>
+          dispatch({
+            type: "holdTriggerPositionsWriteErr",
             prev,
             message: errorMessage(err),
           }),

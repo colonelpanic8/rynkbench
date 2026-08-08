@@ -42,15 +42,16 @@
     "glove80-rmk": {
       "flake": false,
       "locked": {
-        "lastModified": 1786185544,
-        "narHash": "sha256-vRqkgRh0j7UfXnzd6XBLHCMa/ldbbXzUoqIGZtNkHik=",
+        "lastModified": 1786192658,
+        "narHash": "sha256-EEtadxNsvhrcfFF7Uv6r7YdgOifGhUT4QrES/4rkbDc=",
         "owner": "colonelpanic8",
         "repo": "glove80-rmk",
-        "rev": "5bb578318a5e7a9f533cd3349419a403110d9829",
+        "rev": "bb47197c64f19a2358ee9a6d15345368a4bcdc81",
         "type": "github"
       },
       "original": {
         "owner": "colonelpanic8",
+        "ref": "feat/runtime-hold-trigger-positions-config",
         "repo": "glove80-rmk",
         "type": "github"
       }
@@ -74,11 +75,11 @@
     "rmk": {
       "flake": false,
       "locked": {
-        "lastModified": 1786172055,
-        "narHash": "sha256-oLULkP/1pMRgXTE1tgK4148e/NaiHr31svDxNS0/Kvw=",
+        "lastModified": 1786191370,
+        "narHash": "sha256-VZbWxTMlKpKgDLdWWucxEICsI7CFdjnkXQWYjsIB1d0=",
         "owner": "colonelpanic8",
         "repo": "rmk",
-        "rev": "ab8bbb537894aa047d39079de785335b8b5f8d35",
+        "rev": "54b57ac4f36b2645c7dd5840e50468e3a11dc5b2",
         "type": "github"
       },
       "original": {

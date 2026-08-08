@@ -19,7 +19,7 @@
     # this flake's own `rmk` pin into that slot — which is also what keeps the
     # two wasm packages agreeing about the protocol types they both generate.
     glove80-rmk = {
-      url = "github:colonelpanic8/glove80-rmk";
+      url = "github:colonelpanic8/glove80-rmk/feat/runtime-hold-trigger-positions-config";
       flake = false;
     };
   };

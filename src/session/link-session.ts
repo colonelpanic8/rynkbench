@@ -625,6 +625,10 @@ export class LinkSession implements RynkSession {
       setOptions: (options) => this.run(() => client.set_behavior_options(options)),
       profiles: () => this.run(() => client.read_all_morse_profiles()),
       setProfile: (index, profile) => this.run(() => client.set_morse_profile(index, profile)),
+      holdTriggerPositions: () =>
+        this.run(() => client.get_morse_hold_trigger_positions()),
+      setHoldTriggerPositions: (positions) =>
+        this.run(() => client.set_morse_hold_trigger_positions({ positions })),
       autoMouseLayers: () => this.run(() => client.get_auto_mouse_layer_configs()),
       setAutoMouseLayers: (configs) =>
         this.run(() => client.set_auto_mouse_layer_configs({ configs })),

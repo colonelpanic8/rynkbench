@@ -958,6 +958,37 @@ describe("behavior", () => {
       expect(await session.behavior.options()).toEqual(next);
     });
   });
+
+  it("reads and atomically replaces positional hold triggers", async () => {
+    await withSession(glove80Board, async (session) => {
+      expect(await session.behavior.holdTriggerPositions()).toEqual({
+        capacity: 32,
+        positions: [
+          { profile: 255, row: 3, col: 8 },
+          { profile: 255, row: 3, col: 9 },
+        ],
+      });
+      const positions = [
+        { profile: 255, row: 2, col: 8 },
+        { profile: 3, row: 2, col: 1 },
+      ];
+      await session.behavior.setHoldTriggerPositions(positions);
+      expect((await session.behavior.holdTriggerPositions()).positions).toEqual(positions);
+    });
+  });
+
+  it("rejects unsupported, oversized, and out-of-range position tables", async () => {
+    await withSession(ortho60Board, async (session) => {
+      await expect(session.behavior.holdTriggerPositions()).rejects.toThrow(/no runtime/);
+    });
+    await withSession(glove80Board, async (session) => {
+      const oversized = Array.from({ length: 33 }, () => ({ profile: 255, row: 0, col: 0 }));
+      await expect(session.behavior.setHoldTriggerPositions(oversized)).rejects.toThrow(/capacity/);
+      await expect(
+        session.behavior.setHoldTriggerPositions([{ profile: 255, row: 99, col: 0 }]),
+      ).rejects.toThrow(/out of range/);
+    });
+  });
 });
 
 describe.each(boards)("%s device status", (_name, spec) => {
