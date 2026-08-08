@@ -14,6 +14,7 @@ import { LightingMode } from "./lighting/LightingMode";
 import { EffectsMode } from "./effects/EffectsMode";
 import { LiveMode } from "./live/LiveMode";
 import { AdvancedMode } from "./advanced/AdvancedMode";
+import { ProfilesMode } from "./ProfilesMode";
 import { DeviceMode } from "./device/DeviceMode";
 import { InspectorShell, cx } from "./kit";
 import {
@@ -22,6 +23,7 @@ import {
   EyeIcon,
   KeymapIcon,
   LightingIcon,
+  ProfilesIcon,
   SparkleIcon,
 } from "./icons";
 
@@ -36,6 +38,7 @@ const MODES: ModeEntry[] = [
   { id: "lighting", label: "Lighting", icon: LightingIcon },
   { id: "effects", label: "Effects", icon: SparkleIcon },
   { id: "live", label: "Live", icon: EyeIcon },
+  { id: "profiles", label: "Profiles", icon: ProfilesIcon },
   { id: "advanced", label: "Advanced", icon: CombinatorIcon },
   { id: "device", label: "Device", icon: DeviceIcon },
 ];
@@ -103,8 +106,12 @@ export function Workbench({
   // on firmware that ships the effect extension.
   const modes = useMemo(
     () =>
-      MODES.filter((m) => m.id !== "effects" || bundle.lightingExtension !== null),
-    [bundle.lightingExtension],
+      MODES.filter(
+        (m) =>
+          (m.id !== "effects" || bundle.lightingExtension !== null) &&
+          (m.id !== "profiles" || bundle.morseProfileCapacity > 0),
+      ),
+    [bundle.lightingExtension, bundle.morseProfileCapacity],
   );
 
   const stateRef = useRef(state);
@@ -190,6 +197,7 @@ export function Workbench({
             {state.mode === "lighting" && <LightingMode />}
             {state.mode === "effects" && <EffectsMode />}
             {state.mode === "live" && <LiveMode />}
+            {state.mode === "profiles" && <ProfilesMode />}
             {state.mode === "advanced" && <AdvancedMode />}
             {state.mode === "device" && <DeviceMode />}
           </main>

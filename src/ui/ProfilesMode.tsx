@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
 import type {
-  MorseHoldTriggerPosition,
   MorseMode,
   MorseProfile,
   MorseProfileEntry,
-} from "../../vendor/rynk-wasm/rynk_wasm";
-import type { KeyView } from "../../model/keyboard";
-import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
-import type { KeyDecor } from "../KeyboardCanvas";
-import { Button, Chip, Panel, SectionLabel, TextInput } from "../kit";
-import { useWorkbench } from "../state";
+} from "../vendor/rynk-wasm/rynk_wasm";
+import type { KeyView } from "../model/keyboard";
+import { BoardWell, KeyboardCanvas } from "./KeyboardCanvas";
+import type { KeyDecor } from "./KeyboardCanvas";
+import { Button, Chip, Panel, SectionLabel, TextInput, cx } from "./kit";
+import {
+  profilePositionCount,
+  replaceProfilePositions,
+  type MatrixPosition,
+} from "./profiles";
+import { useWorkbench } from "./state";
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const MODES: Array<MorseMode> = [
@@ -51,16 +54,19 @@ const EMPTY_PROFILE: MorseProfile = {
   hold_trigger_on_release: undefined,
 };
 
-type MatrixPosition = Pick<MorseHoldTriggerPosition, "row" | "col">;
-
 function positionKey(position: MatrixPosition): string {
   return `${position.row},${position.col}`;
 }
 
-function HoldTriggerPositionsPanel() {
+function HoldTriggerPositionsPanel({
+  profile,
+  profileName,
+}: {
+  profile: number;
+  profileName: string;
+}) {
   const { bundle, state, io } = useWorkbench();
   const capacity = state.morseHoldTriggerPositionCapacity;
-  const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const saved = useMemo(
     () =>
       state.morseHoldTriggerPositions
@@ -71,14 +77,6 @@ function HoldTriggerPositionsPanel() {
   const [draft, setDraft] = useState<MatrixPosition[]>(saved);
 
   useEffect(() => setDraft(saved), [saved]);
-  useEffect(() => {
-    if (
-      profile !== DEFAULT_PROFILE &&
-      !state.morseProfiles.some((entry) => entry.index === profile)
-    ) {
-      setProfile(DEFAULT_PROFILE);
-    }
-  }, [profile, state.morseProfiles]);
 
   const selected = useMemo(() => new Set(draft.map(positionKey)), [draft]);
   const otherCount = state.morseHoldTriggerPositions.length - saved.length;
@@ -111,7 +109,7 @@ function HoldTriggerPositionsPanel() {
   if (capacity === null) {
     return (
       <Panel className="p-5">
-        <SectionLabel>Positional hold triggers</SectionLabel>
+        <SectionLabel>Related keys</SectionLabel>
         <p className="mt-1.5 text-[12px] leading-relaxed text-faint">
           This firmware does not expose runtime hold-trigger positions.
         </p>
@@ -120,9 +118,7 @@ function HoldTriggerPositionsPanel() {
   }
 
   const apply = () => {
-    const positions = state.morseHoldTriggerPositions
-      .filter((position) => position.profile !== profile)
-      .concat(draft.map(({ row, col }) => ({ profile, row, col })));
+    const positions = replaceProfilePositions(state.morseHoldTriggerPositions, profile, draft);
     io.setMorseHoldTriggerPositions(positions);
   };
 
@@ -132,8 +128,9 @@ function HoldTriggerPositionsPanel() {
         <div>
           <SectionLabel>Positional hold triggers</SectionLabel>
           <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-faint">
-            Select the keys allowed to turn a pending tap-hold into a hold. A profile with no
-            entries inherits the global default; an empty global default allows every key.
+            Select keys on the keyboard that may turn a pending tap-hold using {profileName} into
+            a hold. A profile with no selections inherits the board default; an empty board
+            default allows every key.
           </p>
         </div>
         <Chip tone={full ? "accent" : "neutral"} className="tnum">
@@ -141,21 +138,7 @@ function HoldTriggerPositionsPanel() {
         </Chip>
       </div>
 
-      <label className="mt-4 flex items-center justify-between gap-4 text-[13px] text-ink">
-        Position list
-        <select
-          value={profile}
-          onChange={(event) => setProfile(Number(event.target.value))}
-          className="rounded-md border border-line bg-raised px-2 py-1.5 text-[12px] text-ink"
-        >
-          <option value={DEFAULT_PROFILE}>Global default</option>
-          {state.morseProfiles.map((entry) => (
-            <option key={entry.index} value={entry.index}>{entry.name}</option>
-          ))}
-        </select>
-      </label>
-
-      <div className="mt-4 h-[390px] min-h-[260px]">
+      <div className="mt-4 flex h-[390px] min-h-[260px]">
         <BoardWell model={bundle.model}>
           <KeyboardCanvas
             model={bundle.model}
@@ -169,8 +152,8 @@ function HoldTriggerPositionsPanel() {
       <div className="mt-2 text-[11.5px] text-faint">
         {draft.length === 0
           ? profile === DEFAULT_PROFILE
-            ? "No global restriction: any key may trigger a hold."
-            : "No profile-specific list: this profile inherits the global default."
+            ? "No board-wide restriction: any key may trigger a hold."
+            : `${profileName} currently inherits the board default.`
           : `${draft.length} key${draft.length === 1 ? "" : "s"} selected for this list.`}
       </div>
       {pending?.status === "error" && (
@@ -200,10 +183,11 @@ function lowestFreeIndex(entries: MorseProfileEntry[], capacity: number): number
   return null;
 }
 
-function ProfileEditor({ entry, isNew, onDone }: {
+function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
   entry: MorseProfileEntry;
   isNew: boolean;
-  onDone: () => void;
+  onSaved: () => void;
+  onDelete: () => void;
 }) {
   const { state, io } = useWorkbench();
   const [draft, setDraft] = useState<MorseProfileEntry>(() => structuredClone(entry));
@@ -218,7 +202,7 @@ function ProfileEditor({ entry, isNew, onDone }: {
     <Panel className="p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <SectionLabel>{isNew ? "New profile" : "Profile settings"}</SectionLabel>
+          <SectionLabel>{isNew ? "New tap-hold profile" : "Profile settings"}</SectionLabel>
           <p className="mt-1.5 text-[12px] text-faint">Stable slot {entry.index}</p>
         </div>
         {!isNew && (
@@ -226,7 +210,7 @@ function ProfileEditor({ entry, isNew, onDone }: {
             variant="ghost"
             disabled={pending?.status === "pending"}
             onClick={() => {
-              onDone();
+              onDelete();
               io.deleteMorseProfile(entry.index);
             }}
           >
@@ -249,7 +233,7 @@ function ProfileEditor({ entry, isNew, onDone }: {
           {duplicateName ? "Profile names must be unique." : "Enter a profile name."}
         </div>
       )}
-      <div className="mt-5 flex flex-col gap-4">
+      <div className="mt-5 grid gap-x-8 gap-y-4 md:grid-cols-2">
               {NUMBER_FIELDS.map(({ key, label }) => (
                 <label key={key} className="flex items-center justify-between gap-4 text-[13px]">
                   <span className="text-ink">{label}</span>
@@ -322,7 +306,7 @@ function ProfileEditor({ entry, isNew, onDone }: {
           disabled={!dirty || !validName || pending?.status === "pending"}
           onClick={() => {
             io.setMorseProfile({ ...draft, name: draft.name.trim() });
-            onDone();
+            onSaved();
           }}
         >
           {pending?.status === "pending" ? "Writing…" : isNew ? "Create profile" : "Save profile"}
@@ -335,79 +319,169 @@ function ProfileEditor({ entry, isNew, onDone }: {
   );
 }
 
-export function ProfilesTab({ nav }: { nav: ReactNode }) {
+type ProfileSelection =
+  | { kind: "default" }
+  | { kind: "saved"; index: number }
+  | { kind: "new"; index: number };
+
+export function ProfilesMode() {
   const { state } = useWorkbench();
   const firstIndex = state.morseProfiles[0]?.index ?? null;
-  const [selection, setSelection] = useState<{ index: number; isNew: boolean } | null>(
-    firstIndex === null ? null : { index: firstIndex, isNew: false },
+  const [selection, setSelection] = useState<ProfileSelection>(
+    firstIndex === null ? { kind: "default" } : { kind: "saved", index: firstIndex },
   );
-  const selected = selection?.isNew
-    ? null
-    : state.morseProfiles.find((entry) => entry.index === selection?.index) ?? null;
-  const activeSelection = selected || selection?.isNew ? selection : firstIndex === null ? null : { index: firstIndex, isNew: false };
+  const selected =
+    selection.kind === "saved"
+      ? state.morseProfiles.find((entry) => entry.index === selection.index) ?? null
+      : null;
+  const activeSelection: ProfileSelection =
+    selection.kind !== "saved" || selected
+      ? selection
+      : firstIndex === null
+        ? { kind: "default" }
+        : { kind: "saved", index: firstIndex };
   const freeIndex = lowestFreeIndex(state.morseProfiles, state.morseProfileCapacity);
-  const editorEntry = activeSelection?.isNew
+  const editorEntry = activeSelection.kind === "new"
     ? {
         index: activeSelection.index,
-        name: `profile_${String(activeSelection.index).padStart(3, "0")}`,
+        name: "",
         profile: EMPTY_PROFILE,
       }
-    : state.morseProfiles.find((entry) => entry.index === activeSelection?.index) ?? null;
+    : activeSelection.kind === "saved"
+      ? state.morseProfiles.find((entry) => entry.index === activeSelection.index) ?? null
+      : null;
+  const positionProfile =
+    activeSelection.kind === "default"
+      ? DEFAULT_PROFILE
+      : activeSelection.kind === "saved"
+        ? activeSelection.index
+        : null;
+  const positionProfileName =
+    activeSelection.kind === "default" ? "the board default" : editorEntry?.name ?? "this profile";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {nav}
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-5xl flex-col gap-4 pb-8">
-          <Panel className="p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <SectionLabel>Runtime morse profiles</SectionLabel>
-                <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-faint">
-                  Named profiles are created only when you need them. Bindings keep their stable
-                  slot number, so renaming or deleting another profile never retargets a key.
-                </p>
-              </div>
-              <Button
-                variant="primary"
-                disabled={freeIndex === null}
-                onClick={() => freeIndex !== null && setSelection({ index: freeIndex, isNew: true })}
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4 px-1">
+        <div>
+          <h1 className="text-[17px] font-semibold text-ink">Tap-hold profiles</h1>
+          <p className="mt-1 max-w-3xl text-[12px] leading-relaxed text-faint">
+            Tune reusable tap-hold decisions and choose their related keys directly on the
+            keyboard. Profile slots stay stable when another profile is renamed or removed.
+          </p>
+        </div>
+        <Button
+          variant="primary"
+          disabled={freeIndex === null}
+          onClick={() => freeIndex !== null && setSelection({ kind: "new", index: freeIndex })}
+        >
+          Add profile
+        </Button>
+      </div>
+
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[250px_minmax(0,1fr)]">
+        <Panel className="flex min-h-[180px] flex-col overflow-hidden">
+          <div className="border-b border-line-soft px-4 py-3">
+            <SectionLabel>Profiles</SectionLabel>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            <button
+              type="button"
+              aria-current={activeSelection.kind === "default" ? "page" : undefined}
+              onClick={() => setSelection({ kind: "default" })}
+              className={cx(
+                "flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors",
+                activeSelection.kind === "default"
+                  ? "bg-accent-dim/40 text-ink"
+                  : "text-mute hover:bg-raised hover:text-ink",
+              )}
+            >
+              <span>
+                <span className="block text-[13px] font-medium">Board default</span>
+                <span className="mt-0.5 block text-[10.5px] text-faint">Fallback related keys</span>
+              </span>
+              <Chip tone={activeSelection.kind === "default" ? "accent" : "neutral"} className="tnum">
+                {profilePositionCount(state.morseHoldTriggerPositions, DEFAULT_PROFILE)}
+              </Chip>
+            </button>
+
+            <div className="my-2 border-t border-line-soft" />
+            {activeSelection.kind === "new" && (
+              <button
+                type="button"
+                aria-current="page"
+                className="flex w-full cursor-pointer items-center justify-between rounded-lg bg-accent-dim/40 px-3 py-2.5 text-left text-ink"
               >
-                Add profile
-              </Button>
-            </div>
-            {state.morseProfiles.length > 0 ? (
-              <label className="mt-4 flex items-center justify-between gap-4 text-[13px] text-ink">
-                Profile
-                <select
-                  value={activeSelection?.isNew ? `new:${activeSelection.index}` : activeSelection?.index ?? ""}
-                  onChange={(event) => setSelection({ index: Number(event.target.value), isNew: false })}
-                  className="rounded-md border border-line bg-raised px-2 py-1.5 text-[12px] text-ink"
-                >
-                  {activeSelection?.isNew && (
-                    <option value={`new:${activeSelection.index}`}>New profile</option>
+                <span>
+                  <span className="block text-[13px] font-medium">New profile</span>
+                  <span className="mt-0.5 block text-[10.5px] text-faint">
+                    Slot {activeSelection.index}
+                  </span>
+                </span>
+              </button>
+            )}
+            {state.morseProfiles.map((entry) => {
+              const active =
+                activeSelection.kind === "saved" && activeSelection.index === entry.index;
+              return (
+                <button
+                  key={entry.index}
+                  type="button"
+                  aria-current={active ? "page" : undefined}
+                  onClick={() => setSelection({ kind: "saved", index: entry.index })}
+                  className={cx(
+                    "flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors",
+                    active
+                      ? "bg-accent-dim/40 text-ink"
+                      : "text-mute hover:bg-raised hover:text-ink",
                   )}
-                  {state.morseProfiles.map((entry) => (
-                    <option key={entry.index} value={entry.index}>{entry.name}</option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <div className="mt-5 rounded-md border border-dashed border-line p-6 text-center">
-                <div className="text-[13px] text-ink">No custom profiles</div>
-                <div className="mt-1 text-[12px] text-faint">Tap-hold keys use the board default until you create one.</div>
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-medium">{entry.name}</span>
+                    <span className="mt-0.5 block text-[10.5px] text-faint">Slot {entry.index}</span>
+                  </span>
+                  <Chip tone={active ? "accent" : "neutral"} className="tnum">
+                    {profilePositionCount(state.morseHoldTriggerPositions, entry.index)}
+                  </Chip>
+                </button>
+              );
+            })}
+            {state.morseProfiles.length === 0 && activeSelection.kind !== "new" && (
+              <div className="px-3 py-5 text-center text-[12px] leading-relaxed text-faint">
+                No custom profiles yet.
               </div>
             )}
-          </Panel>
-          {editorEntry && activeSelection && (
+          </div>
+          <div className="border-t border-line-soft px-4 py-3 text-[11px] text-faint">
+            {state.morseProfiles.length} / {state.morseProfileCapacity} slots used
+          </div>
+        </Panel>
+
+        <div className="min-h-0 overflow-y-auto pr-1">
+          <div className="mx-auto flex max-w-5xl flex-col gap-4 pb-8">
+          {editorEntry && activeSelection.kind !== "default" && (
             <ProfileEditor
-              key={`${activeSelection.isNew ? "new" : "saved"}:${activeSelection.index}:${editorEntry.name}`}
+              key={`${activeSelection.kind}:${activeSelection.index}:${editorEntry.name}`}
               entry={editorEntry}
-              isNew={activeSelection.isNew}
-              onDone={() => setSelection({ index: activeSelection.index, isNew: false })}
+              isNew={activeSelection.kind === "new"}
+              onSaved={() => setSelection({ kind: "saved", index: activeSelection.index })}
+              onDelete={() => setSelection({ kind: "default" })}
             />
           )}
-          <HoldTriggerPositionsPanel />
+          {positionProfile !== null ? (
+            <HoldTriggerPositionsPanel
+              key={positionProfile}
+              profile={positionProfile}
+              profileName={positionProfileName}
+            />
+          ) : (
+            <Panel className="p-5">
+              <SectionLabel>Related keys</SectionLabel>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-faint">
+                Create the profile first, then choose its related keys on the keyboard layout.
+              </p>
+            </Panel>
+          )}
+          </div>
         </div>
       </div>
     </div>

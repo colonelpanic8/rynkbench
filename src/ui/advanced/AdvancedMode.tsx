@@ -9,24 +9,22 @@ import { MorseTab } from "./MorseTab";
 import { MacrosTab } from "./MacrosTab";
 import { ForksTab } from "./ForksTab";
 import { BehaviorTab } from "./BehaviorTab";
-import { ProfilesTab } from "./ProfilesTab";
 
-type AdvTab = "combos" | "morse" | "profiles" | "macros" | "forks" | "behavior";
+type AdvTab = "combos" | "morse" | "macros" | "forks" | "behavior";
 
 export function AdvancedMode() {
-  const { bundle, state } = useWorkbench();
+  const { bundle } = useWorkbench();
   const caps = bundle.caps;
 
   const tabs = useMemo(() => {
     const out: Array<{ id: AdvTab; label: string }> = [];
     if (caps.max_combos > 0) out.push({ id: "combos", label: "Combos" });
     if (caps.max_morse > 0) out.push({ id: "morse", label: "Morse" });
-    if (state.morseProfileCapacity > 0) out.push({ id: "profiles", label: "Profiles" });
     if (caps.macro_space_size > 0) out.push({ id: "macros", label: "Macros" });
     if (caps.max_forks > 0) out.push({ id: "forks", label: "Forks" });
     out.push({ id: "behavior", label: "Behavior" });
     return out;
-  }, [caps.max_combos, caps.max_morse, caps.macro_space_size, caps.max_forks, state.morseProfileCapacity]);
+  }, [caps.max_combos, caps.max_morse, caps.macro_space_size, caps.max_forks]);
 
   const [tab, setTab] = useState<AdvTab>(tabs[0].id);
   const active = tabs.some((t) => t.id === tab) ? tab : tabs[0].id;
@@ -57,8 +55,6 @@ export function AdvancedMode() {
       return <CombosTab nav={nav} goBehavior={() => setTab("behavior")} />;
     case "morse":
       return <MorseTab nav={nav} />;
-    case "profiles":
-      return <ProfilesTab nav={nav} />;
     case "macros":
       return <MacrosTab nav={nav} />;
     case "forks":

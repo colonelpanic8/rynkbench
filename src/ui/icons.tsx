@@ -58,6 +58,18 @@ export function CombinatorIcon(props: IconProps) {
   );
 }
 
+/** Named tap-hold profiles: a key with a small tuning slider. */
+export function ProfilesIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="1.7" y="2.3" width="7.2" height="6.1" rx="1.3" />
+      <path d="M4.1 5.35h2.4M3.1 11.2h9.8M3.1 13.5h9.8" />
+      <circle cx="11.7" cy="5.35" r="2.1" />
+      <path d="M11.7 3.25v4.2" />
+    </svg>
+  );
+}
+
 /** Effects mode: an animated sparkle from the firmware's effect pack. */
 export function SparkleIcon(props: IconProps) {
   return (

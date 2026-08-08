@@ -43,7 +43,14 @@ import type {
 import type { RynkSession } from "../session/types";
 import type { KeyboardModel } from "../model/keyboard";
 
-export type Mode = "keymap" | "lighting" | "effects" | "live" | "advanced" | "device";
+export type Mode =
+  | "keymap"
+  | "lighting"
+  | "effects"
+  | "live"
+  | "profiles"
+  | "advanced"
+  | "device";
 
 /** Which lighting surface the canvas edits: the transient overlay, or one
  *  layer's durable scene table. Only ever a number when scenes are supported. */
