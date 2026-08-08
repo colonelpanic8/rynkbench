@@ -42,16 +42,15 @@
     "glove80-rmk": {
       "flake": false,
       "locked": {
-        "lastModified": 1786193100,
+        "lastModified": 1786205882,
         "narHash": "sha256-EEtadxNsvhrcfFF7Uv6r7YdgOifGhUT4QrES/4rkbDc=",
         "owner": "colonelpanic8",
         "repo": "glove80-rmk",
-        "rev": "d8e0920775eb97e482a2bc16df34802247fd60c7",
+        "rev": "0c7561f69fdf41be7bfdc1cd22ce2e0854b3a60a",
         "type": "github"
       },
       "original": {
         "owner": "colonelpanic8",
-        "ref": "feat/runtime-hold-trigger-positions-config",
         "repo": "glove80-rmk",
         "type": "github"
       }
