@@ -32,6 +32,8 @@ import type {
   LightingZoneId,
   MatrixState,
   Morse,
+  MorseHoldTriggerPosition,
+  MorseHoldTriggerPositionState,
   MorseProfile,
   PeripheralStatus,
   ProtocolVersion,
@@ -349,6 +351,7 @@ class StubSession implements RynkSession {
     morse_default_profile: emptyMorseProfile(),
   };
   private morseProfiles: MorseProfile[] = Array.from({ length: 8 }, emptyMorseProfile);
+  private holdTriggerPositions: MorseHoldTriggerPosition[] = [];
   private autoMouseConfigs: AutoMouseLayerConfig[] = [];
   private topicHandler: ((event: TopicEvent) => void) | null = null;
   private disconnectHandler: (() => void) | null = null;
@@ -521,6 +524,14 @@ class StubSession implements RynkSession {
     setProfile: async (index: number, profile: MorseProfile): Promise<void> => {
       await lag();
       this.morseProfiles[index] = structuredClone(profile);
+    },
+    holdTriggerPositions: async (): Promise<MorseHoldTriggerPositionState> => {
+      await lag();
+      return { capacity: 32, positions: structuredClone(this.holdTriggerPositions) };
+    },
+    setHoldTriggerPositions: async (positions: MorseHoldTriggerPosition[]): Promise<void> => {
+      await lag();
+      this.holdTriggerPositions = structuredClone(positions);
     },
     autoMouseLayers: async (): Promise<AutoMouseLayerConfigState> => {
       await lag();

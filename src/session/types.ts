@@ -60,6 +60,8 @@ import type {
   MatrixState,
   ModifierCombination,
   Morse,
+  MorseHoldTriggerPosition,
+  MorseHoldTriggerPositionState,
   MorseProfile,
   PeripheralStatus,
   ProtocolVersion,
@@ -227,6 +229,8 @@ export interface BehaviorOps {
   setOptions(options: BehaviorOptions): Promise<void>;
   profiles(): Promise<MorseProfile[]>;
   setProfile(index: number, profile: MorseProfile): Promise<void>;
+  holdTriggerPositions(): Promise<MorseHoldTriggerPositionState>;
+  setHoldTriggerPositions(positions: MorseHoldTriggerPosition[]): Promise<void>;
   autoMouseLayers(): Promise<AutoMouseLayerConfigState>;
   setAutoMouseLayers(configs: AutoMouseLayerConfig[]): Promise<void>;
 }

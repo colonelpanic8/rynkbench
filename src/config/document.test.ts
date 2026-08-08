@@ -363,6 +363,11 @@ describe("snapshotFromState", () => {
       morseProfiles: [
         { ...LIVE_MORSE[0].profile, hold_timeout_ms: 175, prior_idle_time_ms: 110 },
       ],
+      morseHoldTriggerPositionCapacity: 32,
+      morseHoldTriggerPositions: [
+        { profile: 255, row: 2, col: 8 },
+        { profile: 0, row: 2, col: 1 },
+      ],
       autoMouseLayers: [],
       combos: [],
       forks: liveForks,
@@ -382,9 +387,13 @@ describe("snapshotFromState", () => {
     expect(again.snapshot.behaviors?.morses).toEqual(LIVE_MORSE);
     expect(again.snapshot.behaviors?.forks).toEqual(liveForks);
     expect(again.snapshot.behaviors?.morse_profiles).toEqual(state.morseProfiles);
+    expect(again.snapshot.behaviors?.hold_trigger_positions).toEqual(
+      state.morseHoldTriggerPositions,
+    );
     expect(again.snapshot.behaviors?.options).toEqual(state.behaviorOptions);
     expect(again.snapshot.behaviors?.config).toEqual(state.behavior);
     expect(text).toContain("[behavior.morse.profiles.profile_000]");
+    expect(text).toContain("hold_trigger_key_positions");
     expect(text).toContain("[[fork]]");
   });
 });

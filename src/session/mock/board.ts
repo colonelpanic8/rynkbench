@@ -49,6 +49,8 @@ import type {
   LightingZoneId,
   ModifierCombination,
   Morse,
+  MorseHoldTriggerPosition,
+  MorseHoldTriggerPositionState,
   MorseProfile,
   MouseButtons,
   ProtocolVersion,
@@ -98,6 +100,10 @@ export interface BoardSpec {
   /** Runtime tap-hold timing slots. Defaults to eight empty profiles. */
   morseProfileCount?: number;
   seedMorseProfiles?: MorseProfile[];
+  /** Total entries across the default and all profile-specific position lists.
+   *  Omit to simulate firmware predating this runtime surface. */
+  holdTriggerPositionCapacity?: number;
+  seedHoldTriggerPositions?: MorseHoldTriggerPosition[];
   autoMouseLayerCapacity?: number;
   seedAutoMouseLayers?: AutoMouseLayerConfig[];
   ledIndicator: LedIndicator;
@@ -390,6 +396,7 @@ class MockSession implements RynkSession {
   private behaviorConfig: BehaviorConfig;
   private behaviorOptions: BehaviorOptions;
   private readonly morseProfiles: MorseProfile[];
+  private holdTriggerPositions: MorseHoldTriggerPosition[];
   private autoMouseLayers: AutoMouseLayerConfig[];
   private readonly indicator: LedIndicator;
   private ble: BleStatus;
@@ -456,6 +463,8 @@ class MockSession implements RynkSession {
       (profile) => ({ ...profile }),
       spec.seedMorseProfiles,
     );
+    this.holdTriggerPositions = structuredClone(spec.seedHoldTriggerPositions ?? []);
+    this.checkHoldTriggerPositions(this.holdTriggerPositions);
     this.autoMouseLayers = structuredClone(spec.seedAutoMouseLayers ?? []);
     this.indicator = { ...spec.ledIndicator };
     this.ble = { ...spec.connection.ble };
@@ -742,6 +751,26 @@ class MockSession implements RynkSession {
           ...profile,
         };
       }),
+    holdTriggerPositions: () =>
+      latency(
+        (): MorseHoldTriggerPositionState => {
+          if (this.spec.holdTriggerPositionCapacity === undefined) {
+            throw new Error("this firmware has no runtime hold trigger positions");
+          }
+          return {
+            capacity: this.spec.holdTriggerPositionCapacity,
+            positions: structuredClone(this.holdTriggerPositions),
+          };
+        },
+      ),
+    setHoldTriggerPositions: (positions) =>
+      latency(() => {
+        if (this.spec.holdTriggerPositionCapacity === undefined) {
+          throw new Error("this firmware has no runtime hold trigger positions");
+        }
+        this.checkHoldTriggerPositions(positions);
+        this.holdTriggerPositions = structuredClone(positions);
+      }),
     autoMouseLayers: () =>
       latency(
         (): AutoMouseLayerConfigState => ({
@@ -785,6 +814,28 @@ class MockSession implements RynkSession {
       throw new Error(`layer ${layer} out of range`);
     }
     return layer;
+  }
+
+  private checkHoldTriggerPositions(positions: MorseHoldTriggerPosition[]): void {
+    const capacity = this.spec.holdTriggerPositionCapacity ?? 0;
+    if (positions.length > capacity) {
+      throw new Error(`hold trigger positions has ${positions.length} entries, capacity ${capacity}`);
+    }
+    for (const position of positions) {
+      if (position.profile !== 255) {
+        this.checkSlot(position.profile, this.morseProfiles.length, "morse profile");
+      }
+      if (
+        !Number.isInteger(position.row) ||
+        !Number.isInteger(position.col) ||
+        position.row < 0 ||
+        position.row >= this.spec.capabilities.num_rows ||
+        position.col < 0 ||
+        position.col >= this.spec.capabilities.num_cols
+      ) {
+        throw new Error(`hold trigger position ${position.row},${position.col} out of range`);
+      }
+    }
   }
 
   private checkEncoder(encoderId: number): number {

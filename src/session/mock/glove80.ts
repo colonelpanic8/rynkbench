@@ -510,6 +510,11 @@ export const glove80Board: BoardSpec = {
   seedCombos,
   seedMorse,
   seedForks,
+  holdTriggerPositionCapacity: 32,
+  seedHoldTriggerPositions: [
+    { profile: 255, row: 3, col: 8 },
+    { profile: 255, row: 3, col: 9 },
+  ],
   sceneCapacity: 256,
   seedScenes,
   compiledScenes,

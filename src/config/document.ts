@@ -111,6 +111,10 @@ export function snapshotFromState(state: WorkbenchState): RuntimeSnapshot {
       config: state.behavior ?? undefined,
       options: state.behaviorOptions ?? undefined,
       morse_profiles: state.morseProfiles,
+      hold_trigger_positions:
+        state.morseHoldTriggerPositionCapacity === null
+          ? undefined
+          : state.morseHoldTriggerPositions,
       auto_mouse_layers: state.autoMouseLayers,
       morses: state.morse,
       combos: state.combos,

@@ -81,6 +81,8 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     behavior: null,
     behaviorOptions: null,
     morseProfiles: [],
+    morseHoldTriggerPositionCapacity: null,
+    morseHoldTriggerPositions: [],
     autoMouseLayerCapacity: 0,
     autoMouseLayers: [],
     ledIndicator: null,
@@ -246,6 +248,37 @@ describe("layer-state snapshots", () => {
     expect(next.activeLayers).toEqual([1, 2, 4]);
     expect(next.currentLayer).toBe(4);
     expect(next.layerStateComplete).toBe(true);
+  });
+});
+
+describe("positional hold triggers", () => {
+  const previous = [{ profile: 255, row: 0, col: 0 }];
+  const next = [{ profile: 2, row: 1, col: 1 }];
+
+  it("optimistically replaces the table and clears pending on success", () => {
+    const started = reducer(baseState({ morseHoldTriggerPositions: previous }), {
+      type: "holdTriggerPositionsWriteStart",
+      positions: next,
+    });
+    expect(started.morseHoldTriggerPositions).toEqual(next);
+    expect(started.pending.morseHoldTriggerPositions).toEqual({ status: "pending" });
+
+    const finished = reducer(started, { type: "holdTriggerPositionsWriteOk" });
+    expect(finished.morseHoldTriggerPositions).toEqual(next);
+    expect(finished.pending.morseHoldTriggerPositions).toBeUndefined();
+  });
+
+  it("restores the previous table when the write fails", () => {
+    const failed = reducer(baseState({ morseHoldTriggerPositions: next }), {
+      type: "holdTriggerPositionsWriteErr",
+      prev: previous,
+      message: "flash busy",
+    });
+    expect(failed.morseHoldTriggerPositions).toEqual(previous);
+    expect(failed.pending.morseHoldTriggerPositions).toEqual({
+      status: "error",
+      message: "flash busy",
+    });
   });
 });
 
