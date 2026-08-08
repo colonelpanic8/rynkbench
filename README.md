@@ -17,12 +17,12 @@ keymap and per-key lighting live — no install, nothing leaves your machine.
   and conditional/status lighting are read back and reflected in the live view.
 - **Advanced config** — combos, morse (tap-dance), fork, and per-behavior tuning
   for firmware that reports support for them.
-- **Configuration files** — import `glove80.toml` or a MoErgo Layout Editor JSON
-  backup, write only runtime differences, and export either format through the
-  same validation and conversion model as `glove80-control`. Morse, combo and
-  macro tables travel with the keymap, so an editor layout that leans on them
-  survives a round trip. An import reports what it could not represent exactly,
-  naming the layer and key it came from.
+- **Configuration files** — open or create a Glove80 configuration workspace
+  without connecting a keyboard, then download `glove80.toml` or MoErgo JSON.
+  Connected keyboards can import the same files by writing only runtime
+  differences. Both paths use the same validation and conversion model as
+  `glove80-control`; Morse, combo, fork, macro, profile, and lighting tables
+  travel with the keymap.
 - **Split tuning** — inspect and adjust the volatile powered/battery BLE latency
   policy on compatible split centrals.
 - **Simulated boards** — demo a split ergo, an ortholinear 60, and a dev stub
@@ -61,7 +61,7 @@ production bundle. Enable them only for a particular build/startup with
 - **Vite + React + TypeScript + Tailwind v4.** UI under `src/ui`, keyboard/board
   models under `src/model`.
 - **The session seam** (`src/session/types.ts`) is the one interface the UI talks
-  to. Four implementations back it: a `mock` backend with demo boards,
+  to. It is backed by a local-file workspace, a `mock` backend with demo boards,
   `webserial` and `webhid` backends that drive real hardware in the browser, and
   a `native` backend that drives the Tauri app's hidapi transport. The UI never
   imports a transport or WASM directly — only *types* from the generated client

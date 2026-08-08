@@ -20,7 +20,7 @@ import { useWorkbench, errorMessage } from "../state";
 import { isRequest, sessionLog } from "../../session/diagnostics";
 import { Button, Chip, Panel, Row, SectionLabel, cx } from "../kit";
 import { BatteryGlyph, BleIcon, SpinnerIcon, WarningIcon } from "../icons";
-import { KIND_LABEL } from "../TopBar";
+import { KIND_LABEL } from "../session-labels";
 
 const CONNECTION_LABEL: Record<string, string> = {
   Usb: "USB",

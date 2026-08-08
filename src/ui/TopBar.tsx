@@ -16,15 +16,7 @@ import { Chip, Button } from "./kit";
 import { errorReport, TransferReportPanel } from "./TransferReport";
 import type { TransferReport } from "./TransferReport";
 import { BatteryGlyph, PowerIcon, Wordmark } from "./icons";
-
-export const KIND_LABEL: Record<string, string> = {
-  mock: "Mock",
-  webhid: "USB · HID",
-  webserial: "USB · Serial",
-  webbluetooth: "Bluetooth",
-  native: "Native",
-  nativeble: "Bluetooth · Native",
-};
+import { KIND_LABEL } from "./session-labels";
 
 function BatteryReadout({ battery, split }: { battery: BatteryStatus; split: boolean }) {
   const available = battery !== "Unavailable" ? battery.Available : null;
@@ -49,11 +41,15 @@ function BatteryReadout({ battery, split }: { battery: BatteryStatus; split: boo
 
 export function TopBar() {
   const { bundle, state, dispatch, io } = useWorkbench();
+  const offline = bundle.session.kind === "offline";
   const fileInput = useRef<HTMLInputElement>(null);
   /** The last document imported, kept verbatim. An export reuses it for the
    *  layer labels the firmware does not store, and — for MoErgo output — as the
    *  template carrying the editor-owned sections Rynk never sees. */
-  const imported = useRef<string | null>(null);
+  const imported = useRef<string | null>(bundle.workspace?.sourceText ?? null);
+  const [workspaceName, setWorkspaceName] = useState(
+    bundle.workspace?.name ?? bundle.model.name,
+  );
   const [transfer, setTransfer] = useState<"importing" | "exporting" | null>(null);
   const [report, setReport] = useState<TransferReport | null>(null);
   const split = bundle.caps.is_split;
@@ -88,6 +84,7 @@ export function TopBar() {
         catalog: await catalog(),
       });
       imported.current = text;
+      if (offline) setWorkspaceName(file.name);
       const parts = [
         result.changedKeys > 0
           ? `${result.changedKeys} key${result.changedKeys === 1 ? "" : "s"}`
@@ -96,7 +93,9 @@ export function TopBar() {
       ].filter((part) => part !== null);
       const headline =
         parts.length === 0
-          ? `${file.name} already matches the keyboard`
+          ? offline
+            ? `${file.name} already matches this workspace`
+            : `${file.name} already matches the keyboard`
           : `Imported ${parts.join(", ")} from ${file.name}`;
       // Anything the document asked for that could not be written, and anything
       // the import had to approximate, is a caveat on an otherwise clean result
@@ -132,12 +131,21 @@ export function TopBar() {
       const link = document.createElement("a");
       link.href = url;
       const stem =
-        bundle.model.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() ||
-        "glove80";
+        (offline
+          ? workspaceName.replace(/\.(toml|json)$/i, "")
+          : bundle.model.name
+        )
+          ?.replace(/[^a-z0-9]+/gi, "-")
+          .replace(/^-|-$/g, "")
+          .toLowerCase() || "glove80";
       link.download = `${stem}-rynkbench.${FORMAT_EXTENSION[format]}`;
       link.click();
       URL.revokeObjectURL(url);
-      setReport({ outcome: "ok", headline: `Exported ${FORMAT_LABEL[format]}` });
+      if (offline) imported.current = text;
+      setReport({
+        outcome: "ok",
+        headline: `${offline ? "Downloaded" : "Exported"} ${FORMAT_LABEL[format]}`,
+      });
     } catch (error) {
       setReport(errorReport(`Could not export ${FORMAT_LABEL[format]}`, error));
     } finally {
@@ -150,7 +158,9 @@ export function TopBar() {
       <div className="flex items-center gap-3">
         <Wordmark size={26} />
         <div className="flex flex-col leading-tight">
-          <span className="text-[13.5px] font-semibold text-ink">{bundle.model.name}</span>
+          <span className="max-w-52 truncate text-[13.5px] font-semibold text-ink">
+            {workspaceName}
+          </span>
           <span className="text-[10.5px] text-faint">Rynkbench</span>
         </div>
         <Chip tone="neutral">{KIND_LABEL[bundle.session.kind] ?? bundle.session.kind}</Chip>
@@ -169,7 +179,7 @@ export function TopBar() {
         </Chip>
       </div>
 
-      <BatteryReadout battery={state.battery} split={split} />
+      {!offline && <BatteryReadout battery={state.battery} split={split} />}
 
       <div className="h-6 w-px bg-line-soft" />
 
@@ -184,32 +194,36 @@ export function TopBar() {
         variant="ghost"
         disabled={transfer !== null}
         onClick={() => fileInput.current?.click()}
-        title="Import a glove80.toml or a MoErgo Layout Editor JSON backup, writing only what differs from the keyboard"
+        title={
+          offline
+            ? "Open another Glove80 TOML or MoErgo JSON document into this workspace"
+            : "Import a Glove80 TOML or MoErgo JSON backup, writing only what differs from the keyboard"
+        }
       >
-        {transfer === "importing" ? "Importing…" : "Import"}
+        {transfer === "importing" ? "Opening…" : offline ? "Open" : "Import"}
       </Button>
       <Button
         variant="ghost"
         disabled={transfer !== null}
         onClick={() => void exportFile("toml")}
-        title="Export the live configuration as a glove80.toml — keymap and lighting"
+        title={offline ? "Download this workspace as Glove80 TOML" : "Export the live configuration as Glove80 TOML"}
       >
-        {transfer === "exporting" ? "Exporting…" : "Export TOML"}
+        {transfer === "exporting" ? "Downloading…" : offline ? "Download TOML" : "Export TOML"}
       </Button>
       <Button
         variant="ghost"
         disabled={transfer !== null}
         onClick={() => void exportFile("moergo-json")}
-        title="Export the live keymap as a MoErgo Layout Editor JSON backup"
+        title={offline ? "Download this workspace as MoErgo JSON" : "Export the live keymap as MoErgo JSON"}
       >
-        Export JSON
+        {offline ? "Download JSON" : "Export JSON"}
       </Button>
 
       <div className="h-6 w-px bg-line-soft" />
 
-      <Button variant="ghost" onClick={io.disconnect} title="Disconnect">
+      <Button variant="ghost" onClick={io.disconnect} title={offline ? "Close file" : "Disconnect"}>
         <PowerIcon size={15} />
-        Disconnect
+        {offline ? "Close" : "Disconnect"}
       </Button>
 
       {report && (

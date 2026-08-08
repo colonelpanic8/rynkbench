@@ -63,6 +63,12 @@ export type Selection =
 /** Everything loaded during the connect flow, before the workbench mounts. */
 export interface ConnectedBundle {
   session: RynkSession;
+  /** Present only for a local file workspace, never for a connected keyboard. */
+  workspace?: {
+    name: string;
+    sourceText: string | null;
+    format: "toml" | "moergo-json";
+  };
   model: KeyboardModel;
   info: DeviceInfo;
   caps: DeviceCapabilities;

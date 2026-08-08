@@ -114,6 +114,8 @@ export interface BoardSpec {
   seedCombos?: Combo[];
   seedMorse?: Morse[];
   seedForks?: Fork[];
+  /** Initial macro bytes, zero-filled to macro_space_size after this prefix. */
+  seedMacros?: number[];
   /** Max stored layer-scene cells; 0/absent simulates pre-scene firmware. */
   sceneCapacity?: number;
   /** Scene cells stored "in flash" when the session opens. */
@@ -122,6 +124,8 @@ export interface BoardSpec {
    *  simulate firmware predating compiled-scene readback; [] is supported. */
   compiledScenes?: LightingSceneCell[];
   compiledScenePolicy?: LightingLayerPolicy;
+  /** Mutable runtime layer policy when the session opens. */
+  initialLayerPolicy?: LightingLayerPolicy;
   /** Immutable conditional rules and controls compiled from keyboard.toml. */
   conditionalScenes?: LightingConditionalSceneCell[];
   lightingControls?: LightingControls;
@@ -364,7 +368,7 @@ interface OverlayEntry {
 }
 
 class MockSession implements RynkSession {
-  readonly kind: SessionKind = "mock";
+  readonly kind: SessionKind;
   readonly label: string;
 
   private readonly spec: BoardSpec;
@@ -389,7 +393,7 @@ class MockSession implements RynkSession {
   /** Mutable conditional table. A list, not a map: rules compose in table
    *  order, later rules win shared slots, and duplicates are legitimate. */
   private runtimeConditional: LightingExtendedConditionalSceneCell[] = [];
-  private layerPolicy: LightingLayerPolicy = "EffectiveOnly";
+  private layerPolicy: LightingLayerPolicy;
   private readonly comboTable: Combo[];
   private readonly morseTable: Morse[];
   private readonly forkTable: Fork[];
@@ -412,7 +416,8 @@ class MockSession implements RynkSession {
   private ttlTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
 
-  constructor(spec: BoardSpec) {
+  constructor(spec: BoardSpec, kind: SessionKind = "mock") {
+    this.kind = kind;
     this.spec = spec;
     this.label = spec.info.product_name;
     this.layers = spec.defaultLayers.map((actions) => [...actions]);
@@ -446,6 +451,13 @@ class MockSession implements RynkSession {
     this.morseTable = buildSlots(caps.max_morse, emptyMorse, cloneMorse, spec.seedMorse);
     this.forkTable = buildSlots(caps.max_forks, emptyFork, cloneFork, spec.seedForks);
     this.macroBytes = new Uint8Array(caps.macro_space_size);
+    if ((spec.seedMacros?.length ?? 0) > this.macroBytes.length) {
+      throw new Error(
+        `macro seed has ${spec.seedMacros!.length} bytes, capacity ${this.macroBytes.length}`,
+      );
+    }
+    this.macroBytes.set(spec.seedMacros ?? []);
+    this.layerPolicy = spec.initialLayerPolicy ?? "EffectiveOnly";
     this.behaviorConfig = { ...spec.behavior };
     this.behaviorOptions = structuredClone(
       spec.behaviorOptions ?? {
@@ -1318,4 +1330,9 @@ export function mockProvider(spec: BoardSpec): SessionProvider {
     connect: open,
     reconnect: open,
   };
+}
+
+/** Open the same mutable in-memory engine without presenting it as a demo. */
+export function memorySession(spec: BoardSpec, kind: SessionKind = "offline"): RynkSession {
+  return new MockSession(spec, kind);
 }

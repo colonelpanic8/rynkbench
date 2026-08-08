@@ -344,7 +344,13 @@ describe("snapshotFromState", () => {
       // The behavior tables a `TD(n)` cell resolves through. A document
       // describes these too, so an export that dropped them would make an
       // import a one-way door.
-      morse: LIVE_MORSE,
+      // Device reads include every capacity slot. Empty tail entries are not
+      // valid TOML morses and must not leak into the exported document.
+      morse: [
+        ...LIVE_MORSE,
+        { profile: LIVE_MORSE[0].profile, actions: [] },
+        { profile: LIVE_MORSE[0].profile, actions: [] },
+      ],
       behavior: {
         combo_timeout_ms: 50,
         oneshot_timeout_ms: 1000,
@@ -377,7 +383,9 @@ describe("snapshotFromState", () => {
       macroBytes: new Uint8Array(),
     } as unknown as WorkbenchState;
 
-    const text = renderDocument(snapshotFromState(state), CATALOG, "toml", MINIMAL);
+    const snapshot = snapshotFromState(state);
+    expect(snapshot.behaviors?.morses).toEqual(LIVE_MORSE);
+    const text = renderDocument(snapshot, CATALOG, "toml", MINIMAL);
     const again = parseDocument(text, CATALOG);
     expect(again.snapshot.layers).toEqual(parsed.snapshot.layers);
     expect(again.snapshot.lighting?.effects).toEqual(lighting.effects);

@@ -70,6 +70,15 @@ export function ProfilesIcon(props: IconProps) {
   );
 }
 
+export function FileConfigIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 1.7h5l3 3v9.6H4z" />
+      <path d="M9 1.7v3h3M6.2 8h3.6M6.2 10.4h3.6" />
+    </svg>
+  );
+}
+
 /** Effects mode: an animated sparkle from the firmware's effect pack. */
 export function SparkleIcon(props: IconProps) {
   return (

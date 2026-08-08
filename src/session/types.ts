@@ -73,6 +73,7 @@ import type {
 
 /** Which backend produced a session. Drives labels, never behavior. */
 export type SessionKind =
+  | "offline"
   | "mock"
   | "webhid"
   | "webserial"

@@ -34,6 +34,19 @@ const COLS = 14;
 
 let wasmReady: Promise<unknown> | null = null;
 
+/** Firmware reads expose behavior tables at their full capacity, padding the
+ *  unused tail with empty slots. Configuration documents describe only
+ *  populated entries, so carrying that padding into an export would produce
+ *  invalid empty `[[morse]]` records (and noisy empty combo/fork records).
+ *
+ *  Only trim the tail: indices inside the populated prefix are addressable by
+ *  key actions and must remain stable. */
+function trimTrailingEmpty<T>(items: T[], isEmpty: (item: T) => boolean): T[] {
+  let end = items.length;
+  while (end > 0 && isEmpty(items[end - 1])) end -= 1;
+  return items.slice(0, end);
+}
+
 /** One-shot loader for the vendored document module, mirroring the session's
  *  own wasm loader: a failed init is retryable on the next attempt. */
 export function initConfigWasm(): Promise<unknown> {
@@ -116,9 +129,12 @@ export function snapshotFromState(state: WorkbenchState): RuntimeSnapshot {
           ? undefined
           : state.morseHoldTriggerPositions,
       auto_mouse_layers: state.autoMouseLayers,
-      morses: state.morse,
-      combos: state.combos,
-      forks: state.forks,
+      morses: trimTrailingEmpty(state.morse, (morse) => morse.actions.length === 0),
+      combos: trimTrailingEmpty(
+        state.combos,
+        (combo) => combo.output === "No" && combo.actions.length === 0,
+      ),
+      forks: trimTrailingEmpty(state.forks, (fork) => fork.trigger === "No"),
       macros: [...state.macroBytes],
     },
   };

@@ -1,5 +1,7 @@
 // First impression: the connect screen. One card per session provider.
 
+import { useRef } from "react";
+import type { ChangeEvent } from "react";
 import type { SessionProvider } from "../session/types";
 import {
   Wordmark,
@@ -9,6 +11,7 @@ import {
   ChevronRightIcon,
   SpinnerIcon,
   WarningIcon,
+  FileConfigIcon,
 } from "./icons";
 import { cx } from "./kit";
 
@@ -111,17 +114,30 @@ export function ConnectScreen({
   providers,
   attempt,
   notice,
+  offlineBusy,
   onConnect,
+  onOpenFile,
+  onNewFile,
 }: {
   providers: SessionProvider[] | null;
   attempt: ConnectAttempt | null;
   /** Banner text, e.g. after an unexpected disconnect. */
   notice: string | null;
+  offlineBusy: boolean;
   onConnect: (index: number) => void;
+  onOpenFile: (file: File) => void;
+  onNewFile: () => void;
 }) {
+  const fileInput = useRef<HTMLInputElement>(null);
   const connecting = attempt?.status === "connecting";
+  const busy = connecting || offlineBusy;
+  const openFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) onOpenFile(file);
+  };
   return (
-    <div className="relative flex min-h-full items-center justify-center overflow-hidden px-6 py-12">
+    <div className="relative flex min-h-full items-center justify-center overflow-y-auto px-6 py-12">
       {/* backdrop: faint dot lattice + one restrained accent bloom */}
       <div
         aria-hidden
@@ -147,7 +163,7 @@ export function ConnectScreen({
             Rynkbench
           </h1>
           <p className="mt-2.5 text-[13.5px] text-mute">
-            Configure keymaps and lighting over Rynk
+            Configure a keyboard or edit its files directly
           </p>
         </div>
 
@@ -157,6 +173,51 @@ export function ConnectScreen({
             {notice}
           </div>
         )}
+
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".toml,.json,application/json,application/toml"
+          className="hidden"
+          onChange={openFile}
+        />
+        <div className="rounded-2xl border border-accent-deep/40 bg-accent-dim/10 p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-accent-deep/50 bg-raised text-accent">
+              <FileConfigIcon size={19} />
+            </div>
+            <div>
+              <div className="text-[14px] font-semibold text-ink">Configuration workspace</div>
+              <div className="mt-0.5 text-[12px] leading-snug text-mute">
+                Edit locally without connecting a keyboard.
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => fileInput.current?.click()}
+              className="cursor-pointer rounded-lg border border-line bg-raised px-3 py-2 text-[12.5px] font-medium text-ink transition-colors hover:border-line-strong disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {offlineBusy ? "Opening…" : "Open file"}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onNewFile}
+              className="cursor-pointer rounded-lg bg-accent px-3 py-2 text-[12.5px] font-semibold text-well transition-[filter] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              New Glove80 config
+            </button>
+          </div>
+        </div>
+
+        <div className="my-5 flex items-center gap-3 text-[10.5px] font-medium uppercase tracking-[0.12em] text-faint">
+          <span className="h-px flex-1 bg-line-soft" />
+          Connect a keyboard
+          <span className="h-px flex-1 bg-line-soft" />
+        </div>
 
         <div className="flex flex-col gap-3">
           {providers === null && (
@@ -170,7 +231,7 @@ export function ConnectScreen({
               key={`${provider.kind}:${provider.title}`}
               provider={provider}
               attempt={attempt?.providerIndex === i ? attempt : null}
-              disabled={connecting}
+              disabled={busy}
               onConnect={() => onConnect(i)}
             />
           ))}
@@ -182,7 +243,7 @@ export function ConnectScreen({
         </div>
 
         <p className="mt-8 text-center text-[11.5px] text-faint">
-          Connections open locally — nothing leaves this machine.
+          Files and connections stay local — nothing leaves this machine.
         </p>
       </div>
     </div>

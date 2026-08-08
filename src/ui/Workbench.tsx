@@ -108,10 +108,11 @@ export function Workbench({
     () =>
       MODES.filter(
         (m) =>
+          (bundle.session.kind !== "offline" || (m.id !== "live" && m.id !== "device")) &&
           (m.id !== "effects" || bundle.lightingExtension !== null) &&
           (m.id !== "profiles" || bundle.morseProfileCapacity > 0),
       ),
-    [bundle.lightingExtension, bundle.morseProfileCapacity],
+    [bundle.session.kind, bundle.lightingExtension, bundle.morseProfileCapacity],
   );
 
   const stateRef = useRef(state);

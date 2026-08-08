@@ -2,6 +2,7 @@
 // registry; simulated providers are loaded only in an explicitly opted-in build.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { initConfigWasm, parseDocument } from "./config/document";
 import type { BoardEnrichment } from "./model/keyboard";
 import { buildKeyboardModel } from "./model/keyboard";
 import type {
@@ -297,6 +298,7 @@ export default function App() {
   const [attempt, setAttempt] = useState<ConnectAttempt | null>(null);
   const [bundle, setBundle] = useState<ConnectedBundle | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [offlineBusy, setOfflineBusy] = useState(false);
   const [reconnectAttempt, setReconnectAttempt] = useState<{ attempt: number; total: number } | null>(
     null,
   );
@@ -353,6 +355,37 @@ export default function App() {
     providerIndexRef.current = null;
     setReconnectAttempt(null);
     setAttempt(null);
+  }, []);
+
+  const openOffline = useCallback(async (file?: File) => {
+    setNotice(null);
+    setOfflineBusy(true);
+    let session: RynkSession | null = null;
+    try {
+      const offline = await import("./session/offline/glove80");
+      await initConfigWasm();
+      const sourceText = file ? await file.text() : null;
+      const parsed =
+        sourceText === null
+          ? null
+          : parseDocument(sourceText, offline.offlineGlove80Catalog());
+      session = offline.openOfflineGlove80(parsed?.snapshot);
+      const loaded = await openBundle(session);
+      loaded.workspace = {
+        name: file?.name ?? "untitled-glove80.toml",
+        sourceText,
+        format: parsed?.format ?? "toml",
+      };
+      bundleRef.current = loaded;
+      providerIndexRef.current = null;
+      setBundle(loaded);
+      setAttempt(null);
+    } catch (error) {
+      await session?.close().catch(() => {});
+      setNotice(`Could not open configuration: ${errorMessage(error)}`);
+    } finally {
+      setOfflineBusy(false);
+    }
   }, []);
 
   const unexpectedDisconnect = useCallback(
@@ -449,6 +482,14 @@ export default function App() {
   }
 
   return (
-    <ConnectScreen providers={providers} attempt={attempt} notice={notice} onConnect={connect} />
+    <ConnectScreen
+      providers={providers}
+      attempt={attempt}
+      notice={notice}
+      offlineBusy={offlineBusy}
+      onConnect={connect}
+      onOpenFile={(file) => void openOffline(file)}
+      onNewFile={() => void openOffline()}
+    />
   );
 }

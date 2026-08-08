@@ -11,7 +11,7 @@ import type { KeyDecor } from "../KeyboardCanvas";
 import { useWorkbench } from "../state";
 import { cssEmissiveRgb, hsvToRgb } from "../color";
 import { InspectorShell, Panel, Row, SectionLabel, cx } from "../kit";
-import { KIND_LABEL } from "../TopBar";
+import { KIND_LABEL } from "../session-labels";
 import { compositeScenes, effectiveAction } from "./compositor";
 import {
   keyActionHoldsShift,
