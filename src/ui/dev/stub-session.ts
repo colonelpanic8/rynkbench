@@ -35,6 +35,8 @@ import type {
   MorseHoldTriggerPosition,
   MorseHoldTriggerPositionState,
   MorseProfile,
+  MorseProfileEntry,
+  MorseProfileState,
   PeripheralStatus,
   ProtocolVersion,
   TopicEvent,
@@ -350,7 +352,7 @@ class StubSession implements RynkSession {
     morse_prior_idle_ms: 120,
     morse_default_profile: emptyMorseProfile(),
   };
-  private morseProfiles: MorseProfile[] = Array.from({ length: 8 }, emptyMorseProfile);
+  private morseProfiles: MorseProfileEntry[] = [];
   private holdTriggerPositions: MorseHoldTriggerPosition[] = [];
   private autoMouseConfigs: AutoMouseLayerConfig[] = [];
   private topicHandler: ((event: TopicEvent) => void) | null = null;
@@ -517,13 +519,23 @@ class StubSession implements RynkSession {
       await lag();
       this.behaviorOptions = structuredClone(options);
     },
-    profiles: async (): Promise<MorseProfile[]> => {
+    profiles: async (): Promise<MorseProfileState> => {
       await lag();
-      return structuredClone(this.morseProfiles);
+      return { capacity: 8, total: this.morseProfiles.length, entries: structuredClone(this.morseProfiles) };
     },
-    setProfile: async (index: number, profile: MorseProfile): Promise<void> => {
+    setProfile: async (entry: MorseProfileEntry): Promise<void> => {
       await lag();
-      this.morseProfiles[index] = structuredClone(profile);
+      this.morseProfiles = this.morseProfiles
+        .filter((item) => item.index !== entry.index)
+        .concat(structuredClone(entry))
+        .sort((a, b) => a.index - b.index);
+    },
+    deleteProfile: async (index: number): Promise<void> => {
+      await lag();
+      this.morseProfiles = this.morseProfiles.filter((entry) => entry.index !== index);
+      this.holdTriggerPositions = this.holdTriggerPositions.filter(
+        (position) => position.profile !== index,
+      );
     },
     holdTriggerPositions: async (): Promise<MorseHoldTriggerPositionState> => {
       await lag();

@@ -130,23 +130,24 @@ async function writeBehaviors(
   }
 
   if (morse_profiles !== undefined) {
-    if (morse_profiles.length > state.morseProfiles.length) {
+    if (morse_profiles.length > state.morseProfileCapacity) {
       skipped.push(
-        `morse profiles (${morse_profiles.length}; this keyboard holds ${state.morseProfiles.length})`,
+        `morse profiles (${morse_profiles.length}; this keyboard holds ${state.morseProfileCapacity})`,
       );
     } else {
-      const fallback = options?.morse_default_profile ?? state.behaviorOptions?.morse_default_profile;
-      const wanted: MorseProfile[] = state.morseProfiles.map(
-        (profile, index) => morse_profiles[index] ?? fallback ?? profile,
-      );
       let changed = 0;
-      for (let index = 0; index < wanted.length; index += 1) {
-        const profile = wanted[index];
-        const prev = state.morseProfiles[index];
-        if (same(profile, prev)) continue;
-        dispatch({ type: "morseProfileWriteStart", index, profile });
+      for (let index = 0; index < morse_profiles.length; index += 1) {
+        const profile: MorseProfile = morse_profiles[index];
+        const prev = state.morseProfiles.find((entry) => entry.index === index) ?? null;
+        if (prev && same(profile, prev.profile)) continue;
+        const entry = {
+          index,
+          name: prev?.name ?? `profile_${String(index).padStart(3, "0")}`,
+          profile,
+        };
+        dispatch({ type: "morseProfileWriteStart", entry });
         try {
-          await session.behavior.setProfile(index, profile);
+          await session.behavior.setProfile(entry);
           dispatch({ type: "morseProfileWriteOk", index });
           changed += 1;
         } catch (error) {
@@ -159,6 +160,22 @@ async function writeBehaviors(
           throw new Error(`Writing morse profile ${index}: ${errorMessage(error)}`);
         }
       }
+      for (const prev of state.morseProfiles.filter((entry) => entry.index >= morse_profiles.length)) {
+        dispatch({ type: "morseProfileDeleteStart", index: prev.index });
+        try {
+          await session.behavior.deleteProfile(prev.index);
+          dispatch({ type: "morseProfileDeleteOk", index: prev.index });
+          changed += 1;
+        } catch (error) {
+          dispatch({
+            type: "morseProfileDeleteErr",
+            entry: prev,
+            positions: state.morseHoldTriggerPositions,
+            message: errorMessage(error),
+          });
+          throw new Error(`Deleting morse profile ${prev.index}: ${errorMessage(error)}`);
+        }
+      }
       if (changed > 0) applied.push(`${changed} morse profile${changed === 1 ? "" : "s"}`);
     }
   }
@@ -167,7 +184,7 @@ async function writeBehaviors(
     const capacity = state.morseHoldTriggerPositionCapacity;
     const invalidProfile = hold_trigger_positions.find(
       (position) =>
-        position.profile !== 255 && position.profile >= state.morseProfiles.length,
+        position.profile !== 255 && position.profile >= state.morseProfileCapacity,
     );
     if (capacity === null) {
       skipped.push("morse hold trigger positions (unsupported by this keyboard)");
@@ -177,7 +194,7 @@ async function writeBehaviors(
       );
     } else if (invalidProfile !== undefined) {
       skipped.push(
-        `morse hold trigger positions (profile ${invalidProfile.profile}; this keyboard holds ${state.morseProfiles.length} profiles)`,
+        `morse hold trigger positions (profile ${invalidProfile.profile}; this keyboard holds ${state.morseProfileCapacity} profile slots)`,
       );
     } else if (!same(hold_trigger_positions, state.morseHoldTriggerPositions)) {
       const prev = state.morseHoldTriggerPositions;

@@ -62,7 +62,8 @@ import type {
   Morse,
   MorseHoldTriggerPosition,
   MorseHoldTriggerPositionState,
-  MorseProfile,
+  MorseProfileEntry,
+  MorseProfileState,
   PeripheralStatus,
   ProtocolVersion,
   SplitCentralLatencyPolicy,
@@ -227,8 +228,9 @@ export interface BehaviorOps {
   set(config: BehaviorConfig): Promise<void>;
   options(): Promise<BehaviorOptions>;
   setOptions(options: BehaviorOptions): Promise<void>;
-  profiles(): Promise<MorseProfile[]>;
-  setProfile(index: number, profile: MorseProfile): Promise<void>;
+  profiles(): Promise<MorseProfileState>;
+  setProfile(entry: MorseProfileEntry): Promise<void>;
+  deleteProfile(index: number): Promise<void>;
   holdTriggerPositions(): Promise<MorseHoldTriggerPositionState>;
   setHoldTriggerPositions(positions: MorseHoldTriggerPosition[]): Promise<void>;
   autoMouseLayers(): Promise<AutoMouseLayerConfigState>;

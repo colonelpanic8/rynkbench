@@ -319,8 +319,14 @@ function TapHoldEditor({
           className="max-w-72 rounded-md border border-line bg-raised px-2 py-1.5 text-[12px] text-ink"
         >
           <option value={DEFAULT_TAP_HOLD_PROFILE}>Board default</option>
-          {state.morseProfiles.map((item, index) => (
-            <option key={index} value={index}>{index}: {morseProfileSummary(item)}</option>
+          {profile !== DEFAULT_TAP_HOLD_PROFILE &&
+            !state.morseProfiles.some((entry) => entry.index === profile) && (
+              <option value={profile}>Missing profile · slot {profile}</option>
+            )}
+          {state.morseProfiles.map((entry) => (
+            <option key={entry.index} value={entry.index}>
+              {entry.name} · {morseProfileSummary(entry.profile)}
+            </option>
           ))}
         </select>
       </label>

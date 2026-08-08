@@ -80,6 +80,7 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     macroBytes: new Uint8Array(),
     behavior: null,
     behaviorOptions: null,
+    morseProfileCapacity: 0,
     morseProfiles: [],
     morseHoldTriggerPositionCapacity: null,
     morseHoldTriggerPositions: [],
@@ -279,6 +280,51 @@ describe("positional hold triggers", () => {
       status: "error",
       message: "flash busy",
     });
+  });
+});
+
+describe("named morse profiles", () => {
+  const profile = {
+    unilateral_tap: undefined,
+    enable_flow_tap: undefined,
+    mode: "Normal" as const,
+    hold_timeout_ms: 180,
+    gap_timeout_ms: 180,
+    quick_tap_timeout_ms: undefined,
+    retro_tap: undefined,
+    prior_idle_time_ms: undefined,
+    hold_trigger_on_release: undefined,
+  };
+  const first = { index: 0, name: "first", profile };
+  const later = { index: 3, name: "later", profile };
+
+  it("deletes one stable slot without compacting later profiles", () => {
+    const started = reducer(
+      baseState({
+        morseProfileCapacity: 8,
+        morseProfiles: [first, later],
+        morseHoldTriggerPositions: [
+          { profile: 0, row: 0, col: 0 },
+          { profile: 3, row: 1, col: 1 },
+        ],
+      }),
+      { type: "morseProfileDeleteStart", index: 0 },
+    );
+    expect(started.morseProfiles).toEqual([later]);
+    expect(started.morseHoldTriggerPositions).toEqual([{ profile: 3, row: 1, col: 1 }]);
+    expect(started.morseProfiles[0].index).toBe(3);
+  });
+
+  it("restores the entry and position table when deletion fails", () => {
+    const positions = [{ profile: 0, row: 0, col: 0 }];
+    const failed = reducer(baseState({ morseProfiles: [later] }), {
+      type: "morseProfileDeleteErr",
+      entry: first,
+      positions,
+      message: "flash busy",
+    });
+    expect(failed.morseProfiles).toEqual([first, later]);
+    expect(failed.morseHoldTriggerPositions).toEqual(positions);
   });
 });
 

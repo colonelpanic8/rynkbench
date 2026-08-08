@@ -360,9 +360,12 @@ describe("snapshotFromState", () => {
         morse_prior_idle_ms: 120,
         morse_default_profile: LIVE_MORSE[0].profile,
       },
-      morseProfiles: [
-        { ...LIVE_MORSE[0].profile, hold_timeout_ms: 175, prior_idle_time_ms: 110 },
-      ],
+      morseProfileCapacity: 16,
+      morseProfiles: [{
+        index: 0,
+        name: "profile_000",
+        profile: { ...LIVE_MORSE[0].profile, hold_timeout_ms: 175, prior_idle_time_ms: 110 },
+      }],
       morseHoldTriggerPositionCapacity: 32,
       morseHoldTriggerPositions: [
         { profile: 255, row: 2, col: 8 },
@@ -386,7 +389,9 @@ describe("snapshotFromState", () => {
     // rendering the table rather than only the keymap that indexes it.
     expect(again.snapshot.behaviors?.morses).toEqual(LIVE_MORSE);
     expect(again.snapshot.behaviors?.forks).toEqual(liveForks);
-    expect(again.snapshot.behaviors?.morse_profiles).toEqual(state.morseProfiles);
+    expect(again.snapshot.behaviors?.morse_profiles).toEqual(
+      state.morseProfiles.map((entry) => entry.profile),
+    );
     expect(again.snapshot.behaviors?.hold_trigger_positions).toEqual(
       state.morseHoldTriggerPositions,
     );

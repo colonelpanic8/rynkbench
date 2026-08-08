@@ -110,7 +110,7 @@ export function snapshotFromState(state: WorkbenchState): RuntimeSnapshot {
     behaviors: {
       config: state.behavior ?? undefined,
       options: state.behaviorOptions ?? undefined,
-      morse_profiles: state.morseProfiles,
+      morse_profiles: state.morseProfiles.map((entry) => entry.profile),
       hold_trigger_positions:
         state.morseHoldTriggerPositionCapacity === null
           ? undefined

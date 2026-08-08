@@ -21,12 +21,12 @@ export function AdvancedMode() {
     const out: Array<{ id: AdvTab; label: string }> = [];
     if (caps.max_combos > 0) out.push({ id: "combos", label: "Combos" });
     if (caps.max_morse > 0) out.push({ id: "morse", label: "Morse" });
-    if (state.morseProfiles.length > 0) out.push({ id: "profiles", label: "Profiles" });
+    if (state.morseProfileCapacity > 0) out.push({ id: "profiles", label: "Profiles" });
     if (caps.macro_space_size > 0) out.push({ id: "macros", label: "Macros" });
     if (caps.max_forks > 0) out.push({ id: "forks", label: "Forks" });
     out.push({ id: "behavior", label: "Behavior" });
     return out;
-  }, [caps.max_combos, caps.max_morse, caps.macro_space_size, caps.max_forks, state.morseProfiles.length]);
+  }, [caps.max_combos, caps.max_morse, caps.macro_space_size, caps.max_forks, state.morseProfileCapacity]);
 
   const [tab, setTab] = useState<AdvTab>(tabs[0].id);
   const active = tabs.some((t) => t.id === tab) ? tab : tabs[0].id;

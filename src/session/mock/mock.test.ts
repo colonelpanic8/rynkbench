@@ -12,7 +12,7 @@ import { enrichmentFor } from "../../model/boards";
 import { mockProviders } from "./index";
 import { glove80Board } from "./glove80";
 import { ortho60Board } from "./ortho60";
-import { mockProvider, type BoardSpec } from "./board";
+import { emptyMorseProfile, mockProvider, type BoardSpec } from "./board";
 
 const boards: Array<[string, BoardSpec]> = [
   ["Glove80", glove80Board],
@@ -946,11 +946,16 @@ describe("behavior", () => {
 
   it("reads and writes runtime morse profiles and behavior options", async () => {
     await withSession(glove80Board, async (session) => {
-      const profiles = await session.behavior.profiles();
-      expect(profiles).toHaveLength(8);
-      const profile = { ...profiles[0], hold_timeout_ms: 172, mode: "PermissiveHold" as const };
-      await session.behavior.setProfile(2, profile);
-      expect((await session.behavior.profiles())[2]).toEqual(profile);
+      expect(await session.behavior.profiles()).toEqual({ capacity: 8, total: 0, entries: [] });
+      const entry = {
+        index: 2,
+        name: "home-row",
+        profile: { ...emptyMorseProfile(), hold_timeout_ms: 172, mode: "PermissiveHold" as const },
+      };
+      await session.behavior.setProfile(entry);
+      expect(await session.behavior.profiles()).toEqual({ capacity: 8, total: 1, entries: [entry] });
+      await session.behavior.deleteProfile(2);
+      expect((await session.behavior.profiles()).entries).toEqual([]);
 
       const options = await session.behavior.options();
       const next = { ...options, combo_prior_idle_ms: 85, oneshot_quick_release: true };

@@ -52,6 +52,7 @@ import type {
   MorseHoldTriggerPosition,
   MorseHoldTriggerPositionState,
   MorseProfile,
+  MorseProfileEntry,
   MouseButtons,
   ProtocolVersion,
   SplitCentralLatencyPolicy,
@@ -97,7 +98,7 @@ export interface BoardSpec {
   background: LightingBackgroundState;
   behavior: BehaviorConfig;
   behaviorOptions?: BehaviorOptions;
-  /** Runtime tap-hold timing slots. Defaults to eight empty profiles. */
+  /** Runtime tap-hold profile capacity. Defaults to eight slots. */
   morseProfileCount?: number;
   seedMorseProfiles?: MorseProfile[];
   /** Total entries across the default and all profile-specific position lists.
@@ -395,7 +396,7 @@ class MockSession implements RynkSession {
   private readonly macroBytes: Uint8Array;
   private behaviorConfig: BehaviorConfig;
   private behaviorOptions: BehaviorOptions;
-  private readonly morseProfiles: MorseProfile[];
+  private morseProfiles: MorseProfileEntry[];
   private holdTriggerPositions: MorseHoldTriggerPosition[];
   private autoMouseLayers: AutoMouseLayerConfig[];
   private readonly indicator: LedIndicator;
@@ -457,12 +458,11 @@ class MockSession implements RynkSession {
         morse_default_profile: emptyMorseProfile(),
       },
     );
-    this.morseProfiles = buildSlots(
-      spec.morseProfileCount ?? 8,
-      emptyMorseProfile,
-      (profile) => ({ ...profile }),
-      spec.seedMorseProfiles,
-    );
+    this.morseProfiles = (spec.seedMorseProfiles ?? []).map((profile, index) => ({
+      index,
+      name: `profile_${String(index).padStart(3, "0")}`,
+      profile: structuredClone(profile),
+    }));
     this.holdTriggerPositions = structuredClone(spec.seedHoldTriggerPositions ?? []);
     this.checkHoldTriggerPositions(this.holdTriggerPositions);
     this.autoMouseLayers = structuredClone(spec.seedAutoMouseLayers ?? []);
@@ -744,12 +744,30 @@ class MockSession implements RynkSession {
       latency(() => {
         this.behaviorOptions = structuredClone(options);
       }),
-    profiles: () => latency(() => this.morseProfiles.map((profile) => ({ ...profile }))),
-    setProfile: (index, profile) =>
+    profiles: () =>
+      latency(() => ({
+        capacity: this.spec.morseProfileCount ?? 8,
+        total: this.morseProfiles.length,
+        entries: structuredClone(this.morseProfiles),
+      })),
+    setProfile: (entry) =>
       latency(() => {
-        this.morseProfiles[this.checkSlot(index, this.morseProfiles.length, "morse profile")] = {
-          ...profile,
-        };
+        this.checkSlot(entry.index, this.spec.morseProfileCount ?? 8, "morse profile");
+        if (this.morseProfiles.some((item) => item.index !== entry.index && item.name === entry.name)) {
+          throw new Error("duplicate morse profile name");
+        }
+        this.morseProfiles = this.morseProfiles
+          .filter((item) => item.index !== entry.index)
+          .concat(structuredClone(entry))
+          .sort((a, b) => a.index - b.index);
+      }),
+    deleteProfile: (index) =>
+      latency(() => {
+        this.checkSlot(index, this.spec.morseProfileCount ?? 8, "morse profile");
+        this.morseProfiles = this.morseProfiles.filter((entry) => entry.index !== index);
+        this.holdTriggerPositions = this.holdTriggerPositions.filter(
+          (position) => position.profile !== index,
+        );
       }),
     holdTriggerPositions: () =>
       latency(
@@ -823,7 +841,7 @@ class MockSession implements RynkSession {
     }
     for (const position of positions) {
       if (position.profile !== 255) {
-        this.checkSlot(position.profile, this.morseProfiles.length, "morse profile");
+        this.checkSlot(position.profile, this.spec.morseProfileCount ?? 8, "morse profile");
       }
       if (
         !Number.isInteger(position.row) ||

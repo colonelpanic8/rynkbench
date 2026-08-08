@@ -36,7 +36,7 @@ import type {
   ModifierCombination,
   Morse,
   MorseHoldTriggerPosition,
-  MorseProfile,
+  MorseProfileEntry,
   BuildInfo,
   ProtocolVersion,
 } from "../vendor/rynk-wasm/rynk_wasm";
@@ -103,7 +103,8 @@ export interface ConnectedBundle {
   /** null when the device rejected the read (feature-gated out). */
   behavior: BehaviorConfig | null;
   behaviorOptions: BehaviorOptions | null;
-  morseProfiles: MorseProfile[];
+  morseProfileCapacity: number;
+  morseProfiles: MorseProfileEntry[];
   /** null when firmware predates runtime positional hold triggers. */
   morseHoldTriggerPositionCapacity: number | null;
   morseHoldTriggerPositions: MorseHoldTriggerPosition[];
@@ -203,7 +204,8 @@ export interface WorkbenchState {
   macroBytes: Uint8Array;
   behavior: BehaviorConfig | null;
   behaviorOptions: BehaviorOptions | null;
-  morseProfiles: MorseProfile[];
+  morseProfileCapacity: number;
+  morseProfiles: MorseProfileEntry[];
   morseHoldTriggerPositionCapacity: number | null;
   morseHoldTriggerPositions: MorseHoldTriggerPosition[];
   autoMouseLayerCapacity: number;
@@ -339,6 +341,7 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     macroBytes: bundle.macroBytes,
     behavior: bundle.behavior,
     behaviorOptions: bundle.behaviorOptions,
+    morseProfileCapacity: bundle.morseProfileCapacity,
     morseProfiles: bundle.morseProfiles,
     morseHoldTriggerPositionCapacity: bundle.morseHoldTriggerPositionCapacity,
     morseHoldTriggerPositions: bundle.morseHoldTriggerPositions,
@@ -443,9 +446,17 @@ export type WorkbenchAction =
   | { type: "behaviorOptionsWriteStart"; options: BehaviorOptions }
   | { type: "behaviorOptionsWriteOk" }
   | { type: "behaviorOptionsWriteErr"; prev: BehaviorOptions | null; message: string }
-  | { type: "morseProfileWriteStart"; index: number; profile: MorseProfile }
+  | { type: "morseProfileWriteStart"; entry: MorseProfileEntry }
   | { type: "morseProfileWriteOk"; index: number }
-  | { type: "morseProfileWriteErr"; index: number; prev: MorseProfile; message: string }
+  | { type: "morseProfileWriteErr"; index: number; prev: MorseProfileEntry | null; message: string }
+  | { type: "morseProfileDeleteStart"; index: number }
+  | { type: "morseProfileDeleteOk"; index: number }
+  | {
+      type: "morseProfileDeleteErr";
+      entry: MorseProfileEntry;
+      positions: MorseHoldTriggerPosition[];
+      message: string;
+    }
   | { type: "holdTriggerPositionsWriteStart"; positions: MorseHoldTriggerPosition[] }
   | { type: "holdTriggerPositionsWriteOk" }
   | {
@@ -813,12 +824,17 @@ export function makeWorkbenchReducer(cols: number) {
           },
         };
       case "morseProfileWriteStart": {
-        const morseProfiles = state.morseProfiles.slice();
-        morseProfiles[act.index] = act.profile;
+        const morseProfiles = state.morseProfiles
+          .filter((entry) => entry.index !== act.entry.index)
+          .concat(act.entry)
+          .sort((a, b) => a.index - b.index);
         return {
           ...state,
           morseProfiles,
-          pending: { ...state.pending, [`morseProfile:${act.index}`]: { status: "pending" } },
+          pending: {
+            ...state.pending,
+            [`morseProfile:${act.entry.index}`]: { status: "pending" },
+          },
         };
       }
       case "morseProfileWriteOk": {
@@ -826,8 +842,10 @@ export function makeWorkbenchReducer(cols: number) {
         return { ...state, pending };
       }
       case "morseProfileWriteErr": {
-        const morseProfiles = state.morseProfiles.slice();
-        morseProfiles[act.index] = act.prev;
+        const morseProfiles = state.morseProfiles
+          .filter((entry) => entry.index !== act.index)
+          .concat(act.prev ? [act.prev] : [])
+          .sort((a, b) => a.index - b.index);
         return {
           ...state,
           morseProfiles,
@@ -837,6 +855,32 @@ export function makeWorkbenchReducer(cols: number) {
           },
         };
       }
+      case "morseProfileDeleteStart":
+        return {
+          ...state,
+          morseProfiles: state.morseProfiles.filter((entry) => entry.index !== act.index),
+          morseHoldTriggerPositions: state.morseHoldTriggerPositions.filter(
+            (position) => position.profile !== act.index,
+          ),
+          pending: {
+            ...state.pending,
+            [`morseProfile:${act.index}`]: { status: "pending" },
+          },
+        };
+      case "morseProfileDeleteOk": {
+        const { [`morseProfile:${act.index}`]: _done, ...pending } = state.pending;
+        return { ...state, pending };
+      }
+      case "morseProfileDeleteErr":
+        return {
+          ...state,
+          morseProfiles: state.morseProfiles.concat(act.entry).sort((a, b) => a.index - b.index),
+          morseHoldTriggerPositions: act.positions,
+          pending: {
+            ...state.pending,
+            [`morseProfile:${act.entry.index}`]: { status: "error", message: act.message },
+          },
+        };
       case "holdTriggerPositionsWriteStart":
         return {
           ...state,
@@ -977,7 +1021,8 @@ export interface WorkbenchIo {
   writeMacros(bytes: Uint8Array): void;
   setBehavior(config: BehaviorConfig): void;
   setBehaviorOptions(options: BehaviorOptions): void;
-  setMorseProfile(index: number, profile: MorseProfile): void;
+  setMorseProfile(entry: MorseProfileEntry): void;
+  deleteMorseProfile(index: number): void;
   setMorseHoldTriggerPositions(positions: MorseHoldTriggerPosition[]): void;
   setAutoMouseLayers(configs: AutoMouseLayerConfig[]): void;
   disconnect(): void;
@@ -1241,16 +1286,33 @@ export function makeIo(
           dispatch({ type: "behaviorOptionsWriteErr", prev, message: errorMessage(err) }),
       );
     },
-    setMorseProfile(index, profile) {
-      const prev = getState().morseProfiles[index];
-      dispatch({ type: "morseProfileWriteStart", index, profile });
-      session.behavior.setProfile(index, profile).then(
-        () => dispatch({ type: "morseProfileWriteOk", index }),
+    setMorseProfile(entry) {
+      const prev = getState().morseProfiles.find((item) => item.index === entry.index) ?? null;
+      dispatch({ type: "morseProfileWriteStart", entry });
+      session.behavior.setProfile(entry).then(
+        () => dispatch({ type: "morseProfileWriteOk", index: entry.index }),
         (err) =>
           dispatch({
             type: "morseProfileWriteErr",
-            index,
+            index: entry.index,
             prev,
+            message: errorMessage(err),
+          }),
+      );
+    },
+    deleteMorseProfile(index) {
+      const state = getState();
+      const entry = state.morseProfiles.find((item) => item.index === index);
+      if (!entry) return;
+      const positions = state.morseHoldTriggerPositions;
+      dispatch({ type: "morseProfileDeleteStart", index });
+      session.behavior.deleteProfile(index).then(
+        () => dispatch({ type: "morseProfileDeleteOk", index }),
+        (err) =>
+          dispatch({
+            type: "morseProfileDeleteErr",
+            entry,
+            positions,
             message: errorMessage(err),
           }),
       );
