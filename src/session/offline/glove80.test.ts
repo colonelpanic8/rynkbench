@@ -41,7 +41,23 @@ describe("offline Glove80 workspace", () => {
       behaviors: {
         config: undefined,
         options: undefined,
-        morse_profiles: [],
+        morse_profiles: [
+          {
+            index: 23,
+            name: "thumb_layer",
+            profile: {
+              enable_flow_tap: false,
+              hold_timeout_ms: 200,
+              gap_timeout_ms: 200,
+              quick_tap_timeout_ms: 150,
+              prior_idle_time_ms: 120,
+              unilateral_tap: false,
+              retro_tap: false,
+              hold_trigger_on_release: false,
+              mode: "PermissiveHold",
+            },
+          },
+        ],
         hold_trigger_positions: [{ profile: 255, row: 3, col: 8 }],
         auto_mouse_layers: [],
         morses: [],
@@ -56,10 +72,17 @@ describe("offline Glove80 workspace", () => {
     expect(board.initialDefaultLayer).toBe(1);
     expect(board.brightness).toBe(177);
     expect(board.initialLayerPolicy).toBe("ActiveStack");
+    expect(board.morseProfileCount).toBe(24);
+    expect(board.seedMorseProfiles).toEqual(snapshot.behaviors?.morse_profiles);
     expect(board.seedHoldTriggerPositions).toEqual([{ profile: 255, row: 3, col: 8 }]);
 
     const session = openOfflineGlove80(snapshot);
     expect(session.kind).toBe("offline");
+    expect(await session.behavior.profiles()).toEqual({
+      capacity: 24,
+      total: 1,
+      entries: snapshot.behaviors?.morse_profiles,
+    });
     expect(await session.macros.read()).toEqual(new Uint8Array([1, 2, 3, ...Array(509).fill(0)]));
     await session.close();
   });

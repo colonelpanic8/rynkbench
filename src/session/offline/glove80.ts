@@ -74,7 +74,10 @@ export function offlineGlove80Board(snapshot?: RuntimeSnapshot): BoardSpec {
       },
     behavior: structuredClone(behaviors?.config ?? glove80Board.behavior),
     behaviorOptions: structuredClone(behaviors?.options ?? glove80Board.behaviorOptions),
-    morseProfileCount: Math.max(16, behaviors?.morse_profiles?.length ?? 0),
+    morseProfileCount: Math.max(
+      16,
+      ...(behaviors?.morse_profiles ?? []).map((entry) => entry.index + 1),
+    ),
     seedMorseProfiles: structuredClone(behaviors?.morse_profiles ?? []),
     holdTriggerPositionCapacity: Math.max(64, behaviors?.hold_trigger_positions?.length ?? 0),
     seedHoldTriggerPositions: structuredClone(behaviors?.hold_trigger_positions ?? []),

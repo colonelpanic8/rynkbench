@@ -10,7 +10,7 @@ import type { Dispatch } from "react";
 import type { RynkSession } from "../session/types";
 import type { ConnectedBundle, WorkbenchAction, WorkbenchState } from "../ui/state";
 import { errorMessage } from "../ui/state";
-import type { Combo, Fork, Morse, MorseProfile } from "../vendor/rynk-wasm/rynk_wasm";
+import type { Combo, Fork, Morse } from "../vendor/rynk-wasm/rynk_wasm";
 import {
   assertSupportedMatrix,
   parseDocument,
@@ -130,37 +130,38 @@ async function writeBehaviors(
   }
 
   if (morse_profiles !== undefined) {
-    if (morse_profiles.length > state.morseProfileCapacity) {
+    const invalidEntry = morse_profiles.find(
+      (entry) => entry.index >= state.morseProfileCapacity,
+    );
+    if (invalidEntry !== undefined) {
       skipped.push(
-        `morse profiles (${morse_profiles.length}; this keyboard holds ${state.morseProfileCapacity})`,
+        `morse profiles (slot ${invalidEntry.index}; this keyboard holds ${state.morseProfileCapacity} slots)`,
       );
     } else {
       let changed = 0;
-      for (let index = 0; index < morse_profiles.length; index += 1) {
-        const profile: MorseProfile = morse_profiles[index];
-        const prev = state.morseProfiles.find((entry) => entry.index === index) ?? null;
-        if (prev && same(profile, prev.profile)) continue;
-        const entry = {
-          index,
-          name: prev?.name ?? `profile_${String(index).padStart(3, "0")}`,
-          profile,
-        };
+      for (const entry of morse_profiles) {
+        const prev =
+          state.morseProfiles.find((candidate) => candidate.index === entry.index) ?? null;
+        if (prev && same(entry, prev)) continue;
         dispatch({ type: "morseProfileWriteStart", entry });
         try {
           await session.behavior.setProfile(entry);
-          dispatch({ type: "morseProfileWriteOk", index });
+          dispatch({ type: "morseProfileWriteOk", index: entry.index });
           changed += 1;
         } catch (error) {
           dispatch({
             type: "morseProfileWriteErr",
-            index,
+            index: entry.index,
             prev,
             message: errorMessage(error),
           });
-          throw new Error(`Writing morse profile ${index}: ${errorMessage(error)}`);
+          throw new Error(`Writing morse profile ${entry.index}: ${errorMessage(error)}`);
         }
       }
-      for (const prev of state.morseProfiles.filter((entry) => entry.index >= morse_profiles.length)) {
+      const desiredIndexes = new Set(morse_profiles.map((entry) => entry.index));
+      for (const prev of state.morseProfiles.filter(
+        (entry) => !desiredIndexes.has(entry.index),
+      )) {
         dispatch({ type: "morseProfileDeleteStart", index: prev.index });
         try {
           await session.behavior.deleteProfile(prev.index);

@@ -100,7 +100,7 @@ export interface BoardSpec {
   behaviorOptions?: BehaviorOptions;
   /** Runtime tap-hold profile capacity. Defaults to eight slots. */
   morseProfileCount?: number;
-  seedMorseProfiles?: MorseProfile[];
+  seedMorseProfiles?: MorseProfileEntry[];
   /** Total entries across the default and all profile-specific position lists.
    *  Omit to simulate firmware predating this runtime surface. */
   holdTriggerPositionCapacity?: number;
@@ -470,11 +470,7 @@ class MockSession implements RynkSession {
         morse_default_profile: emptyMorseProfile(),
       },
     );
-    this.morseProfiles = (spec.seedMorseProfiles ?? []).map((profile, index) => ({
-      index,
-      name: `profile_${String(index).padStart(3, "0")}`,
-      profile: structuredClone(profile),
-    }));
+    this.morseProfiles = structuredClone(spec.seedMorseProfiles ?? []);
     this.holdTriggerPositions = structuredClone(spec.seedHoldTriggerPositions ?? []);
     this.checkHoldTriggerPositions(this.holdTriggerPositions);
     this.autoMouseLayers = structuredClone(spec.seedAutoMouseLayers ?? []);

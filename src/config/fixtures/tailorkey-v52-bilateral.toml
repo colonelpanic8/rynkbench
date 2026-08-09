@@ -1,0 +1,561 @@
+# Hand-authored semantic port of TailorKey v5.2³ Bilateral (QWERTY).
+# Source: https://my.moergo.com/glove80/#/layout/user/10f689fa-608f-4c28-81f9-c29b986d8e06
+#
+# This is intentionally not the output of an intent-recognizing importer. The
+# source JSON was used as a behavioral specification, then its scaffolding was
+# replaced by RMK/Rynk runtime features:
+# - eight per-finger HRM helper layers become four named bilateral profiles;
+# - 58 duplicated Morse records become named profiles plus typed MT/LT/TH keys;
+# - the remaining 12 user-visible layers, 20 combo slots and six true macros
+#   retain the source layout's actions.
+#
+# The file itself is runtime state and is applied through glove80-control. The
+# three transparent MouseSlow/MouseFast/MouseWarp layers require these compiled
+# input-scale entries to reproduce TailorKey's momentary 1/9x, 3x and 12x mouse
+# movement and scrolling exactly; mouse layer scaling is not a runtime command:
+#
+#   [[behavior.mouse_layer_scale]]
+#   layer = 7
+#   pointer = [1, 9]
+#   scroll = [1, 9]
+#   [[behavior.mouse_layer_scale]]
+#   layer = 8
+#   pointer = [3, 1]
+#   scroll = [3, 1]
+#   [[behavior.mouse_layer_scale]]
+#   layer = 9
+#   pointer = [12, 1]
+#   scroll = [12, 1]
+#
+# Without those compiled entries everything else remains usable, but the three
+# momentary speed-selector keys on Mouse have no scaling effect.
+
+default_layer = 0
+
+[[layer]]
+id = "base"
+name = "Base (QWERTY)"
+keys = """
+
+KC_F1 KC_F2 KC_F3 KC_F4 KC_F5 -- KC_LSFT KC_RSFT -- KC_F6 KC_F7 KC_F8 KC_F9 KC_F10
+KC_EQL KC_1 KC_2 KC_3 KC_4 KC_5 KC_LCTL KC_RCTL KC_6 KC_7 KC_8 KC_9 KC_0 KC_MINS
+KC_TAB KC_Q KC_W KC_E KC_R KC_T MO(10) KC_LGUI KC_Y KC_U KC_I KC_O KC_P KC_BSLS
+KC_ESC MT(KC_A, LGui, hrm_pinky) MT(KC_S, LAlt, hrm_ring) MT(KC_D, LCtrl, hrm_middle) MT(KC_F, LShift, hrm_index) KC_G LT(4, KC_BSPC, thumb_layer) LT(5, KC_SPC, thumb_space_layer) KC_H MT(KC_J, RShift, hrm_index) MT(KC_K, RCtrl, hrm_middle) MT(KC_L, LAlt, hrm_ring) MT(KC_SCLN, RGui, hrm_pinky) KC_QUOT
+KC_GRV KC_Z KC_X KC_C KC_V KC_B KC_DEL LT(6, KC_ENT, thumb_layer) KC_N KC_M KC_COMM KC_DOT KC_SLSH KC_PGUP
+MO(11) KC_HOME KC_END KC_LEFT KC_RGHT -- KC_LALT KC_RALT -- KC_UP KC_DOWN KC_LBRC KC_RBRC KC_PGDN
+"""
+
+[[layer]]
+id = "typing"
+name = "Typing"
+keys = """
+
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_A KC_S KC_D KC_F KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_J KC_K KC_L KC_SCLN KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+MO(11) KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+"""
+
+[[layer]]
+id = "autoshift"
+name = "Autoshift"
+keys = """
+
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+TH(KC_EQL, LSFT(KC_EQL), autoshift) TH(KC_1, LSFT(KC_1), autoshift) TH(KC_2, LSFT(KC_2), autoshift) TH(KC_3, LSFT(KC_3), autoshift) TH(KC_4, LSFT(KC_4), autoshift) TH(KC_5, LSFT(KC_5), autoshift) KC_TRNS KC_TRNS TH(KC_6, LSFT(KC_6), autoshift) TH(KC_7, LSFT(KC_7), autoshift) TH(KC_8, LSFT(KC_8), autoshift) TH(KC_9, LSFT(KC_9), autoshift) TH(KC_0, LSFT(KC_0), autoshift) TH(KC_MINS, LSFT(KC_MINS), autoshift)
+KC_TRNS TH(KC_Q, LSFT(KC_Q), autoshift) TH(KC_W, LSFT(KC_W), autoshift) TH(KC_E, LSFT(KC_E), autoshift) TH(KC_R, LSFT(KC_R), autoshift) TH(KC_T, LSFT(KC_T), autoshift) KC_TRNS KC_TRNS TH(KC_Y, LSFT(KC_Y), autoshift) TH(KC_U, LSFT(KC_U), autoshift) TH(KC_I, LSFT(KC_I), autoshift) TH(KC_O, LSFT(KC_O), autoshift) TH(KC_P, LSFT(KC_P), autoshift) TH(KC_BSLS, LSFT(KC_BSLS), autoshift)
+KC_TRNS TH(KC_A, LSFT(KC_A), autoshift) TH(KC_S, LSFT(KC_S), autoshift) TH(KC_D, LSFT(KC_D), autoshift) TH(KC_F, LSFT(KC_F), autoshift) TH(KC_G, LSFT(KC_G), autoshift) KC_TRNS KC_TRNS TH(KC_H, LSFT(KC_H), autoshift) TH(KC_J, LSFT(KC_J), autoshift) TH(KC_K, LSFT(KC_K), autoshift) TH(KC_L, LSFT(KC_L), autoshift) TH(KC_SCLN, LSFT(KC_SCLN), autoshift) TH(KC_QUOT, LSFT(KC_QUOT), autoshift)
+TH(KC_GRV, LSFT(KC_GRV), autoshift) TH(KC_Z, LSFT(KC_Z), autoshift) TH(KC_X, LSFT(KC_X), autoshift) TH(KC_C, LSFT(KC_C), autoshift) TH(KC_V, LSFT(KC_V), autoshift) TH(KC_B, LSFT(KC_B), autoshift) KC_TRNS KC_TRNS TH(KC_N, LSFT(KC_N), autoshift) TH(KC_M, LSFT(KC_M), autoshift) TH(KC_COMM, LSFT(KC_COMM), autoshift) TH(KC_DOT, LSFT(KC_DOT), autoshift) TH(KC_SLSH, LSFT(KC_SLSH), autoshift) KC_TRNS
+MO(11) KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS TH(KC_LBRC, LSFT(KC_LBRC), autoshift) TH(KC_RBRC, LSFT(KC_RBRC), autoshift) KC_TRNS
+"""
+
+[[layer]]
+id = "gaming"
+name = "Gaming"
+keys = """
+
+KC_ESC KC_P KC_O KC_N KC_BSPC -- KC_LSFT KC_ENT -- KC_F1 KC_F2 KC_F3 KC_F4 KC_F5
+KC_M KC_6 KC_7 KC_8 KC_9 KC_0 KC_LALT KC_UP KC_F6 KC_F7 KC_F8 KC_F9 KC_F10 KC_F11
+KC_I KC_1 KC_2 KC_3 KC_4 KC_5 KC_V KC_ESC KC_Y KC_U KC_I KC_O KC_P KC_F12
+KC_T KC_TAB KC_Q KC_W KC_E KC_R KC_SPC KC_RGHT KC_H KC_J KC_K KC_L KC_SCLN KC_QUOT
+KC_G KC_LSFT KC_A KC_S KC_D KC_F KC_LCTL KC_DOWN KC_N KC_M KC_COMM KC_DOT KC_SLSH KC_BSLS
+KC_B KC_LCTL KC_Z KC_X KC_C -- KC_ENT KC_LEFT -- KC_MINS KC_LBRC KC_RBRC KC_EQL KC_GRV
+"""
+
+[[layer]]
+id = "cursor"
+name = "Cursor"
+keys = """
+
+-- -- -- -- -- -- -- MACRO(4) -- -- -- -- -- --
+-- KC_ESC KC_INS LSFT(KC_TAB) KC_DEL LSFT(LGUI(KC_S)) -- MACRO(3) -- -- -- -- -- --
+-- KC_ENT KC_SPC KC_TAB KC_BSPC LCTL(KC_X) -- MACRO(2) LCTL(KC_X) LSFT(KC_TAB) LCTL(KC_Z) LCTL(KC_Y) KC_TAB --
+OSM(MOD_LSFT) KC_LGUI KC_LALT KC_LCTL KC_LSFT LCTL(KC_C) -- MACRO(1) LCTL(KC_C) KC_LEFT KC_UP KC_DOWN KC_RGHT OSM(MOD_RSFT)
+LCTL(KC_L) LCTL(KC_A) MACRO(0) MACRO(1) LCTL(KC_F) LCTL(KC_V) -- MACRO(0) LCTL(KC_V) KC_HOME KC_PGUP KC_PGDN KC_END LCTL(KC_L)
+LCTL(KC_K) LCTL(KC_Z) LCTL(KC_Y) LCTL(LSFT(KC_G)) LCTL(KC_G) -- -- LCTL(KC_A) -- LCTL(KC_F) LCTL(LSFT(KC_G)) LCTL(KC_G) LCTL(KC_H) LCTL(KC_K)
+"""
+
+[[layer]]
+id = "symbol"
+name = "Symbol"
+keys = """
+
+-- -- -- -- -- -- KC_BSLS -- -- -- -- -- -- --
+-- KC_GRV LSFT(KC_9) LSFT(KC_0) KC_SCLN KC_COMM KC_DOT -- -- -- -- -- -- --
+LSFT(KC_1) KC_LBRC LSFT(KC_LBRC) LSFT(KC_RBRC) KC_RBRC LSFT(KC_SLSH) LSFT(KC_8) -- KC_DOT KC_DEL LSFT(KC_TAB) KC_INS KC_ESC --
+LSFT(KC_3) LSFT(KC_6) KC_EQL LSFT(KC_MINS) LSFT(KC_4) LSFT(KC_8) LSFT(KC_5) -- KC_COMM KC_BSPC KC_TAB KC_SPC KC_ENT --
+LSFT(KC_GRV) LSFT(KC_COMM) LSFT(KC_BSLS) KC_MINS LSFT(KC_DOT) KC_SLSH LSFT(KC_SCLN) -- KC_SCLN LSFT(KC_QUOT) KC_QUOT KC_GRV KC_BSLS --
+MACRO(5) LSFT(KC_7) KC_QUOT LSFT(KC_QUOT) LSFT(KC_EQL) -- LSFT(KC_2) -- -- OSM(MOD_RSFT) OSM(MOD_RCTL) OSM(MOD_RALT) OSM(MOD_RGUI) --
+"""
+
+[[layer]]
+id = "mouse"
+name = "Mouse"
+keys = """
+
+-- -- -- -- -- -- KC_BTN3 LCTL(KC_V) -- -- -- -- -- --
+-- -- -- -- -- -- KC_APP LCTL(KC_C) -- -- -- -- -- --
+-- -- KC_WH_L KC_MS_U KC_WH_R -- KC_BTN5 LCTL(KC_X) KC_WH_L KC_BTN1 KC_BTN3 KC_BTN2 KC_WH_R --
+-- KC_WH_U KC_MS_L KC_MS_D KC_MS_R KC_WH_U KC_BTN1 -- KC_WH_U MO(8) MO(9) MO(7) KC_APP KC_BTN4
+-- KC_WH_D MO(7) MO(9) MO(8) KC_WH_D KC_BTN2 -- KC_WH_D KC_MS_L KC_MS_U KC_MS_D KC_MS_R KC_BTN5
+-- -- LCTL(KC_X) LCTL(KC_C) LCTL(KC_V) -- KC_BTN4 -- -- KC_RSFT KC_RCTL KC_RALT KC_RGUI --
+"""
+
+[[layer]]
+id = "mouseslow"
+name = "MouseSlow"
+keys = """
+
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+"""
+
+[[layer]]
+id = "mousefast"
+name = "MouseFast"
+keys = """
+
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+"""
+
+[[layer]]
+id = "mousewarp"
+name = "MouseWarp"
+keys = """
+
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+"""
+
+[[layer]]
+id = "lower"
+name = "Lower"
+keys = """
+
+KC_BRID KC_BRIU KC_MPRV KC_MNXT KC_MPLY -- KC_TRNS KC_TRNS -- KC_MUTE KC_VOLD KC_VOLU -- KC_PAUS
+KC_TRNS -- -- -- -- KC_HOME KC_TRNS KC_TRNS LSFT(KC_9) KC_NUM KC_EQL KC_PSLS KC_PAST KC_PSCR
+KC_TRNS -- -- KC_UP -- KC_END TO(0) KC_TRNS LSFT(KC_0) KC_P7 KC_P8 KC_P9 KC_PMNS KC_SCRL
+KC_TRNS -- KC_LEFT KC_DOWN KC_RGHT KC_PGUP KC_TRNS KC_TRNS LSFT(KC_5) KC_P4 KC_P5 KC_P6 KC_PPLS --
+KC_TRNS KC_APP -- KC_F11 KC_F12 KC_PGDN KC_TRNS KC_TRNS KC_COMM KC_P1 KC_P2 KC_P3 KC_PENT KC_TRNS
+MO(11) KC_CAPS KC_INS KC_F11 KC_F12 -- KC_TRNS KC_TRNS -- KC_P0 KC_P0 KC_PDOT KC_PENT KC_TRNS
+"""
+
+[[layer]]
+id = "magic"
+name = "Magic"
+keys = """
+
+-- -- -- -- -- -- USER(2) -- -- -- -- -- USER(10) USER(11)
+TO(0) -- TO(1) -- -- TO(2) USER(3) -- -- -- -- -- -- --
+-- UG_SPDU UG_SATU UG_HUEU UG_VALU UG_TOGG -- -- -- -- -- -- -- --
+QK_BOOT UG_SPDD UG_SATD UG_HUED UG_VALD UG_NEXT USER(0) -- -- -- -- -- -- USER(12)
+QK_RBT -- -- -- -- -- USER(1) -- -- -- -- -- -- QK_RBT
+-- -- -- -- -- -- QK_OUTPUT_USB -- -- -- -- -- -- --
+"""
+
+[[combo]]
+name = "F11 (base)"
+keys = [
+    "KC_F9",
+    "KC_0",
+]
+output = "KC_F11"
+layer = 0
+
+[[combo]]
+name = "F11 (AutoShift)"
+keys = [
+    "KC_TRNS",
+    "TH(KC_0, LSFT(KC_0), autoshift)",
+]
+output = "KC_F11"
+layer = 2
+
+[[combo]]
+name = "F12 (base)"
+keys = [
+    "KC_F10",
+    "KC_MINS",
+]
+output = "KC_F12"
+layer = 0
+
+[[combo]]
+name = "F12 (AutoShift)"
+keys = [
+    "KC_TRNS",
+    "TH(KC_MINS, LSFT(KC_MINS), autoshift)",
+]
+output = "KC_F12"
+layer = 2
+
+[[combo]]
+name = "Alt-Tab (base)"
+keys = [
+    "LT(4, KC_BSPC, thumb_layer)",
+    "KC_LSFT",
+]
+output = "LMT(4, MOD_LALT, KC_TAB)"
+layer = 0
+
+[[combo]]
+name = "Alt-Tab (AutoShift)"
+keys = [
+    "KC_TRNS",
+    "KC_TRNS",
+]
+output = "LMT(4, MOD_LALT, KC_TAB)"
+layer = 2
+
+[[combo]]
+name = "Ctrl-Tab (base)"
+keys = [
+    "KC_LCTL",
+    "KC_DEL",
+]
+output = "LMT(4, MOD_LCTL, KC_TAB)"
+layer = 0
+
+[[combo]]
+name = "Ctrl-Tab (AutoShift)"
+keys = [
+    "KC_TRNS",
+    "KC_TRNS",
+]
+output = "LMT(4, MOD_LCTL, KC_TAB)"
+layer = 2
+
+[[combo]]
+name = "Toggle gaming (base)"
+keys = [
+    "KC_B",
+    "KC_RGHT",
+]
+output = "TG(3)"
+layer = 0
+
+[[combo]]
+name = "Toggle gaming (gaming)"
+keys = [
+    "KC_F",
+    "KC_C",
+]
+output = "TG(3)"
+layer = 3
+
+[[combo]]
+name = "Caps Lock (right, base)"
+keys = [
+    "KC_RCTL",
+    "KC_RALT",
+]
+output = "KC_CAPS"
+layer = 0
+
+[[combo]]
+name = "Caps Lock (right, AutoShift)"
+keys = [
+    "KC_TRNS",
+    "KC_TRNS",
+]
+output = "KC_CAPS"
+layer = 2
+
+[[combo]]
+name = "Caps Lock (left, base)"
+keys = [
+    "KC_LALT",
+    "KC_LCTL",
+]
+output = "KC_CAPS"
+layer = 0
+
+[[combo]]
+name = "Caps Lock (left, AutoShift)"
+keys = [
+    "KC_TRNS",
+    "KC_TRNS",
+]
+output = "KC_CAPS"
+layer = 2
+
+[[combo]]
+name = "Caps Word (left, base)"
+keys = [
+    "KC_DEL",
+    "LT(4, KC_BSPC, thumb_layer)",
+]
+output = "CW_TOGG"
+layer = 0
+
+[[combo]]
+name = "Caps Word (left, AutoShift)"
+keys = [
+    "KC_TRNS",
+    "KC_TRNS",
+]
+output = "CW_TOGG"
+layer = 2
+
+[[combo]]
+name = "Caps Word (right, base)"
+keys = [
+    "LT(6, KC_ENT, thumb_layer)",
+    "LT(5, KC_SPC, thumb_space_layer)",
+]
+output = "CW_TOGG"
+layer = 0
+
+[[combo]]
+name = "Caps Word (right, AutoShift)"
+keys = [
+    "KC_TRNS",
+    "KC_TRNS",
+]
+output = "CW_TOGG"
+layer = 2
+
+[[combo]]
+name = "GUI-Tab (base)"
+keys = [
+    "KC_LSFT",
+    "KC_LALT",
+]
+output = "LMT(4, MOD_LGUI, KC_TAB)"
+layer = 0
+
+[[combo]]
+name = "GUI-Tab (AutoShift)"
+keys = [
+    "KC_TRNS",
+    "KC_TRNS",
+]
+output = "LMT(4, MOD_LGUI, KC_TAB)"
+layer = 2
+
+[[macro]]
+name = "Select line"
+
+[[macro.operations]]
+operation = "tap"
+keycode = "KC_HOME"
+
+[[macro.operations]]
+operation = "down"
+keycode = "KC_LSFT"
+
+[[macro.operations]]
+operation = "tap"
+keycode = "KC_END"
+
+[[macro.operations]]
+operation = "up"
+keycode = "KC_LSFT"
+
+[[macro]]
+name = "Select word"
+
+[[macro.operations]]
+operation = "down"
+keycode = "KC_LCTL"
+
+[[macro.operations]]
+operation = "tap"
+keycode = "KC_LEFT"
+
+[[macro.operations]]
+operation = "up"
+keycode = "KC_LCTL"
+
+[[macro.operations]]
+operation = "down"
+keycode = "KC_LCTL"
+
+[[macro.operations]]
+operation = "down"
+keycode = "KC_LSFT"
+
+[[macro.operations]]
+operation = "tap"
+keycode = "KC_RGHT"
+
+[[macro.operations]]
+operation = "up"
+keycode = "KC_LSFT"
+
+[[macro.operations]]
+operation = "up"
+keycode = "KC_LCTL"
+
+[[macro]]
+name = "Cursor wiggle"
+
+[[macro.operations]]
+operation = "tap"
+keycode = "KC_DOWN"
+
+[[macro.operations]]
+operation = "tap"
+keycode = "KC_UP"
+
+[[macro.operations]]
+operation = "tap"
+keycode = "KC_RGHT"
+
+[[macro.operations]]
+operation = "tap"
+keycode = "KC_LEFT"
+
+[[macro]]
+name = "Select to line end"
+
+[[macro.operations]]
+operation = "down"
+keycode = "KC_LSFT"
+
+[[macro.operations]]
+operation = "tap"
+keycode = "KC_END"
+
+[[macro.operations]]
+operation = "up"
+keycode = "KC_LSFT"
+
+[[macro]]
+name = "Select next word"
+
+[[macro.operations]]
+operation = "down"
+keycode = "KC_LCTL"
+
+[[macro.operations]]
+operation = "down"
+keycode = "KC_LSFT"
+
+[[macro.operations]]
+operation = "tap"
+keycode = "KC_RGHT"
+
+[[macro.operations]]
+operation = "up"
+keycode = "KC_LSFT"
+
+[[macro.operations]]
+operation = "up"
+keycode = "KC_LCTL"
+
+[[macro]]
+name = "Two dots"
+
+[[macro.operations]]
+operation = "tap"
+keycode = "KC_DOT"
+
+[[macro.operations]]
+operation = "tap"
+keycode = "KC_DOT"
+
+[behavior]
+combo_timeout_ms = 50
+oneshot_timeout_ms = 1000
+tap_interval_ms = 20
+tap_capslock_interval_ms = 20
+oneshot_activate_on_keypress = false
+oneshot_quick_release = false
+
+[behavior.morse]
+enable_flow_tap = false
+prior_idle_ms = 120
+
+[behavior.morse.default_profile]
+hold_timeout_ms = 250
+gap_timeout_ms = 250
+unilateral_tap = false
+mode = "normal"
+
+[behavior.morse.profiles.autoshift]
+hold_timeout_ms = 190
+unilateral_tap = false
+mode = "normal"
+
+[behavior.morse.profiles.hrm_index]
+enable_flow_tap = true
+hold_timeout_ms = 180
+quick_tap_ms = 300
+prior_idle_ms = 100
+unilateral_tap = true
+hold_trigger_on_release = true
+mode = "normal"
+
+[behavior.morse.profiles.hrm_middle]
+enable_flow_tap = true
+hold_timeout_ms = 210
+quick_tap_ms = 300
+prior_idle_ms = 150
+unilateral_tap = true
+hold_trigger_on_release = true
+mode = "normal"
+
+[behavior.morse.profiles.hrm_pinky]
+enable_flow_tap = true
+hold_timeout_ms = 270
+quick_tap_ms = 300
+prior_idle_ms = 150
+unilateral_tap = true
+hold_trigger_on_release = true
+mode = "normal"
+
+[behavior.morse.profiles.hrm_ring]
+enable_flow_tap = true
+hold_timeout_ms = 240
+quick_tap_ms = 300
+prior_idle_ms = 100
+unilateral_tap = true
+hold_trigger_on_release = true
+mode = "normal"
+
+[behavior.morse.profiles.thumb_layer]
+hold_timeout_ms = 200
+quick_tap_ms = 300
+unilateral_tap = false
+mode = "permissive-hold"
+[behavior.morse.profiles.thumb_space_layer]
+hold_timeout_ms = 200
+quick_tap_ms = 150
+unilateral_tap = false
+mode = "permissive-hold"

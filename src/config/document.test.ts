@@ -88,6 +88,34 @@ describe("detectFormat", () => {
 });
 
 describe("parseDocument", () => {
+  it("opens and exactly round-trips the semantic TailorKey configuration", () => {
+    const source = readFileSync(
+      "src/config/fixtures/tailorkey-v52-bilateral.toml",
+      "utf8",
+    );
+    const catalog: ExtensionCatalog = { effects: [], palettes: [], params: [] };
+    const parsed = parseDocument(source, catalog);
+
+    expect(parsed.format).toBe("toml");
+    expect(parsed.notes).toEqual([]);
+    expect(parsed.snapshot.layers).toHaveLength(12);
+    expect(parsed.snapshot.behaviors?.combos).toHaveLength(20);
+    expect(parsed.snapshot.behaviors?.morse_profiles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "autoshift" }),
+        expect.objectContaining({ name: "hrm_index" }),
+        expect.objectContaining({ name: "thumb_space_layer" }),
+      ]),
+    );
+    expect(parsed.snapshot.behaviors?.morse_profiles).toHaveLength(7);
+
+    const rendered = renderDocument(parsed.snapshot, catalog, "toml", source);
+    const reparsed = parseDocument(rendered, catalog);
+    expect(reparsed.snapshot).toEqual(parsed.snapshot);
+    expect(rendered).toContain("[behavior.morse.profiles.hrm_index]");
+    expect(rendered).toContain("TH(KC_0,LSFT(KC_0),autoshift)");
+  });
+
   it("resolves effect, palette and parameter names through the catalog", () => {
     const { format, snapshot } = parseDocument(MINIMAL, CATALOG);
     expect(format).toBe("toml");
@@ -397,9 +425,7 @@ describe("snapshotFromState", () => {
     // rendering the table rather than only the keymap that indexes it.
     expect(again.snapshot.behaviors?.morses).toEqual(LIVE_MORSE);
     expect(again.snapshot.behaviors?.forks).toEqual(liveForks);
-    expect(again.snapshot.behaviors?.morse_profiles).toEqual(
-      state.morseProfiles.map((entry) => entry.profile),
-    );
+    expect(again.snapshot.behaviors?.morse_profiles).toEqual(state.morseProfiles);
     expect(again.snapshot.behaviors?.hold_trigger_positions).toEqual(
       state.morseHoldTriggerPositions,
     );
