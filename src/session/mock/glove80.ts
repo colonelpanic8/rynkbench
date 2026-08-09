@@ -521,7 +521,7 @@ export const glove80Board: BoardSpec = {
   compiledScenePolicy: "EffectiveOnly",
   conditionalScenes,
   lightingControls: { output_toggle_user_action: undefined, wake_layers: 1 << 2 },
-  runtimeConditionalCapacity: 32,
+  runtimeConditionalCapacity: 64,
   runtimeConditionalPredicates: true,
   seedRuntimeConditionalScenes,
   // The real firmware's extension band: PaletteFX effects with its palette

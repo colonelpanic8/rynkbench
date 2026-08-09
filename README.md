@@ -48,6 +48,11 @@ keymap and per-key lighting live — no install, nothing leaves your machine.
   61, and 81 percent); later low-battery or charging rules can override their
   colors. The connected firmware must advertise conditional lighting and both
   battery nodes for the complete two-half bar to work.
+- **Status setup installs those rules for you.** In Lighting, use **Select** to
+  choose one connection key or five battery-bar keys, then use **Status setup**
+  to bind the action and install the ordered indicator rules. On a Glove80, the
+  complete Magic-layer layout from `glove80-config`—two battery bars, three BLE
+  profile keys, and the USB key—is available as a single preset.
 
 Web Serial and WebHID need a Chromium-based browser (Chrome or Edge); Firefox
 and Safari don't implement them. Use **Web Serial** for upstream RMK's USB CDC

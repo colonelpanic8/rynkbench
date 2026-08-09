@@ -20,6 +20,7 @@ import {
 import { ColorPicker } from "./ColorPicker";
 import { BackgroundPanel } from "./BackgroundPanel";
 import { ConditionalRulesPanel } from "./ConditionalRulesPanel";
+import { StatusPresetsPanel } from "./StatusPresetsPanel";
 import { LayerPresets } from "./LayerPresets";
 import type { Hsv } from "../color";
 import { cssEmissiveRgb, cssRgb, hsvToRgb } from "../color";
@@ -843,9 +844,14 @@ export function LightingMode() {
           </div>
 
           {bundle.runtimeConditionalStatus && (
-            <div className="border-t border-line-soft pt-4">
-              <ConditionalRulesPanel />
-            </div>
+            <>
+              <div className="border-t border-line-soft pt-4">
+                <StatusPresetsPanel />
+              </div>
+              <div className="border-t border-line-soft pt-4">
+                <ConditionalRulesPanel />
+              </div>
+            </>
           )}
 
           <div className="border-t border-line-soft pt-4">
