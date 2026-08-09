@@ -219,6 +219,7 @@ export function emptyMorse(): Morse {
   return {
     profile: {
       unilateral_tap: undefined,
+      opposite_hand_hold: undefined,
       enable_flow_tap: undefined,
       mode: undefined,
       hold_timeout_ms: undefined,

@@ -103,7 +103,10 @@ describe("parseDocument", () => {
     expect(parsed.snapshot.behaviors?.morse_profiles).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "autoshift" }),
-        expect.objectContaining({ name: "hrm_index" }),
+        expect.objectContaining({
+          name: "hrm_index",
+          profile: expect.objectContaining({ opposite_hand_hold: true }),
+        }),
         expect.objectContaining({ name: "thumb_space_layer" }),
       ]),
     );
@@ -293,6 +296,7 @@ const LIVE_MORSE = [
   {
     profile: {
       unilateral_tap: true,
+      opposite_hand_hold: undefined,
       enable_flow_tap: undefined,
       mode: "Normal" as const,
       hold_timeout_ms: 210,

@@ -52,6 +52,7 @@ describe("offline Glove80 workspace", () => {
               quick_tap_timeout_ms: 150,
               prior_idle_time_ms: 120,
               unilateral_tap: false,
+              opposite_hand_hold: undefined,
               retro_tap: false,
               hold_trigger_on_release: false,
               mode: "PermissiveHold",

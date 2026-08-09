@@ -59,6 +59,7 @@ function sleep(ms: number): Promise<void> {
 function emptyMorseProfile(): MorseProfile {
   return {
     unilateral_tap: undefined,
+    opposite_hand_hold: undefined,
     enable_flow_tap: undefined,
     mode: undefined,
     hold_timeout_ms: undefined,
@@ -316,6 +317,7 @@ class StubSession implements RynkSession {
   private morseTable: Morse[] = Array.from({ length: CAPS.max_morse }, () => ({
     profile: {
       unilateral_tap: undefined,
+      opposite_hand_hold: undefined,
       enable_flow_tap: undefined,
       mode: undefined,
       hold_timeout_ms: undefined,

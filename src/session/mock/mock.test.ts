@@ -839,6 +839,7 @@ describe("morse slots", () => {
       const morse: Morse = {
         profile: {
           unilateral_tap: true,
+          opposite_hand_hold: undefined,
           enable_flow_tap: undefined,
           mode: "PermissiveHold",
           hold_timeout_ms: 180,

@@ -286,6 +286,7 @@ describe("positional hold triggers", () => {
 describe("named morse profiles", () => {
   const profile = {
     unilateral_tap: undefined,
+    opposite_hand_hold: undefined,
     enable_flow_tap: undefined,
     mode: "Normal" as const,
     hold_timeout_ms: 180,

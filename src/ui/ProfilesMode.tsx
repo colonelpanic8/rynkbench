@@ -30,6 +30,7 @@ const NUMBER_FIELDS: Array<{ key: keyof MorseProfile; label: string }> = [
 ];
 const BOOL_FIELDS: Array<{ key: keyof MorseProfile; label: string }> = [
   { key: "unilateral_tap", label: "Unilateral tap" },
+  { key: "opposite_hand_hold", label: "Hold only for opposite hand" },
   { key: "enable_flow_tap", label: "Flow tap" },
   { key: "retro_tap", label: "Retro tap" },
   { key: "hold_trigger_on_release", label: "Hold trigger on release" },
@@ -44,6 +45,7 @@ function optionalNumber(value: string): number | undefined {
 const DEFAULT_PROFILE = 255;
 const EMPTY_PROFILE: MorseProfile = {
   unilateral_tap: undefined,
+  opposite_hand_hold: undefined,
   enable_flow_tap: undefined,
   mode: undefined,
   hold_timeout_ms: undefined,
@@ -279,15 +281,20 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
                   <span className="text-ink">{label}</span>
                   <select
                     value={draft.profile[key] === undefined ? "" : String(draft.profile[key])}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        profile: {
-                          ...draft.profile,
-                          [key]: event.target.value === "" ? undefined : event.target.value === "true",
-                        },
-                      })
-                    }
+                    onChange={(event) => {
+                      const value =
+                        event.target.value === "" ? undefined : event.target.value === "true";
+                      const profile = { ...draft.profile, [key]: value };
+                      // These policies describe mutually exclusive decisions.
+                      // Enabling one clears the other rather than creating an
+                      // invalid profile that cannot be represented on wire.
+                      if (value === true && key === "unilateral_tap") {
+                        profile.opposite_hand_hold = undefined;
+                      } else if (value === true && key === "opposite_hand_hold") {
+                        profile.unilateral_tap = undefined;
+                      }
+                      setDraft({ ...draft, profile });
+                    }}
                     className="rounded-md border border-line bg-raised px-2 py-1.5 text-[12px] text-ink"
                   >
                     <option value="">Global default</option>
@@ -297,6 +304,13 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
                 </label>
               ))}
       </div>
+      {draft.profile.opposite_hand_hold === true && (
+        <p className="mt-4 rounded-lg border border-line-soft bg-well px-3 py-2 text-[11.5px] leading-relaxed text-faint">
+          Opposite-hand hold uses the keyboard&apos;s L/R/* geometry tags. The timeout arms the
+          hold; a same-hand ordinary key still resolves this key as a tap, while an
+          opposite-hand or bilateral key activates the hold.
+        </p>
+      )}
       {pending?.status === "error" && (
         <div className="mt-4 text-[12px] text-danger">Write failed: {pending.message}</div>
       )}

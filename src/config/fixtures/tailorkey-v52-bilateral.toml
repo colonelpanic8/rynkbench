@@ -4,7 +4,8 @@
 # This is intentionally not the output of an intent-recognizing importer. The
 # source JSON was used as a behavioral specification, then its scaffolding was
 # replaced by RMK/Rynk runtime features:
-# - eight per-finger HRM helper layers become four named bilateral profiles;
+# - eight per-finger HRM helper layers become four named profiles using
+#   `opposite_hand_hold`, resolved from the firmware's L/R/* geometry tags;
 # - 58 duplicated Morse records become named profiles plus typed MT/LT/TH keys;
 # - the remaining 12 user-visible layers, 20 combo slots and six true macros
 #   retain the source layout's actions.
@@ -518,8 +519,7 @@ enable_flow_tap = true
 hold_timeout_ms = 180
 quick_tap_ms = 300
 prior_idle_ms = 100
-unilateral_tap = true
-hold_trigger_on_release = true
+opposite_hand_hold = true
 mode = "normal"
 
 [behavior.morse.profiles.hrm_middle]
@@ -527,8 +527,7 @@ enable_flow_tap = true
 hold_timeout_ms = 210
 quick_tap_ms = 300
 prior_idle_ms = 150
-unilateral_tap = true
-hold_trigger_on_release = true
+opposite_hand_hold = true
 mode = "normal"
 
 [behavior.morse.profiles.hrm_pinky]
@@ -536,8 +535,7 @@ enable_flow_tap = true
 hold_timeout_ms = 270
 quick_tap_ms = 300
 prior_idle_ms = 150
-unilateral_tap = true
-hold_trigger_on_release = true
+opposite_hand_hold = true
 mode = "normal"
 
 [behavior.morse.profiles.hrm_ring]
@@ -545,8 +543,7 @@ enable_flow_tap = true
 hold_timeout_ms = 240
 quick_tap_ms = 300
 prior_idle_ms = 100
-unilateral_tap = true
-hold_trigger_on_release = true
+opposite_hand_hold = true
 mode = "normal"
 
 [behavior.morse.profiles.thumb_layer]
