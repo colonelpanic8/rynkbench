@@ -28,6 +28,27 @@ keymap and per-key lighting live — no install, nothing leaves your machine.
 - **Simulated boards** — demo a split ergo, an ortholinear 60, and a dev stub
   with no hardware attached, so the whole UI is explorable offline.
 
+## Behavior and indicator notes
+
+- **Tap-hold profiles are live configuration.** `Save profile` writes the
+  selected slot directly to the connected keyboard; bindings that name that
+  slot use the new timings immediately, without reloading a file or flashing.
+- **Modified Morse actions are atomic actions.** In a Morse pattern's action
+  picker, open **Keys**, select the modifiers, and then select the key. For
+  example, selecting left Alt and then F4 produces one `Alt+F4` action. The
+  separate **Mods** tab remains for a held modifier by itself, such as the hold
+  side of a Delete-tap/Alt-hold binding.
+- **Combo triggers follow RMK actions, not matrix positions.** The board canvas
+  makes physical selection convenient, but the stored trigger is the resolved
+  key action on the combo's scoped layer. Position-addressed combos would need
+  a firmware and Rynk protocol addition rather than only a Rynkbench UI change.
+- **Battery indicators use conditional lighting rules.** Node 0 is the central
+  half and node 1 is the peripheral half on a split board. A bar is a set of
+  rules on chosen LEDs with increasing minimum levels (for example 1, 21, 41,
+  61, and 81 percent); later low-battery or charging rules can override their
+  colors. The connected firmware must advertise conditional lighting and both
+  battery nodes for the complete two-half bar to work.
+
 Web Serial and WebHID need a Chromium-based browser (Chrome or Edge); Firefox
 and Safari don't implement them. Use **Web Serial** for upstream RMK's USB CDC
 transport and **WebHID** for firmware exposing the vendor Rynk HID interface.

@@ -18,6 +18,7 @@ import { DEFAULT_TAP_HOLD_PROFILE, morsePatternGlyph } from "../morse";
 import { useWorkbench } from "../state";
 import { morseProfileSummary } from "../morse-profile";
 import { Button, SectionLabel, TextInput, cx } from "../kit";
+import { pickedHidAction } from "./actions";
 
 type Tab =
   | "keys"
@@ -237,12 +238,23 @@ export function SlotPicker({
         ))}
       </div>
       {tab === "keys" && (
-        <KeycodeBrowser
-          compact
-          query={query}
-          onQuery={setQuery}
-          onPick={(code) => onPick({ Key: { Hid: code } })}
-        />
+        <div className="flex flex-col gap-2.5">
+          <div>
+            <div className="mb-1.5 text-[11px] text-faint">With modifiers</div>
+            <ModGrid mods={mods} onChange={setMods} />
+            {anyModifier(mods) && (
+              <div className="mt-1.5 text-[11px] text-accent">
+                Next key uses {modifierSymbols(mods)} + key
+              </div>
+            )}
+          </div>
+          <KeycodeBrowser
+            compact
+            query={query}
+            onQuery={setQuery}
+            onPick={(code) => onPick(pickedHidAction(code, mods))}
+          />
+        </div>
       )}
       {tab === "mods" && (
         <div className="flex flex-col gap-2.5">
@@ -590,13 +602,7 @@ export function ActionEditor({
           <KeycodeBrowser
             query={query}
             onQuery={setQuery}
-            onPick={(code) => {
-              if (anyModifier(keyMods)) {
-                onCommit({ Single: { KeyWithModifier: [code, keyMods] } });
-              } else {
-                onCommit({ Single: { Key: { Hid: code } } });
-              }
-            }}
+            onPick={(code) => onCommit({ Single: pickedHidAction(code, keyMods) })}
           />
         </div>
       )}

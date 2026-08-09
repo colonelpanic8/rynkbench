@@ -133,6 +133,30 @@ describe("parseDocument", () => {
     expect(snapshot.lighting?.effect_params).toEqual([{ effect: 1, index: 0, value: 11 }]);
   });
 
+  it("carries a Delete-tap Alt-hold binding without a morse workaround", () => {
+    const source = MINIMAL.replace("KC_A", "MT(MOD_LALT, KC_DEL)");
+    const { snapshot } = parseDocument(source, CATALOG);
+
+    expect(snapshot.layers[0][0]).toEqual({
+      TapHold: [
+        { Key: { Hid: "Delete" } },
+        {
+          Modifier: {
+            left_ctrl: false,
+            left_shift: false,
+            left_alt: true,
+            left_gui: false,
+            right_ctrl: false,
+            right_shift: false,
+            right_alt: false,
+            right_gui: false,
+          },
+        },
+        255,
+      ],
+    });
+  });
+
   it("names an effect the connected keyboard does not advertise", () => {
     expect(() => parseDocument(MINIMAL, { effects: [], palettes: [], params: [] })).toThrow(
       /unknown extension effect 'Rain'/,
