@@ -1004,8 +1004,10 @@ export interface WorkbenchContextValue {
   io: WorkbenchIo;
 }
 
+export type IoWriteResult = { ok: true } | { ok: false; message: string };
+
 export interface WorkbenchIo {
-  setKey(layer: number, row: number, col: number, action: KeyAction): void;
+  setKey(layer: number, row: number, col: number, action: KeyAction): Promise<IoWriteResult>;
   loadEncoder(layer: number, id: number): void;
   setEncoder(layer: number, id: number, action: EncoderAction): void;
   setDefaultLayer(layer: number): void;
@@ -1019,7 +1021,9 @@ export interface WorkbenchIo {
   setScenePolicy(policy: LightingLayerPolicy): void;
   /** Atomically replace the mutable conditional table with this exact order
    *  (only when the firmware has such a table). */
-  applyConditionalScenes(cells: LightingExtendedConditionalSceneCell[]): void;
+  applyConditionalScenes(
+    cells: LightingExtendedConditionalSceneCell[],
+  ): Promise<IoWriteResult>;
   /** Select an extension effect/palette, then write any staged parameter
    *  values for the selected effect (only when the firmware supports it). */
   setExtensionState(
@@ -1080,9 +1084,13 @@ export function makeIo(
     setKey(layer, row, col, action) {
       const prev = getState().layers[layer][row * cols + col];
       dispatch({ type: "keyWriteStart", layer, row, col, action });
-      session.keymap.setKey(layer, row, col, action).then(
-        () => dispatch({ type: "keyWriteOk", layer, row, col }),
-        (err) =>
+      return session.keymap.setKey(layer, row, col, action).then(
+        () => {
+          dispatch({ type: "keyWriteOk", layer, row, col });
+          return { ok: true } as const;
+        },
+        (err) => {
+          const message = errorMessage(err);
           dispatch({
             type: "keyWriteErr",
             layer,
@@ -1090,8 +1098,10 @@ export function makeIo(
             col,
             prev,
             attempted: action,
-            message: errorMessage(err),
-          }),
+            message,
+          });
+          return { ok: false, message } as const;
+        },
       );
     },
     loadEncoder(layer, id) {
@@ -1201,11 +1211,22 @@ export function makeIo(
     },
     applyConditionalScenes(cells) {
       dispatch({ type: "lightingBusy", busy: true, error: null });
-      session.lighting.conditionalScenes.replace(cells).then(
-        (lightingState) =>
-          dispatch({ type: "conditionalApplied", state: lightingState, cells }),
-        (err) => dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
-      );
+      return (async () => {
+        const lightingState = await session.lighting.conditionalScenes.replace(cells);
+        const readback = await session.lighting.conditionalScenes.read();
+        if (!conditionalTablesEqual(readback, cells)) {
+          throw new Error(
+            `conditional lighting read-back mismatch: wrote ${cells.length} rule(s), ` +
+              `read ${readback.length}`,
+          );
+        }
+        dispatch({ type: "conditionalApplied", state: lightingState, cells: readback });
+        return { ok: true } as const;
+      })().catch((err) => {
+        const message = errorMessage(err);
+        dispatch({ type: "lightingBusy", busy: false, error: message });
+        return { ok: false, message } as const;
+      });
     },
     setScenePolicy(policy) {
       dispatch({ type: "lightingBusy", busy: true, error: null });

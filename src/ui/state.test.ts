@@ -252,6 +252,85 @@ describe("layer-state snapshots", () => {
   });
 });
 
+describe("verified status writes", () => {
+  const statusRule = (ledId: number, red: number): LightingExtendedConditionalSceneCell => ({
+    cell: {
+      conditions: { layer: undefined, battery: undefined, output_mode: undefined },
+      led_id: ledId,
+      effect: solid(red),
+    },
+    connection: undefined,
+    effects: undefined,
+  });
+
+  it("does not report conditional success until device read-back matches", async () => {
+    const cells = [statusRule(1, 7)];
+    const calls: string[] = [];
+    const actions: WorkbenchAction[] = [];
+    const session = {
+      lighting: {
+        conditionalScenes: {
+          replace: async () => {
+            calls.push("replace");
+            return LIGHTING;
+          },
+          read: async () => {
+            calls.push("read");
+            return structuredClone(cells);
+          },
+        },
+      },
+    } as unknown as RynkSession;
+    const io = makeIo(session, () => baseState(), (act) => actions.push(act), 2, () => {});
+
+    const result = await io.applyConditionalScenes(cells);
+
+    expect(result).toEqual({ ok: true });
+    expect(calls).toEqual(["replace", "read"]);
+    expect(actions.at(-1)).toEqual({ type: "conditionalApplied", state: LIGHTING, cells });
+  });
+
+  it("returns a failure and keeps success state unset on read-back mismatch", async () => {
+    const actions: WorkbenchAction[] = [];
+    const session = {
+      lighting: {
+        conditionalScenes: {
+          replace: async () => LIGHTING,
+          read: async () => [],
+        },
+      },
+    } as unknown as RynkSession;
+    const io = makeIo(session, () => baseState(), (act) => actions.push(act), 2, () => {});
+
+    const result = await io.applyConditionalScenes([statusRule(1, 7)]);
+
+    expect(result).toEqual({
+      ok: false,
+      message: "conditional lighting read-back mismatch: wrote 1 rule(s), read 0",
+    });
+    expect(actions.some((action) => action.type === "conditionalApplied")).toBe(false);
+    expect(actions.at(-1)).toMatchObject({ type: "lightingBusy", busy: false });
+  });
+
+  it("returns the key-write failure after rolling the optimistic action back", async () => {
+    const actions: WorkbenchAction[] = [];
+    const session = {
+      keymap: {
+        setKey: async () => {
+          throw new Error("flash busy");
+        },
+      },
+    } as unknown as RynkSession;
+    const state = baseState({ layers: [["No", "No"], []] });
+    const io = makeIo(session, () => state, (act) => actions.push(act), 2, () => {});
+
+    const result = await io.setKey(0, 0, 0, "No");
+
+    expect(result).toEqual({ ok: false, message: "flash busy" });
+    expect(actions.at(-1)).toMatchObject({ type: "keyWriteErr", message: "flash busy" });
+  });
+});
+
 describe("positional hold triggers", () => {
   const previous = [{ profile: 255, row: 0, col: 0 }];
   const next = [{ profile: 2, row: 1, col: 1 }];

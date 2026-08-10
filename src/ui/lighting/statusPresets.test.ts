@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   GLOVE80_BATTERY_BARS,
   GLOVE80_CONNECTION_KEYS,
@@ -9,6 +9,7 @@ import {
   replaceBatteryBar,
   replaceBleStatus,
   usbStatusRules,
+  writeGlove80StatusSetup,
 } from "./statusPresets";
 
 describe("status lighting presets", () => {
@@ -73,5 +74,56 @@ describe("status lighting presets", () => {
     expect(connectionKeyAction(GLOVE80_CONNECTION_KEYS[3].kind)).toEqual({
       Single: { KeyboardControl: "OutputUsb" },
     });
+  });
+
+  it("serializes every key write before replacing the conditional table", async () => {
+    const calls: string[] = [];
+    let inFlight = false;
+    const result = await writeGlove80StatusSetup(
+      {
+        async setKey(preset) {
+          expect(inFlight).toBe(false);
+          inFlight = true;
+          calls.push(`key ${preset.row},${preset.col}`);
+          await Promise.resolve();
+          inFlight = false;
+          return { ok: true };
+        },
+        async applyRules(rules) {
+          expect(inFlight).toBe(false);
+          calls.push(`rules ${rules.length}`);
+          return { ok: true };
+        },
+      },
+      [],
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(calls).toEqual([
+      "key 3,6",
+      "key 4,6",
+      "key 5,6",
+      "key 0,6",
+      "rules 47",
+    ]);
+  });
+
+  it("stops before lighting replacement when a key write fails", async () => {
+    const applyRules = vi.fn();
+    let writes = 0;
+    const result = await writeGlove80StatusSetup(
+      {
+        async setKey() {
+          writes++;
+          return writes === 2 ? { ok: false, message: "flash busy" } : { ok: true };
+        },
+        applyRules,
+      },
+      [],
+    );
+
+    expect(result).toEqual({ ok: false, message: "flash busy" });
+    expect(writes).toBe(2);
+    expect(applyRules).not.toHaveBeenCalled();
   });
 });

@@ -9,6 +9,7 @@ import {
   replaceBatteryBar,
   replaceBleStatus,
   replaceUsbStatus,
+  writeGlove80StatusSetup,
 } from "./statusPresets";
 
 const RUNTIME_EFFECTS_CONDITIONS = 1 << 15;
@@ -61,54 +62,71 @@ export function StatusPresetsPanel() {
     bundle.caps.num_ble_profiles >= 3 &&
     exactKeys.every(({ preset, key }) => key?.ledId === preset.led);
 
-  const applyRules = (rules: typeof state.runtimeConditionalDraft, success: string) => {
+  const applyRules = async (rules: typeof state.runtimeConditionalDraft, success: string) => {
     if (rules.length > status.capacity) {
       setMessage(`This setup needs ${rules.length} rules; the keyboard holds ${status.capacity}.`);
       return false;
     }
-    setMessage(success);
-    io.applyConditionalScenes(rules);
-    return true;
+    setMessage("Installing and verifying…");
+    const result = await io.applyConditionalScenes(rules);
+    setMessage(result.ok ? success : `Installation failed: ${result.message}`);
+    return result.ok;
   };
 
-  const installGlove80 = () => {
+  const installGlove80 = async () => {
     const rules = installGlove80StatusRules(state.runtimeConditionalDraft);
     if (rules.length > status.capacity) {
       setMessage(`The complete Glove80 setup needs ${rules.length} rules; this keyboard holds ${status.capacity}.`);
       return;
     }
-    for (const { preset } of exactKeys) {
-      io.setKey(preset.layer, preset.row, preset.col, connectionKeyAction(preset.kind));
-    }
-    applyRules(
-      rules,
-      "Installed Magic-layer battery bars, three Bluetooth profile keys, and the USB status key.",
+    setMessage("Installing and verifying…");
+    const result = await writeGlove80StatusSetup(
+      {
+        setKey: (preset, action) => io.setKey(preset.layer, preset.row, preset.col, action),
+        applyRules: (next) => io.applyConditionalScenes(next),
+      },
+      state.runtimeConditionalDraft,
+    );
+    setMessage(
+      result.ok
+        ? "Installed and verified Magic-layer battery bars, three Bluetooth profile keys, and the USB status key."
+        : `Installation failed: ${result.message}`,
     );
   };
 
-  const installConnectionKey = () => {
+  const installConnectionKey = async () => {
     if (!selectedKey || selectedKey.ledId === undefined) return;
     const connectionKind = kind === "ble" ? { type: "ble" as const, slot } : { type: "usb" as const };
     const rules = kind === "ble"
       ? replaceBleStatus(state.runtimeConditionalDraft, layer, selectedKey.ledId, slot)
       : replaceUsbStatus(state.runtimeConditionalDraft, layer, selectedKey.ledId);
-    if (!applyRules(
+    setMessage("Installing and verifying…");
+    const keyResult = await io.setKey(
+      layer,
+      selectedKey.row,
+      selectedKey.col,
+      connectionKeyAction(connectionKind),
+    );
+    if (!keyResult.ok) {
+      setMessage(`Installation failed: ${keyResult.message}`);
+      return;
+    }
+    await applyRules(
       rules,
       kind === "ble"
-        ? `Bound Bluetooth slot ${slot + 1} and installed its status lighting.`
-        : "Bound USB output and installed its status lighting.",
-    )) return;
-    io.setKey(layer, selectedKey.row, selectedKey.col, connectionKeyAction(connectionKind));
+        ? `Bound and verified Bluetooth slot ${slot + 1} with status lighting.`
+        : "Bound and verified USB output with status lighting.",
+    );
   };
 
-  const installBatteryBar = () => {
+  const installBatteryBar = async () => {
     if (!selectedBar) return;
     const rules = replaceBatteryBar(state.runtimeConditionalDraft, {
       layer,
       node,
       leds: selectedBar,
     });
-    if (applyRules(rules, `Installed a five-segment battery bar for node ${node}.`)) {
+    if (await applyRules(rules, `Installed and verified a five-segment battery bar for node ${node}.`)) {
       dispatch({ type: "lightingSelect", leds: [] });
     }
   };

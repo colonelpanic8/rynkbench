@@ -21,6 +21,13 @@ export interface ConnectionKeyPreset {
   kind: { type: "ble"; slot: number } | { type: "usb" };
 }
 
+export type StatusSetupResult = { ok: true } | { ok: false; message: string };
+
+export interface StatusSetupWriter {
+  setKey(preset: ConnectionKeyPreset, action: KeyAction): Promise<StatusSetupResult>;
+  applyRules(rules: StatusRule[]): Promise<StatusSetupResult>;
+}
+
 export const GLOVE80_BATTERY_BARS: BatteryBarPreset[] = [
   { layer: 2, node: 0, leds: [39, 38, 37, 36, 35] },
   { layer: 2, node: 1, leds: [79, 78, 77, 76, 75] },
@@ -241,4 +248,15 @@ export function installGlove80StatusRules(current: StatusRule[]): StatusRule[] {
       : replaceUsbStatus(rules, key.layer, key.led);
   }
   return rules;
+}
+
+export async function writeGlove80StatusSetup(
+  writer: StatusSetupWriter,
+  current: StatusRule[],
+): Promise<StatusSetupResult> {
+  for (const preset of GLOVE80_CONNECTION_KEYS) {
+    const result = await writer.setKey(preset, connectionKeyAction(preset.kind));
+    if (!result.ok) return result;
+  }
+  return writer.applyRules(installGlove80StatusRules(current));
 }
