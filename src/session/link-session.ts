@@ -253,6 +253,15 @@ function isStateRevisionConflict(error: unknown): boolean {
   return String(error).includes("StateRevisionConflict");
 }
 
+function isRetryableConditionalReadError(error: unknown): boolean {
+  const message = String(error);
+  return message.includes("response decode failed") ||
+    message.includes("did not answer") ||
+    message.includes("Transport") ||
+    message.includes("transport") ||
+    message.includes("link died");
+}
+
 interface OverlayReadClient {
   get_lighting_state(): Promise<LightingState>;
   get_lighting_overlay(request: LightingOverlayPageRequest): Promise<LightingOverlayPage>;
@@ -440,12 +449,13 @@ async function readConditionalTable<Cell>(
   pager: ConditionalPager<Cell>,
   attempts: number,
 ): Promise<Cell[]> {
-  let lastConflict: unknown;
+  let lastError: unknown;
+  let onlyConflicts = true;
   for (let attempt = 0; attempt < attempts; attempt++) {
-    // Request the status even for an empty table: besides pinning the
-    // revision, it probes endpoint support on firmware without the surface.
-    const status = await pager.status();
     try {
+      // Request the status even for an empty table: besides pinning the
+      // revision, it probes endpoint support on firmware without the surface.
+      const status = await pager.status();
       const cells: Cell[] = [];
       while (cells.length < status.cell_len) {
         const page = await pager.page({
@@ -472,13 +482,16 @@ async function readConditionalTable<Cell>(
       }
       return cells;
     } catch (error) {
-      if (!isStateRevisionConflict(error)) throw error;
-      lastConflict = error;
+      if (!isStateRevisionConflict(error) && !isRetryableConditionalReadError(error)) throw error;
+      lastError = error;
+      onlyConflicts &&= isStateRevisionConflict(error);
     }
   }
   throw new Error(
-    `runtime conditional table kept changing across ${attempts} read attempts`,
-    { cause: lastConflict },
+    onlyConflicts
+      ? `runtime conditional table kept changing across ${attempts} read attempts`
+      : `runtime conditional table read failed across ${attempts} attempts`,
+    { cause: lastError },
   );
 }
 

@@ -355,6 +355,40 @@ describe("WebHID runtime conditional readback", () => {
     ).rejects.toThrow("runtime conditional table kept changing across 3 read attempts");
   });
 
+  it("restarts the pinned read after a transient response decode failure", async () => {
+    const cells = [rule(1, 0), rule(2, 0)];
+    const get_lighting_runtime_conditional_scene_status = vi.fn(
+      async () => status(7, cells.length),
+    );
+    const get_lighting_runtime_conditional_scenes = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new Error("response decode failed: Found an Option discriminant that wasn't 0 or 1"),
+      )
+      .mockResolvedValue({ revision: 7, total_count: cells.length, items: cells });
+
+    await expect(
+      readLightingRuntimeConditionalScenes({
+        get_lighting_runtime_conditional_scene_status,
+        get_lighting_runtime_conditional_scenes,
+      }),
+    ).resolves.toEqual(cells);
+    expect(get_lighting_runtime_conditional_scene_status).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports a persistent response decode failure after bounded retries", async () => {
+    const get_lighting_runtime_conditional_scene_status = vi.fn(async () => status(7, 1));
+    await expect(
+      readLightingRuntimeConditionalScenes({
+        get_lighting_runtime_conditional_scene_status,
+        get_lighting_runtime_conditional_scenes: async () => {
+          throw new Error("response decode failed: malformed frame");
+        },
+      }),
+    ).rejects.toThrow("runtime conditional table read failed across 3 attempts");
+    expect(get_lighting_runtime_conditional_scene_status).toHaveBeenCalledTimes(3);
+  });
+
   it("rejects a page that exceeds the advertised total", async () => {
     await expect(
       readLightingRuntimeConditionalScenes({
