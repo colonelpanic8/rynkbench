@@ -202,6 +202,12 @@ interface ExtendedRuntimeConditionalClient {
   ): Promise<LightingExtendedRuntimeConditionalScenesPage>;
 }
 
+interface RuntimeConditionalStatusClient {
+  get_lighting_capabilities(): Promise<LightingCapabilities>;
+  get_lighting_runtime_conditional_scene_status(): Promise<LightingRuntimeConditionalSceneStatus>;
+  get_lighting_extended_runtime_conditional_scene_status(): Promise<LightingRuntimeConditionalSceneStatus>;
+}
+
 /** The two conditional-table readers differ only in which endpoint pair they
  *  call, so they share one pager rather than one copy of the coherence rules
  *  each. */
@@ -443,6 +449,18 @@ export async function readLightingExtendedRuntimeConditionalScenes(
     },
     attempts,
   );
+}
+
+export async function readLightingRuntimeConditionalStatus(
+  client: RuntimeConditionalStatusClient,
+): Promise<LightingRuntimeConditionalSceneStatus> {
+  const caps = await client.get_lighting_capabilities();
+  if ((caps.features & RUNTIME_CONDITIONAL_SCENES) === 0) {
+    throw new Error("this firmware does not support runtime conditional scenes");
+  }
+  return (caps.features & RUNTIME_EFFECTS_CONDITIONS) !== 0
+    ? client.get_lighting_extended_runtime_conditional_scene_status()
+    : client.get_lighting_runtime_conditional_scene_status();
 }
 
 async function readConditionalTable<Cell>(
@@ -1152,14 +1170,7 @@ export class LinkSession implements RynkSession {
   }
 
   private async readRuntimeConditionalStatus(): Promise<LightingRuntimeConditionalSceneStatus> {
-    // Feature-gate before touching the endpoint, like every other additive
-    // lighting surface: firmware without the table would reject the unknown
-    // request with an opaque protocol error.
-    const caps = await this.client.get_lighting_capabilities();
-    if ((caps.features & RUNTIME_CONDITIONAL_SCENES) === 0) {
-      throw new Error("this firmware does not support runtime conditional scenes");
-    }
-    return this.client.get_lighting_runtime_conditional_scene_status();
+    return readLightingRuntimeConditionalStatus(this.client);
   }
 
   /** Whether this firmware speaks the extended conditional cell. */

@@ -53,7 +53,7 @@ const BONDED = solid(176, 0, 0);
 const SELECTED = solid(0, 80, 255);
 const ACTIVE = solid(0, 192, 32);
 const ADVERTISING: LightingEffect = {
-  Blink: { color: { r: 255, g: 255, b: 255 }, period_ms: 800, phase_ms: 0, duty: 128 },
+  Blink: { color: { r: 255, g: 255, b: 255 }, period_ms: 800, phase_ms: 0, duty: 50 },
 };
 
 function rule(

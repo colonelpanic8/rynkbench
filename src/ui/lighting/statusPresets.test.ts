@@ -30,7 +30,9 @@ describe("status lighting presets", () => {
 
     expect(rules).toHaveLength(6);
     expect(rules[0].connection?.bonded).toEqual({ slot: 0, bonded: false });
-    expect(rules[3].cell.effect).toHaveProperty("Blink");
+    expect(rules[3].cell.effect).toEqual({
+      Blink: { color: { r: 255, g: 255, b: 255 }, period_ms: 800, phase_ms: 0, duty: 50 },
+    });
     expect(rules[5].connection).toMatchObject({
       profile: 0,
       ble_state: "Connected",

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
   LightingConditionalSceneCell,
+  LightingCapabilities,
   LightingEffect,
   LightingExtensionParam,
   LightingOverlayCell,
@@ -13,6 +14,7 @@ import {
   readLightingExtensionNames,
   readLightingExtensionParams,
   readLightingOverlay,
+  readLightingRuntimeConditionalStatus,
   readLightingRuntimeConditionalScenes,
   watchdogClient,
 } from "./link-session";
@@ -271,6 +273,21 @@ describe("WebHID runtime conditional readback", () => {
     capacity: 32,
     cell_len,
     chunk_capacity: 8,
+  });
+
+  it("uses the extended status endpoint for an extended table", async () => {
+    const legacyStatus = vi.fn(async () => status(3, 12));
+    const extendedStatus = vi.fn(async () => ({ ...status(3, 12), chunk_capacity: 5 }));
+
+    await expect(
+      readLightingRuntimeConditionalStatus({
+        get_lighting_capabilities: async () => ({ features: (1 << 12) | (1 << 15) }) as LightingCapabilities,
+        get_lighting_runtime_conditional_scene_status: legacyStatus,
+        get_lighting_extended_runtime_conditional_scene_status: extendedStatus,
+      }),
+    ).resolves.toMatchObject({ chunk_capacity: 5 });
+    expect(extendedStatus).toHaveBeenCalledOnce();
+    expect(legacyStatus).not.toHaveBeenCalled();
   });
 
   it("returns an empty table without paging", async () => {
