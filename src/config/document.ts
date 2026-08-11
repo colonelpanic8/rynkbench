@@ -34,19 +34,6 @@ const COLS = 14;
 
 let wasmReady: Promise<unknown> | null = null;
 
-/** Firmware reads expose behavior tables at their full capacity, padding the
- *  unused tail with empty slots. Configuration documents describe only
- *  populated entries, so carrying that padding into an export would produce
- *  invalid empty `[[morse]]` records (and noisy empty combo/fork records).
- *
- *  Only trim the tail: indices inside the populated prefix are addressable by
- *  key actions and must remain stable. */
-function trimTrailingEmpty<T>(items: T[], isEmpty: (item: T) => boolean): T[] {
-  let end = items.length;
-  while (end > 0 && isEmpty(items[end - 1])) end -= 1;
-  return items.slice(0, end);
-}
-
 /** One-shot loader for the vendored document module, mirroring the session's
  *  own wasm loader: a failed init is retryable on the next attempt. */
 export function initConfigWasm(): Promise<unknown> {
@@ -70,8 +57,9 @@ export function assertSupportedMatrix(rows: number, cols: number): void {
  *
  *  Reading every effect's parameter list costs one request per effect, so this
  *  is built on demand rather than during connect. Firmware predating the
- *  parameter surface rejects the request outright; that is recorded as "this
- *  effect has no parameters", exactly as the live editor treats it. */
+ *  parameter surface rejects the request outright. Once the extension is
+ *  advertised, a failed parameter read makes an export incomplete and must be
+ *  reported rather than silently represented as an effect with no parameters. */
 export async function loadCatalog(
   session: RynkSession,
   state: WorkbenchState,
@@ -81,7 +69,7 @@ export async function loadCatalog(
   if (state.lightingExtension === null) return { effects: [], palettes: [], params: [] };
   const params: EffectParamSet[] = [];
   for (let effect = 0; effect < effectNames.length; effect += 1) {
-    const items = await session.lighting.extensionParams(effect).catch(() => []);
+    const items = await session.lighting.extensionParams(effect);
     if (items.length > 0) params.push({ effect, name: effectNames[effect], params: items });
   }
   return { effects: effectNames, palettes: paletteNames, params };
@@ -129,12 +117,9 @@ export function snapshotFromState(state: WorkbenchState): RuntimeSnapshot {
           ? undefined
           : state.morseHoldTriggerPositions,
       auto_mouse_layers: state.autoMouseLayers,
-      morses: trimTrailingEmpty(state.morse, (morse) => morse.actions.length === 0),
-      combos: trimTrailingEmpty(
-        state.combos,
-        (combo) => combo.output === "No" && combo.actions.length === 0,
-      ),
-      forks: trimTrailingEmpty(state.forks, (fork) => fork.trigger === "No"),
+      morses: state.morse,
+      combos: state.combos,
+      forks: state.forks,
       macros: [...state.macroBytes],
     },
   };

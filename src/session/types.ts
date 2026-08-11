@@ -24,7 +24,7 @@ import type {
   BehaviorOptions,
   BleStatus,
   BuildInfo,
-  Combo,
+  ComboDefinition,
   ConnectionStatus,
   DeviceCapabilities,
   DeviceInfo,
@@ -203,8 +203,8 @@ export interface LightingSceneOps {
 /** Slot-table ops (combos, morse, forks) share one shape: the backend reads
  *  the full table (bulk endpoints where supported) and writes one slot. */
 export interface ComboOps {
-  readAll(): Promise<Combo[]>;
-  set(index: number, combo: Combo): Promise<void>;
+  readAll(): Promise<ComboDefinition[]>;
+  set(index: number, combo: ComboDefinition): Promise<void>;
 }
 
 export interface MorseOps {
@@ -284,6 +284,15 @@ export interface RynkSession {
   close(): Promise<void>;
 }
 
+/** One concrete device exposed by a backend that can enumerate without a
+ * browser-owned chooser. `id` is backend-private and is only passed back to
+ * that same provider. */
+export interface SessionTarget {
+  readonly id: string;
+  readonly label: string;
+  readonly detail?: string;
+}
+
 /** A connectable backend surfaced on the connect screen. */
 export interface SessionProvider {
   readonly kind: SessionKind;
@@ -291,11 +300,14 @@ export interface SessionProvider {
   readonly description: string;
   /** Whether this backend can work in the current environment. */
   available(): boolean;
+  /** Enumerate selectable devices when the backend owns device selection.
+   * Browser transports omit this and use their browser-owned chooser. */
+  listTargets?(): Promise<SessionTarget[]>;
   /**
    * Open a session. Must be called from a user gesture (click) so backends
    * that show a browser device picker are permitted to do so.
    */
-  connect(): Promise<RynkSession>;
+  connect(targetId?: string): Promise<RynkSession>;
   /**
    * Reopen the most recently connected device without requiring a user
    * gesture or showing a device picker. Used for automatic recovery after an

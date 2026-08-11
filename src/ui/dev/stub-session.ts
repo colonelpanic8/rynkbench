@@ -12,7 +12,7 @@ import type {
   BehaviorOptions,
   BleStatus,
   BuildInfo,
-  Combo,
+  ComboDefinition,
   ConnectionStatus,
   DeviceCapabilities,
   DeviceInfo,
@@ -309,10 +309,8 @@ class StubSession implements RynkSession {
     speed: 0,
     mode: "Solid",
   };
-  private comboTable: Combo[] = Array.from({ length: CAPS.max_combos }, () => ({
-    actions: [],
-    output: "No" as const,
-    layer: undefined,
+  private comboTable: ComboDefinition[] = Array.from({ length: CAPS.max_combos }, () => ({
+    Actions: { actions: [], output: "No" as const, layer: undefined },
   }));
   private morseTable: Morse[] = Array.from({ length: CAPS.max_morse }, () => ({
     profile: {
@@ -460,11 +458,11 @@ class StubSession implements RynkSession {
   };
 
   combos = {
-    readAll: async (): Promise<Combo[]> => {
+    readAll: async (): Promise<ComboDefinition[]> => {
       await lag();
       return structuredClone(this.comboTable);
     },
-    set: async (index: number, combo: Combo): Promise<void> => {
+    set: async (index: number, combo: ComboDefinition): Promise<void> => {
       await lag();
       this.comboTable[index] = structuredClone(combo);
     },

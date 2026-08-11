@@ -8,7 +8,7 @@ import type {
   BatteryStatus,
   BehaviorConfig,
   BehaviorOptions,
-  Combo,
+  ComboDefinition,
   ConnectionStatus,
   DeviceCapabilities,
   DeviceInfo,
@@ -63,6 +63,9 @@ export type Selection =
 /** Everything loaded during the connect flow, before the workbench mounts. */
 export interface ConnectedBundle {
   session: RynkSession;
+  /** Configuration-bearing reads that failed while opening this snapshot.
+   *  Export must refuse to turn their fallback values into a lossy file. */
+  incompleteReads?: string[];
   /** Present only for a local file workspace, never for a connected keyboard. */
   workspace?: {
     name: string;
@@ -109,7 +112,7 @@ export interface ConnectedBundle {
   extensionEffectNames: string[];
   extensionPaletteNames: string[];
   /** Advanced tables; empty arrays when the device reports zero capacity. */
-  combos: Combo[];
+  combos: ComboDefinition[];
   morse: Morse[];
   forks: Fork[];
   macroBytes: Uint8Array;
@@ -139,7 +142,7 @@ export interface PendingInfo {
 export type SlotKind = "combos" | "morse" | "forks";
 
 export type SlotValueOf<K extends SlotKind> = K extends "combos"
-  ? Combo
+  ? ComboDefinition
   : K extends "morse"
     ? Morse
     : Fork;
@@ -211,7 +214,7 @@ export interface WorkbenchState {
   /** ledId → nonce, bumped on paint for the pop animation. */
   paintTick: Record<number, number>;
   /** Advanced tables, kept full-length (empty slots included). */
-  combos: Combo[];
+  combos: ComboDefinition[];
   morse: Morse[];
   forks: Fork[];
   macroBytes: Uint8Array;
@@ -438,13 +441,13 @@ export type WorkbenchAction =
   | { type: "hoverLeds"; leds: number[] | null }
   | { type: "lightingSelect"; leds: number[]; mode?: "replace" | "add" | "remove" }
   | { type: "lightingStateSet"; state: LightingState }
-  | { type: "slotWriteStart"; kind: SlotKind; index: number; value: Combo | Morse | Fork }
+  | { type: "slotWriteStart"; kind: SlotKind; index: number; value: ComboDefinition | Morse | Fork }
   | { type: "slotWriteOk"; kind: SlotKind; index: number }
   | {
       type: "slotWriteErr";
       kind: SlotKind;
       index: number;
-      prev: Combo | Morse | Fork;
+      prev: ComboDefinition | Morse | Fork;
       message: string;
     }
   | { type: "slotErrDismiss"; kind: SlotKind; index: number }
@@ -749,7 +752,7 @@ export function makeWorkbenchReducer(cols: number) {
         return { ...state, lightingState: act.state, lightingBusy: false, lightingError: null };
       case "slotWriteStart": {
         const id = slotPendingId(act.kind, act.index);
-        const table = state[act.kind].slice() as Array<Combo | Morse | Fork>;
+        const table = state[act.kind].slice() as Array<ComboDefinition | Morse | Fork>;
         table[act.index] = act.value;
         return {
           ...state,
@@ -764,7 +767,7 @@ export function makeWorkbenchReducer(cols: number) {
       }
       case "slotWriteErr": {
         const id = slotPendingId(act.kind, act.index);
-        const table = state[act.kind].slice() as Array<Combo | Morse | Fork>;
+        const table = state[act.kind].slice() as Array<ComboDefinition | Morse | Fork>;
         table[act.index] = act.prev;
         return {
           ...state,
@@ -1285,7 +1288,7 @@ export function makeIo(
       dispatch({ type: "slotWriteStart", kind, index, value });
       const write =
         kind === "combos"
-          ? session.combos.set(index, value as Combo)
+          ? session.combos.set(index, value as ComboDefinition)
           : kind === "morse"
             ? session.morse.set(index, value as Morse)
             : session.forks.set(index, value as Fork);

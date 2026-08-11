@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
-  Combo,
+  ComboDefinition,
   LightingConditionalSceneCell,
   LightingExtendedConditionalSceneCell,
   Morse,
@@ -784,13 +784,14 @@ describe("combo slots", () => {
       const combos = await session.combos.readAll();
       expect(combos).toHaveLength(caps.max_combos);
       expect(combos[0]).toEqual({
-        actions: [{ Single: { Key: { Hid: "J" } } }, { Single: { Key: { Hid: "K" } } }],
-        output: { Single: { Key: { Hid: "Escape" } } },
-        layer: undefined,
+        Actions: {
+          actions: [{ Single: { Key: { Hid: "J" } } }, { Single: { Key: { Hid: "K" } } }],
+          output: { Single: { Key: { Hid: "Escape" } } },
+          layer: undefined,
+        },
       });
       for (const combo of combos.slice(1)) {
-        expect(combo.output).toBe("No");
-        expect(combo.actions).toEqual([]);
+        expect(combo).toEqual({ Actions: { actions: [], output: "No", layer: undefined } });
       }
     });
   });
@@ -798,19 +799,27 @@ describe("combo slots", () => {
   it("round-trips a slot write and enforces slot/key bounds", async () => {
     await withSession(ortho60Board, async (session) => {
       const caps = await session.device.capabilities();
-      expect((await session.combos.readAll()).every((combo) => combo.output === "No")).toBe(true);
-      const combo: Combo = {
-        actions: [{ Single: { Key: { Hid: "D" } } }, { Single: { Key: { Hid: "F" } } }],
-        output: { Single: { Key: { Hid: "Tab" } } },
-        layer: 0,
+      expect(
+        (await session.combos.readAll()).every(
+          (combo) => "Actions" in combo && combo.Actions.output === "No",
+        ),
+      ).toBe(true);
+      const combo: ComboDefinition = {
+        Actions: {
+          actions: [{ Single: { Key: { Hid: "D" } } }, { Single: { Key: { Hid: "F" } } }],
+          output: { Single: { Key: { Hid: "Tab" } } },
+          layer: 0,
+        },
       };
       await session.combos.set(1, combo);
       expect((await session.combos.readAll())[1]).toEqual(combo);
       await expect(session.combos.set(caps.max_combos, combo)).rejects.toThrow(/out of range/);
       await expect(session.combos.set(-1, combo)).rejects.toThrow(/out of range/);
       const tooWide = {
-        ...combo,
-        actions: Array.from({ length: caps.max_combo_keys + 1 }, () => "No" as const),
+        Actions: {
+          ...combo.Actions,
+          actions: Array.from({ length: caps.max_combo_keys + 1 }, () => "No" as const),
+        },
       };
       await expect(session.combos.set(0, tooWide)).rejects.toThrow(/max/);
     });
@@ -1161,9 +1170,17 @@ describe("providers", () => {
       const untouched = await second.keymap.readAll();
       expect(untouched[0].actions[0]).toEqual({ Single: { Key: { Hid: "Grave" } } });
       // Advanced-config tables are per-connection too.
-      await first.combos.set(0, { actions: [], output: { Single: { Key: { Hid: "A" } } }, layer: undefined });
+      await first.combos.set(0, {
+        Actions: {
+          actions: [],
+          output: { Single: { Key: { Hid: "A" } } },
+          layer: undefined,
+        },
+      });
       await first.macros.write(Uint8Array.of(9));
-      expect((await second.combos.readAll())[0].output).toBe("No");
+      expect((await second.combos.readAll())[0]).toEqual({
+        Actions: { actions: [], output: "No", layer: undefined },
+      });
       expect((await second.macros.read())[0]).toBe(0);
     } finally {
       await first.close();

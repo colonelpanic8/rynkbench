@@ -13,7 +13,7 @@ import type {
   BehaviorOptions,
   BleStatus,
   BuildInfo,
-  Combo,
+  ComboDefinition,
   ConnectionStatus,
   DeviceCapabilities,
   DeviceInfo,
@@ -111,7 +111,7 @@ export interface BoardSpec {
   /** Battery each split peripheral reports; wired halves say `"Unavailable"`. */
   peripheralBattery?: BatteryStatus;
   /** Pre-programmed slots, filling the table from slot 0. */
-  seedCombos?: Combo[];
+  seedCombos?: ComboDefinition[];
   seedMorse?: Morse[];
   seedForks?: Fork[];
   /** Initial macro bytes, zero-filled to macro_space_size after this prefix. */
@@ -211,8 +211,8 @@ export function noStateBits(): StateBits {
 }
 
 // Empty slots mirror what real firmware reports for unprogrammed entries.
-export function emptyCombo(): Combo {
-  return { actions: [], output: "No", layer: undefined };
+export function emptyCombo(): ComboDefinition {
+  return { Actions: { actions: [], output: "No", layer: undefined } };
 }
 
 export function emptyMorse(): Morse {
@@ -257,7 +257,7 @@ const cloneStateBits = (bits: StateBits): StateBits => ({
   mouse: { ...bits.mouse },
 });
 
-const cloneCombo = (combo: Combo): Combo => ({ ...combo, actions: [...combo.actions] });
+const cloneCombo = (combo: ComboDefinition): ComboDefinition => structuredClone(combo);
 
 const cloneMorse = (morse: Morse): Morse => ({
   profile: { ...morse.profile },
@@ -395,7 +395,7 @@ class MockSession implements RynkSession {
    *  order, later rules win shared slots, and duplicates are legitimate. */
   private runtimeConditional: LightingExtendedConditionalSceneCell[] = [];
   private layerPolicy: LightingLayerPolicy;
-  private readonly comboTable: Combo[];
+  private readonly comboTable: ComboDefinition[];
   private readonly morseTable: Morse[];
   private readonly forkTable: Fork[];
   private readonly macroBytes: Uint8Array;
@@ -703,8 +703,11 @@ class MockSession implements RynkSession {
     set: (index, combo) =>
       latency(() => {
         const slot = this.checkSlot(index, this.comboTable.length, "combo");
-        if (combo.actions.length > this.spec.capabilities.max_combo_keys) {
-          throw new Error(`combo has ${combo.actions.length} keys, max ${this.spec.capabilities.max_combo_keys}`);
+        const count = "Actions" in combo
+          ? combo.Actions.actions.length
+          : combo.Positions.positions.length;
+        if (count > this.spec.capabilities.max_combo_keys) {
+          throw new Error(`combo has ${count} keys, max ${this.spec.capabilities.max_combo_keys}`);
         }
         this.comboTable[slot] = cloneCombo(combo);
       }),

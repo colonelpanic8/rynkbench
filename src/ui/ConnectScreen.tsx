@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import type { ChangeEvent } from "react";
-import type { SessionProvider } from "../session/types";
+import type { SessionProvider, SessionTarget } from "../session/types";
 import {
   Wordmark,
   UsbIcon,
@@ -17,8 +17,9 @@ import { cx } from "./kit";
 
 export interface ConnectAttempt {
   providerIndex: number;
-  status: "connecting" | "error";
+  status: "connecting" | "selecting" | "error";
   message?: string;
+  targets?: SessionTarget[];
 }
 
 function ProviderGlyph({ kind }: { kind: SessionProvider["kind"] }) {
@@ -43,11 +44,12 @@ function ProviderCard({
 }: {
   provider: SessionProvider;
   attempt: ConnectAttempt | null;
-  onConnect: () => void;
+  onConnect: (targetId?: string) => void;
   disabled: boolean;
 }) {
   const available = provider.available();
   const connecting = attempt?.status === "connecting";
+  const selecting = attempt?.status === "selecting";
   const error = attempt?.status === "error" ? (attempt.message ?? "Connection failed") : null;
   const clickable = available && !disabled;
 
@@ -56,7 +58,7 @@ function ProviderCard({
       <button
         type="button"
         disabled={!clickable}
-        onClick={onConnect}
+        onClick={() => onConnect()}
         className={cx(
           "group w-full rounded-2xl border bg-panel p-4 text-left transition-all duration-150",
           clickable
@@ -91,6 +93,24 @@ function ProviderCard({
       {connecting && (
         <div className="mt-1.5 px-1 text-[12px] text-accent">Opening session…</div>
       )}
+      {selecting && attempt.targets && (
+        <div className="mt-2 rounded-xl border border-line-soft bg-panel p-2">
+          <div className="px-2 pb-1.5 text-[11.5px] text-mute">Choose a keyboard</div>
+          <div className="flex flex-col gap-1">
+            {attempt.targets.map((target) => (
+              <button
+                key={target.id}
+                type="button"
+                onClick={() => onConnect(target.id)}
+                className="cursor-pointer rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-raised"
+              >
+                <div className="text-[12.5px] font-medium text-ink">{target.label}</div>
+                {target.detail && <div className="text-[11px] text-faint">{target.detail}</div>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {error && (
         <div className="mt-1.5 flex items-center gap-2 px-1 text-[12px] text-danger">
           <WarningIcon size={14} />
@@ -99,7 +119,7 @@ function ProviderCard({
           </span>
           <button
             type="button"
-            onClick={onConnect}
+            onClick={() => onConnect()}
             className="cursor-pointer font-medium text-ink underline decoration-line-strong underline-offset-2 hover:decoration-ink"
           >
             Retry
@@ -124,7 +144,7 @@ export function ConnectScreen({
   /** Banner text, e.g. after an unexpected disconnect. */
   notice: string | null;
   offlineBusy: boolean;
-  onConnect: (index: number) => void;
+  onConnect: (index: number, targetId?: string) => void;
   onOpenFile: (file: File) => void;
   onNewFile: () => void;
 }) {
@@ -232,7 +252,7 @@ export function ConnectScreen({
               provider={provider}
               attempt={attempt?.providerIndex === i ? attempt : null}
               disabled={busy}
-              onConnect={() => onConnect(i)}
+              onConnect={(targetId) => onConnect(i, targetId)}
             />
           ))}
           {providers?.length === 0 && (

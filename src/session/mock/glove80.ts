@@ -5,7 +5,7 @@
 // enrichment tables so the default keymap and rendered labels agree.
 
 import type {
-  Combo,
+  ComboDefinition,
   DeviceCapabilities,
   DeviceInfo,
   EncoderAction,
@@ -193,7 +193,9 @@ const capabilities: DeviceCapabilities = {
 // the rest of each table reads back as empty, like fresh firmware.
 
 // J+K chorded together produce Escape (the classic vim combo).
-const seedCombos: Combo[] = [{ actions: [hid("J"), hid("K")], output: hid("Escape"), layer: undefined }];
+const seedCombos: ComboDefinition[] = [
+  { Actions: { actions: [hid("J"), hid("K")], output: hid("Escape"), layer: undefined } },
+];
 
 // Morse slot 0: tap (pattern 0b1·0) types Escape, hold (0b1·1) enables layer 1.
 const seedMorse: Morse[] = [
