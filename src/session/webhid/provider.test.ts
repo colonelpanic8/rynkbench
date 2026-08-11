@@ -45,11 +45,10 @@ function device(productName: string): HIDDevice {
   } as unknown as HIDDevice;
 }
 
-function install(granted: HIDDevice[], picked?: HIDDevice) {
+function install(picked?: HIDDevice) {
   const requestDevice = vi.fn(() => Promise.resolve(picked ? [picked] : []));
   (globalThis as { navigator?: unknown }).navigator = {
     hid: {
-      getDevices: () => Promise.resolve(granted),
       requestDevice,
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
@@ -64,25 +63,21 @@ describe("WebHID provider device selection", () => {
     delete (globalThis as { navigator?: unknown }).navigator;
   });
 
-  /// The case that made rynkbench unusable with a second keyboard attached:
-  /// the wrong grant sorts first and the old code opened it and stopped.
-  it("skips a granted device that cannot handshake and uses the one that can", async () => {
-    const stale = device("Glove80 (old firmware)");
+  it("uses Chromium's chooser instead of silently taking the first grant", async () => {
     const working = device("Glove80");
     handshakes.add("Glove80");
-    const requestDevice = install([stale, working]);
+    const requestDevice = install(working);
 
     const session = (await webHidProvider.connect()) as unknown as { client: { label: string } };
 
     expect(session.client.label).toBe("Glove80");
-    // No picker: recovery is automatic once both devices are granted.
-    expect(requestDevice).not.toHaveBeenCalled();
+    expect(requestDevice).toHaveBeenCalledOnce();
   });
 
   it("prompts when nothing is granted yet", async () => {
     const working = device("Glove80");
     handshakes.add("Glove80");
-    const requestDevice = install([], working);
+    const requestDevice = install(working);
 
     const session = (await webHidProvider.connect()) as unknown as { client: { label: string } };
 
@@ -93,7 +88,7 @@ describe("WebHID provider device selection", () => {
   it("reconnects the last device without opening the picker", async () => {
     const working = device("Glove80");
     handshakes.add("Glove80");
-    const requestDevice = install([], working);
+    const requestDevice = install(working);
     const original = await webHidProvider.connect();
     await original.close();
 
@@ -102,18 +97,16 @@ describe("WebHID provider device selection", () => {
     expect(requestDevice).toHaveBeenCalledOnce();
   });
 
-  /// A sole bad grant cannot be replaced in the same user gesture, so the
-  /// attempt has to fail — but it must rule that device out, or the next
-  /// click would retry it forever and never reach the picker.
-  it("rules out a failing grant so the next attempt reaches the picker", async () => {
+  it("lets a retry choose a different device after a failed handshake", async () => {
     const stale = device("Glove80 (old firmware)");
     const working = device("Glove80");
-    install([stale]);
+    const firstRequest = install(stale);
 
-    await expect(webHidProvider.connect()).rejects.toThrow(/choose a different one/);
+    await expect(webHidProvider.connect()).rejects.toThrow("protocol mismatch");
+    expect(firstRequest).toHaveBeenCalledOnce();
 
     handshakes.add("Glove80");
-    const requestDevice = install([stale], working);
+    const requestDevice = install(working);
     const session = (await webHidProvider.connect()) as unknown as { client: { label: string } };
 
     expect(session.client.label).toBe("Glove80");

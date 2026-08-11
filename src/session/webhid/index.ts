@@ -5,13 +5,7 @@ import { connect } from "../../vendor/rynk-wasm/rynk_wasm";
 import { LinkSession } from "../link-session";
 import type { SessionProvider } from "../types";
 import { initWasm } from "../wasm";
-import {
-  grantedRynkDevices,
-  hidByteLink,
-  openRynkHidDevice,
-  rejectRynkDevice,
-  requestRynkDevice,
-} from "./link";
+import { hidByteLink, openRynkHidDevice, requestRynkDevice } from "./link";
 
 let lastDevice: HIDDevice | null = null;
 
@@ -22,37 +16,10 @@ export const webHidProvider: SessionProvider = {
     "Connect to a Rynk keyboard over USB. Requires a Chromium-based browser (Chrome, Edge).",
   available: () => typeof navigator !== "undefined" && "hid" in navigator,
   async connect() {
-    // More than one keyboard of the same model can be granted, and WebHID
-    // offers no serial number to tell them apart, so the only way to know
-    // which grant is the right one is to complete the handshake. Try each
-    // before prompting: picking the first Rynk interface reconnects to
-    // whichever grant sorts first, which on a second keyboard running
-    // incompatible firmware fails identically on every reload.
-    const granted = await grantedRynkDevices();
-    let failure: unknown;
-    for (const candidate of granted) {
-      try {
-        return await rememberedSession(candidate);
-      } catch (error) {
-        // A grant that cannot handshake is out of the running for this page
-        // session, so a later attempt reaches the picker instead of retrying
-        // it. Being unable to open it at all counts the same way.
-        rejectRynkDevice(candidate);
-        failure ??= error;
-      }
-    }
-
-    if (granted.length > 0) {
-      throw new Error(
-        `No granted device completed the Rynk handshake${
-          failure instanceof Error ? `: ${failure.message}` : ""
-        }. If more than one keyboard is connected, connect again to choose a different one.`,
-      );
-    }
-
-    // No usable grant, so this is the first run (or every grant has been
-    // ruled out). The picker must open before any await on wasm init would
-    // burn the user gesture that allows it.
+    // Always let Chromium choose the physical keyboard. Reusing the first
+    // grant is ambiguous as soon as two compatible boards are connected.
+    // requestDevice must remain the first await so the click's user activation
+    // is still available to the browser-owned chooser.
     return await rememberedSession(await requestRynkDevice());
   },
   async reconnect() {

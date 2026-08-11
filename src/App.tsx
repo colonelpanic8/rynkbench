@@ -23,7 +23,12 @@ import type {
   LightingState,
   ModifierCombination,
 } from "./vendor/rynk-wasm/rynk_wasm";
-import type { LightingTopology, RynkSession, SessionProvider } from "./session/types";
+import type {
+  LightingTopology,
+  RynkSession,
+  SessionProvider,
+  SessionTarget,
+} from "./session/types";
 import { RECONNECT_DELAYS_MS, retryReconnect } from "./session/reconnect";
 import type { ConnectAttempt } from "./ui/ConnectScreen";
 import { ConnectScreen } from "./ui/ConnectScreen";
@@ -325,14 +330,23 @@ export default function App() {
   }, []);
 
   const connect = useCallback(
-    async (index: number) => {
+    async (index: number, selectedTargetId?: string) => {
       const provider = providers?.[index];
       if (!provider) return;
       setNotice(null);
       setAttempt({ providerIndex: index, status: "connecting" });
       let session: RynkSession | null = null;
       try {
-        session = await provider.connect();
+        let targetId = selectedTargetId;
+        if (provider.listTargets && targetId === undefined) {
+          const targets: SessionTarget[] = await provider.listTargets();
+          if (targets.length > 1) {
+            setAttempt({ providerIndex: index, status: "selecting", targets });
+            return;
+          }
+          targetId = targets[0]?.id;
+        }
+        session = await provider.connect(targetId);
         const loaded = await openBundle(session);
         bundleRef.current = loaded;
         providerIndexRef.current = index;

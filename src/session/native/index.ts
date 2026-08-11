@@ -13,7 +13,7 @@
 import { connect } from "../../vendor/rynk-wasm/rynk_wasm";
 import { LinkSession } from "../link-session";
 import { RynkFrameBuffer, type RynkByteLink } from "../rynk-link";
-import type { SessionProvider } from "../types";
+import type { SessionProvider, SessionTarget } from "../types";
 import { initWasm } from "../wasm";
 
 interface NativeCandidate {
@@ -87,12 +87,29 @@ export const nativeProvider: SessionProvider = {
   title: "USB (native)",
   description: "Connect to a Rynk keyboard over USB through the desktop app's HID backend.",
   available: () => typeof window !== "undefined" && window.__TAURI__ !== undefined,
-  connect: () => connectNative(),
+  listTargets: listNativeTargets,
+  connect: (targetId) => connectNative(null, targetId),
   reconnect: () => {
     if (!hasConnected) throw new Error("No native keyboard has been connected yet");
     return connectNative(lastCandidate);
   },
 };
+
+async function listNativeTargets(): Promise<SessionTarget[]> {
+  let candidates: NativeCandidate[];
+  try {
+    candidates = await tauri().core.invoke<NativeCandidate[]>("rynk_list");
+  } catch {
+    // Older desktop shells do not expose enumeration. An empty list tells the
+    // app to use the shell's default-device behavior instead.
+    return [];
+  }
+  return candidates.map((candidate, index) => ({
+    id: candidate.path,
+    label: candidate.label,
+    detail: candidate.serial ? `Serial ${candidate.serial}` : `USB device ${index + 1}`,
+  }));
+}
 
 /**
  * Two keyboards of the same model expose identical labels, and only a
@@ -100,7 +117,10 @@ export const nativeProvider: SessionProvider = {
  * reconnect, prefer the previous serial/path but still tolerate a changed
  * hidraw path after USB re-enumeration.
  */
-async function connectNative(preferred: NativeCandidate | null = null): Promise<LinkSession> {
+async function connectNative(
+  preferred: NativeCandidate | null = null,
+  selectedPath?: string,
+): Promise<LinkSession> {
   const t = tauri();
   let candidates: NativeCandidate[] = [];
   try {
@@ -108,21 +128,25 @@ async function connectNative(preferred: NativeCandidate | null = null): Promise<
   } catch {
     // An older desktop shell has no rynk_list; fall back to its own choice.
   }
-  if (preferred) {
+  if (preferred && !selectedPath) {
     candidates.sort(
       (a, b) =>
         Number(matchesCandidate(b, preferred)) - Number(matchesCandidate(a, preferred)),
     );
   }
-  const paths: (string | undefined)[] = candidates.length
-    ? candidates.map((candidate) => candidate.path)
-    : [undefined];
+  const paths: (string | undefined)[] = selectedPath
+    ? [selectedPath]
+    : candidates.length
+      ? candidates.map((candidate) => candidate.path)
+      : [undefined];
 
   let failure: unknown;
   for (const path of paths) {
     try {
       const session = await openSession(path);
-      lastCandidate = candidates.find((candidate) => candidate.path === path) ?? null;
+      lastCandidate =
+        candidates.find((candidate) => candidate.path === path) ??
+        (path ? { path, label: "Rynk (native)" } : null);
       hasConnected = true;
       return session;
     } catch (error) {

@@ -17,28 +17,6 @@ function isRynkInterface(device: HIDDevice): boolean {
   return device.collections.some((c) => isRynkUsage(c.usagePage ?? -1, c.usage ?? -1));
 }
 
-/// Grants that failed to speak Rynk this page session. WebHID hands out
-/// grants in its own order and exposes no serial number, so two keyboards of
-/// the same model are indistinguishable before the handshake; without this,
-/// a bad grant that sorts first would be retried forever and the picker
-/// would never reappear.
-const rejected = new WeakSet<HIDDevice>();
-
-/** Every previously-granted Rynk interface worth trying, in browser order. */
-export async function grantedRynkDevices(): Promise<HIDDevice[]> {
-  try {
-    return (await navigator.hid.getDevices()).filter((d) => isRynkInterface(d) && !rejected.has(d));
-  } catch {
-    return [];
-  }
-}
-
-/// Record that `device` did not complete the Rynk handshake, so the next
-/// connect skips it and falls through to the picker once nothing is left.
-export function rejectRynkDevice(device: HIDDevice): void {
-  rejected.add(device);
-}
-
 /** Show the browser device picker and return the chosen Rynk interface. */
 export async function requestRynkDevice(): Promise<HIDDevice> {
   const devices = await navigator.hid.requestDevice({
