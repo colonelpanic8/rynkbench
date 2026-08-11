@@ -24,7 +24,7 @@ import type {
   BehaviorOptions,
   BleStatus,
   BuildInfo,
-  Combo,
+  ComboDefinition,
   ConnectionStatus,
   DeviceCapabilities,
   DeviceInfo,
@@ -203,8 +203,8 @@ export interface LightingSceneOps {
 /** Slot-table ops (combos, morse, forks) share one shape: the backend reads
  *  the full table (bulk endpoints where supported) and writes one slot. */
 export interface ComboOps {
-  readAll(): Promise<Combo[]>;
-  set(index: number, combo: Combo): Promise<void>;
+  readAll(): Promise<ComboDefinition[]>;
+  set(index: number, combo: ComboDefinition): Promise<void>;
 }
 
 export interface MorseOps {

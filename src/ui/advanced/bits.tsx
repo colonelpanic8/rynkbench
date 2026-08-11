@@ -3,7 +3,7 @@
 
 import type { ReactNode } from "react";
 import type {
-  Combo,
+  ComboDefinition,
   Fork,
   KeyAction,
   LedIndicator,
@@ -11,6 +11,7 @@ import type {
   MouseButtons,
   StateBits,
 } from "../../vendor/rynk-wasm/rynk_wasm";
+import { comboIsEmpty as definitionIsEmpty } from "../combos";
 import { EMPTY_MODS, keyActionGlyph } from "../labels";
 import { ModGrid } from "../keymap/ActionEditor";
 import type { PendingInfo, SlotKind } from "../state";
@@ -22,8 +23,8 @@ import { WarningIcon } from "../icons";
 /* Empty-slot semantics (mirror what fresh firmware reports)           */
 /* ------------------------------------------------------------------ */
 
-export function comboIsEmpty(combo: Combo): boolean {
-  return combo.output === "No" && combo.actions.length === 0;
+export function comboIsEmpty(combo: ComboDefinition): boolean {
+  return definitionIsEmpty(combo);
 }
 
 export function morseIsEmpty(morse: Morse): boolean {

@@ -3,7 +3,11 @@
 
 import { useState } from "react";
 import type { ReactNode } from "react";
-import type { Combo, KeyAction } from "../../vendor/rynk-wasm/rynk_wasm";
+import type {
+  ComboDefinition,
+  KeyAction,
+  MatrixPosition,
+} from "../../vendor/rynk-wasm/rynk_wasm";
 import type { KeyView } from "../../model/keyboard";
 import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
@@ -13,6 +17,16 @@ import { slotPendingId, useWorkbench } from "../state";
 import { Button, Chip, InspectorShell, SectionLabel, cx } from "../kit";
 import { CloseIcon, PlusIcon, TrashIcon } from "../icons";
 import { SlotStatus, comboIsEmpty } from "./bits";
+import {
+  comboIsActions,
+  comboLayer,
+  comboOutput,
+  comboTriggerCount,
+  comboWithLayer,
+  comboWithOutput,
+  emptyComboDefinition,
+  samePosition,
+} from "../combos";
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -21,6 +35,22 @@ function TriggerChip({ action, onRemove }: { action: KeyAction; onRemove: () => 
   return (
     <span className="inline-flex items-center gap-1 rounded-md border border-cap-edge bg-cap px-2 py-1 font-mono text-[12.5px] text-cap-ink">
       {glyph.text || "·"}
+      <button
+        type="button"
+        title="Remove trigger key"
+        onClick={onRemove}
+        className="cursor-pointer text-faint transition-colors duration-120 hover:text-danger"
+      >
+        <CloseIcon size={10} />
+      </button>
+    </span>
+  );
+}
+
+function PositionChip({ position, onRemove }: { position: MatrixPosition; onRemove: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md border border-cap-edge bg-cap px-2 py-1 font-mono text-[12.5px] text-cap-ink">
+      r{position.row}c{position.col}
       <button
         type="button"
         title="Remove trigger key"
@@ -45,7 +75,7 @@ export function CombosTab({
   const cols = caps.num_cols;
 
   const [sel, setSel] = useState<number | null>(null);
-  const [draft, setDraft] = useState<Combo | null>(null);
+  const [draft, setDraft] = useState<ComboDefinition | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const editing = sel !== null && draft !== null;
@@ -55,7 +85,7 @@ export function CombosTab({
 
   const open = (index: number) => {
     setSel(index);
-    setDraft(JSON.parse(JSON.stringify(state.combos[index])) as Combo);
+    setDraft(structuredClone(state.combos[index]));
     setPickerOpen(false);
   };
 
@@ -68,7 +98,7 @@ export function CombosTab({
     const free = state.combos.findIndex(comboIsEmpty);
     if (free === -1) return;
     setSel(free);
-    setDraft({ actions: [], output: "No", layer: undefined });
+    setDraft(emptyComboDefinition());
     setPickerOpen(false);
   };
 
@@ -79,17 +109,31 @@ export function CombosTab({
 
   // Trigger capture reads actions from the combo's scoped layer, else the
   // default layer — that is the keymap the chord will be matched against.
-  const captureLayer = draft?.layer ?? state.defaultLayer;
+  const captureLayer = draft ? (comboLayer(draft) ?? state.defaultLayer) : state.defaultLayer;
   const layerActions = state.layers[captureLayer];
 
   const toggleTrigger = (action: KeyAction) => {
-    if (!draft) return;
+    if (!draft || !comboIsActions(draft)) return;
     if (action === "No" || action === "Transparent") return;
-    const at = draft.actions.findIndex((a) => same(a, action));
+    const combo = draft.Actions;
+    const at = combo.actions.findIndex((a) => same(a, action));
     if (at >= 0) {
-      setDraft({ ...draft, actions: draft.actions.filter((_, i) => i !== at) });
-    } else if (draft.actions.length < caps.max_combo_keys) {
-      setDraft({ ...draft, actions: [...draft.actions, action] });
+      setDraft({ Actions: { ...combo, actions: combo.actions.filter((_, i) => i !== at) } });
+    } else if (combo.actions.length < caps.max_combo_keys) {
+      setDraft({ Actions: { ...combo, actions: [...combo.actions, action] } });
+    }
+  };
+
+  const togglePosition = (position: MatrixPosition) => {
+    if (!draft || comboIsActions(draft)) return;
+    const combo = draft.Positions;
+    const at = combo.positions.findIndex((candidate) => samePosition(candidate, position));
+    if (at >= 0) {
+      setDraft({
+        Positions: { ...combo, positions: combo.positions.filter((_, index) => index !== at) },
+      });
+    } else if (combo.positions.length < caps.max_combo_keys) {
+      setDraft({ Positions: { ...combo, positions: [...combo.positions, position] } });
     }
   };
 
@@ -100,16 +144,20 @@ export function CombosTab({
       glyph.text = key.label;
       glyph.dim = true;
     }
-    const isTrigger =
-      editing && action !== undefined && draft.actions.some((a) => same(a, action));
+    const isTrigger = editing && draft !== null && (comboIsActions(draft)
+      ? action !== undefined && draft.Actions.actions.some((candidate) => same(candidate, action))
+      : draft.Positions.positions.some((position) => samePosition(position, key)));
     return {
       glyph,
       inSelection: isTrigger,
-      disabled: editing && (action === "No" || action === "Transparent"),
+      disabled:
+        editing && draft !== null && comboIsActions(draft) &&
+        (action === "No" || action === "Transparent"),
     };
   };
 
-  const full = editing && draft.actions.length >= caps.max_combo_keys;
+  const triggerCount = draft ? comboTriggerCount(draft) : 0;
+  const full = editing && triggerCount >= caps.max_combo_keys;
 
   return (
     <>
@@ -122,7 +170,7 @@ export function CombosTab({
                 Click keys to add them to the chord
               </span>
               <Chip tone={full ? "accent" : "neutral"} className="tnum">
-                {draft.actions.length} / {caps.max_combo_keys} keys
+                {triggerCount} / {caps.max_combo_keys} keys
               </Chip>
               <span className="tnum text-[11.5px] text-faint">
                 capturing from layer {captureLayer}
@@ -141,8 +189,12 @@ export function CombosTab({
             interactive={editing}
             decorFor={decorFor}
             onKeyPointerDown={(key) => {
-              const action = layerActions?.[key.row * cols + key.col];
-              if (action !== undefined) toggleTrigger(action);
+              if (draft && comboIsActions(draft)) {
+                const action = layerActions?.[key.row * cols + key.col];
+                if (action !== undefined) toggleTrigger(action);
+              } else {
+                togglePosition({ row: key.row, col: key.col });
+              }
             }}
           />
         </BoardWell>
@@ -175,15 +227,18 @@ export function CombosTab({
               )}
             >
               <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ink">
-                {(index === sel && draft ? draft : combo).actions
-                  .map((a) => keyActionGlyph(a).text || "·")
-                  .join(" + ") || "—"}
+                {(() => {
+                  const displayed = index === sel && draft ? draft : combo;
+                  return comboIsActions(displayed)
+                    ? displayed.Actions.actions.map((a) => keyActionGlyph(a).text || "·").join(" + ") || "—"
+                    : displayed.Positions.positions.map((p) => `r${p.row}c${p.col}`).join(" + ") || "—";
+                })()}
                 <span className="mx-1.5 text-faint">→</span>
-                {keyActionGlyph((index === sel && draft ? draft : combo).output).text || "·"}
+                {keyActionGlyph(comboOutput(index === sel && draft ? draft : combo)).text || "·"}
               </span>
-              {(index === sel && draft ? draft : combo).layer !== undefined && (
+              {comboLayer(index === sel && draft ? draft : combo) !== undefined && (
                 <Chip className="tnum shrink-0">
-                  L{(index === sel && draft ? draft : combo).layer}
+                  L{comboLayer(index === sel && draft ? draft : combo)}
                 </Chip>
               )}
             </button>
@@ -197,51 +252,86 @@ export function CombosTab({
         {editing && (
           <div className="mt-4 flex min-h-0 flex-col gap-3 border-t border-line-soft pt-3">
             <div>
-              <SectionLabel>Trigger keys</SectionLabel>
+              <div className="flex items-center justify-between gap-3">
+                <SectionLabel>Trigger keys</SectionLabel>
+                <select
+                  value={comboIsActions(draft) ? "actions" : "positions"}
+                  onChange={(event) => {
+                    const output = comboOutput(draft);
+                    const layer = comboLayer(draft);
+                    setDraft(event.target.value === "actions"
+                      ? { Actions: { actions: [], output, layer } }
+                      : { Positions: { positions: [], output, layer } });
+                    setPickerOpen(false);
+                  }}
+                  className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                >
+                  <option value="actions">Match actions</option>
+                  <option value="positions">Match positions</option>
+                </select>
+              </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                {draft.actions.length === 0 && (
+                {triggerCount === 0 && (
                   <span className="text-[12px] text-faint">Click keys on the board…</span>
                 )}
-                {draft.actions.map((action, i) => (
-                  <TriggerChip
-                    key={i}
-                    action={action}
-                    onRemove={() =>
-                      setDraft({ ...draft, actions: draft.actions.filter((_, j) => j !== i) })
-                    }
-                  />
-                ))}
+                {comboIsActions(draft)
+                  ? draft.Actions.actions.map((action, i) => (
+                      <TriggerChip
+                        key={i}
+                        action={action}
+                        onRemove={() => setDraft({
+                          Actions: {
+                            ...draft.Actions,
+                            actions: draft.Actions.actions.filter((_, j) => j !== i),
+                          },
+                        })}
+                      />
+                    ))
+                  : draft.Positions.positions.map((position, i) => (
+                      <PositionChip
+                        key={`${position.row}:${position.col}`}
+                        position={position}
+                        onRemove={() => setDraft({
+                          Positions: {
+                            ...draft.Positions,
+                            positions: draft.Positions.positions.filter((_, j) => j !== i),
+                          },
+                        })}
+                      />
+                    ))}
               </div>
-              <button
-                type="button"
-                className="mt-1.5 cursor-pointer text-[11.5px] text-faint underline underline-offset-2 transition-colors duration-120 hover:text-mute"
-                onClick={() => setPickerOpen((v) => !v)}
-              >
-                {pickerOpen ? "Hide picker" : "Add a trigger without a physical key…"}
-              </button>
-              {pickerOpen && (
-                <div className="mt-2">
-                  <SlotPicker
-                    numLayers={caps.num_layers}
-                    onPick={(a) => {
-                      toggleTrigger({ Single: a });
-                      setPickerOpen(false);
-                    }}
-                  />
-                </div>
+              {comboIsActions(draft) && (
+                <>
+                  <button
+                    type="button"
+                    className="mt-1.5 cursor-pointer text-[11.5px] text-faint underline underline-offset-2 transition-colors duration-120 hover:text-mute"
+                    onClick={() => setPickerOpen((v) => !v)}
+                  >
+                    {pickerOpen ? "Hide picker" : "Add a trigger without a physical key…"}
+                  </button>
+                  {pickerOpen && (
+                    <div className="mt-2">
+                      <SlotPicker
+                        numLayers={caps.num_layers}
+                        onPick={(a) => {
+                          toggleTrigger({ Single: a });
+                          setPickerOpen(false);
+                        }}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
             <label className="flex items-center justify-between gap-3 text-[12.5px] text-mute">
               Only on layer
               <select
-                value={draft.layer ?? "any"}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    layer: e.target.value === "any" ? undefined : Number(e.target.value),
-                  })
-                }
+                value={comboLayer(draft) ?? "any"}
+                onChange={(e) => setDraft(comboWithLayer(
+                  draft,
+                  e.target.value === "any" ? undefined : Number(e.target.value),
+                ))}
                 className="rounded-lg border border-line bg-well px-2 py-1 text-[12.5px] text-ink"
               >
                 <option value="any">Any layer</option>
@@ -268,7 +358,7 @@ export function CombosTab({
               <SectionLabel>Output</SectionLabel>
               <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-line bg-raised px-3 py-2">
                 <span className="font-mono text-[13px] text-ink">
-                  {keyActionGlyph(draft.output).text || "unset"}
+                  {keyActionGlyph(comboOutput(draft)).text || "unset"}
                 </span>
               </div>
               {/* fixed-height frame: keeps the editor's internal scrolling from
@@ -276,9 +366,9 @@ export function CombosTab({
               <div className="mt-2 flex h-[360px] shrink-0 flex-col rounded-lg border border-line-soft bg-well/40 p-2.5">
                 <ActionEditor
                   key={sel}
-                  current={draft.output}
+                  current={comboOutput(draft)}
                   numLayers={caps.num_layers}
-                  onCommit={(output) => setDraft({ ...draft, output })}
+                  onCommit={(output) => setDraft(comboWithOutput(draft, output))}
                 />
               </div>
             </div>
@@ -289,8 +379,8 @@ export function CombosTab({
               <Button
                 variant="primary"
                 className="flex-1"
-                disabled={!dirty || pending || draft.actions.length < 2 || draft.output === "No"}
-                onClick={() => io.setSlot("combos", sel, JSON.parse(JSON.stringify(draft)) as Combo)}
+                disabled={!dirty || pending || triggerCount < 2 || comboOutput(draft) === "No"}
+                onClick={() => io.setSlot("combos", sel, structuredClone(draft))}
               >
                 Save combo
               </Button>
@@ -299,7 +389,7 @@ export function CombosTab({
                 title="Delete this combo (frees the slot)"
                 disabled={pending || (saved !== null && comboIsEmpty(saved))}
                 onClick={() => {
-                  io.setSlot("combos", sel, { actions: [], output: "No", layer: undefined });
+                  io.setSlot("combos", sel, emptyComboDefinition());
                   close();
                 }}
               >
@@ -309,7 +399,7 @@ export function CombosTab({
                 Close
               </Button>
             </div>
-            {editing && draft.actions.length === 1 && (
+            {editing && triggerCount === 1 && (
               <div className="text-[11.5px] text-warn">A combo needs at least two trigger keys.</div>
             )}
           </div>

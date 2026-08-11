@@ -10,7 +10,7 @@ import type { Dispatch } from "react";
 import type { RynkSession } from "../session/types";
 import type { ConnectedBundle, WorkbenchAction, WorkbenchState } from "../ui/state";
 import { errorMessage } from "../ui/state";
-import type { Combo, Fork, Morse } from "../vendor/rynk-wasm/rynk_wasm";
+import type { ComboDefinition, Fork, Morse } from "../vendor/rynk-wasm/rynk_wasm";
 import {
   assertSupportedMatrix,
   parseDocument,
@@ -258,7 +258,7 @@ async function writeBehaviors(
 
   const table = async (
     kind: "morse" | "combos" | "forks",
-    wanted: Morse[] | Combo[] | Fork[] | undefined,
+    wanted: Morse[] | ComboDefinition[] | Fork[] | undefined,
     capacity: number,
     noun: string,
   ) => {
@@ -275,7 +275,7 @@ async function writeBehaviors(
       dispatch({ type: "slotWriteStart", kind, index, value });
       try {
         if (kind === "morse") await session.morse.set(index, value as Morse);
-        else if (kind === "combos") await session.combos.set(index, value as Combo);
+        else if (kind === "combos") await session.combos.set(index, value as ComboDefinition);
         else await session.forks.set(index, value as Fork);
         dispatch({ type: "slotWriteOk", kind, index });
         changed += 1;
@@ -441,6 +441,12 @@ export function exportDocument(
   catalog: ExtensionCatalog,
   format: ConfigFormat,
   previous?: string,
+  incompleteReads: string[] = [],
 ): string {
+  if (incompleteReads.length > 0) {
+    throw new Error(
+      `Cannot export an incomplete device snapshot. Reconnect and try again.\n\nFailed reads:\n- ${incompleteReads.join("\n- ")}`,
+    );
+  }
   return renderDocument(snapshotFromState(state), catalog, format, previous);
 }

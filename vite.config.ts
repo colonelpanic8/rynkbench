@@ -2,7 +2,8 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig, searchForWorkspaceRoot } from "vite";
+import { searchForWorkspaceRoot } from "vite";
+import { configDefaults, defineConfig } from "vitest/config";
 
 const projectRoot = fileURLToPath(new URL(".", import.meta.url));
 
@@ -19,6 +20,9 @@ const wasmRoots = ["rynk-wasm", "glove80-config-wasm"].map((pkg) =>
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  test: {
+    exclude: [...configDefaults.exclude, "**/.worktrees/**"],
+  },
   server: {
     fs: {
       allow: [searchForWorkspaceRoot(projectRoot), ...wasmRoots],

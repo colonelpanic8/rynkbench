@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { initSync } from "../vendor/glove80-config-wasm/glove80_config_wasm";
 import type { ExtensionCatalog } from "./document";
 import { detectFormat, parseDocument, renderDocument, snapshotFromState } from "./document";
+import { exportDocument } from "./transfer";
 import type { WorkbenchState } from "../ui/state";
 import type { Morse } from "../vendor/rynk-wasm/rynk_wasm";
 
@@ -400,8 +401,8 @@ describe("snapshotFromState", () => {
       // The behavior tables a `TD(n)` cell resolves through. A document
       // describes these too, so an export that dropped them would make an
       // import a one-way door.
-      // Device reads include every capacity slot. Empty tail entries are not
-      // valid TOML morses and must not leak into the exported document.
+      // Device reads include every capacity slot. The shared Rust document
+      // renderer owns canonical trimming, so this adapter passes them through.
       morse: [
         ...LIVE_MORSE,
         { profile: LIVE_MORSE[0].profile, actions: [] },
@@ -440,7 +441,7 @@ describe("snapshotFromState", () => {
     } as unknown as WorkbenchState;
 
     const snapshot = snapshotFromState(state);
-    expect(snapshot.behaviors?.morses).toEqual(LIVE_MORSE);
+    expect(snapshot.behaviors?.morses).toEqual(state.morse);
     const text = renderDocument(snapshot, CATALOG, "toml", MINIMAL);
     const again = parseDocument(text, CATALOG);
     expect(again.snapshot.layers).toEqual(parsed.snapshot.layers);
@@ -462,5 +463,17 @@ describe("snapshotFromState", () => {
     expect(text).toContain("[behavior.morse.profiles.profile_000]");
     expect(text).toContain("hold_trigger_key_positions");
     expect(text).toContain("[[fork]]");
+  });
+
+  it("refuses to export fallback values from a partial device read", () => {
+    expect(() =>
+      exportDocument(
+        {} as WorkbenchState,
+        CATALOG,
+        "toml",
+        undefined,
+        ["combos: timed out", "macro buffer: disconnected"],
+      ),
+    ).toThrow(/incomplete device snapshot[\s\S]*combos: timed out[\s\S]*macro buffer/);
   });
 });

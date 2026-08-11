@@ -126,6 +126,7 @@ export function TopBar() {
         await catalog(),
         format,
         imported.current ?? undefined,
+        bundle.incompleteReads ?? [],
       );
       const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
       const link = document.createElement("a");

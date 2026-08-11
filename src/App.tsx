@@ -82,6 +82,27 @@ const EMPTY_TOPOLOGY: LightingTopology = {
 };
 
 async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
+  const incompleteReads: string[] = [];
+  const unsupported = (error: unknown): boolean => {
+    const message = error instanceof Error ? error.message : String(error);
+    return /UnknownCmd|Unimplemented|Unsupported|does not support/i.test(message);
+  };
+  const requiredRead = async <T,>(label: string, read: Promise<T>, fallback: T): Promise<T> => {
+    try {
+      return await read;
+    } catch (error) {
+      incompleteReads.push(`${label}: ${errorMessage(error)}`);
+      return fallback;
+    }
+  };
+  const optionalRead = async <T,>(label: string, read: Promise<T>, fallback: T): Promise<T> => {
+    try {
+      return await read;
+    } catch (error) {
+      if (!unsupported(error)) incompleteReads.push(`${label}: ${errorMessage(error)}`);
+      return fallback;
+    }
+  };
   const [info, caps, protocol, layout] = await Promise.all([
     session.device.info(),
     session.device.capabilities(),
@@ -121,14 +142,15 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
         session.lighting.capabilities(),
         session.lighting.state(),
       ]);
-    } catch {
+    } catch (error) {
+      incompleteReads.push(`lighting state: ${errorMessage(error)}`);
       topology = EMPTY_TOPOLOGY;
     }
-    try {
-      lightingOutputMode = await session.lighting.outputMode();
-    } catch {
-      lightingOutputMode = null;
-    }
+    lightingOutputMode = await optionalRead(
+      "lighting output mode",
+      session.lighting.outputMode(),
+      null,
+    );
     try {
       overlay = await session.lighting.readOverlay();
     } catch {
@@ -140,9 +162,12 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
       const status = await session.lighting.scenes.sceneStatus();
       if (status.capacity > 0) {
         sceneStatus = status;
-        scenes = await session.lighting.scenes.readScenes();
+        scenes = await requiredRead("lighting scenes", session.lighting.scenes.readScenes(), []);
       }
-    } catch {
+    } catch (error) {
+      if (!unsupported(error)) {
+        incompleteReads.push(`lighting scene status: ${errorMessage(error)}`);
+      }
       sceneStatus = null;
     }
     // Compiled scenes are an immutable, independently composited source. Old
@@ -169,9 +194,16 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
       const status = await session.lighting.conditionalScenes.status();
       if (status.capacity > 0) {
         runtimeConditionalStatus = status;
-        runtimeConditionalScenes = await session.lighting.conditionalScenes.read();
+        runtimeConditionalScenes = await requiredRead(
+          "conditional lighting scenes",
+          session.lighting.conditionalScenes.read(),
+          [],
+        );
       }
-    } catch {
+    } catch (error) {
+      if (!unsupported(error)) {
+        incompleteReads.push(`conditional lighting status: ${errorMessage(error)}`);
+      }
       runtimeConditionalStatus = null;
       runtimeConditionalScenes = [];
     }
@@ -179,12 +211,19 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     // feature-gated newer firmware; absence just hides the panel.
     try {
       lightingExtension = await session.lighting.extension();
-      lightingExtensionLayers = await session.lighting.extensionLayers().catch(() => null);
+      lightingExtensionLayers = await optionalRead(
+        "lighting extension layers",
+        session.lighting.extensionLayers(),
+        null,
+      );
       [extensionEffectNames, extensionPaletteNames] = await Promise.all([
-        session.lighting.extensionNames("Effects"),
-        session.lighting.extensionNames("Palettes"),
+        requiredRead("lighting effect names", session.lighting.extensionNames("Effects"), []),
+        requiredRead("lighting palette names", session.lighting.extensionNames("Palettes"), []),
       ]);
-    } catch {
+    } catch (error) {
+      if (!unsupported(error)) {
+        incompleteReads.push(`lighting extension: ${errorMessage(error)}`);
+      }
       lightingExtension = null;
       lightingExtensionLayers = null;
       extensionEffectNames = [];
@@ -200,7 +239,15 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
 
   const layerKeymaps = await session.keymap.readAll();
   const layers: KeyAction[][] = Array.from({ length: caps.num_layers }, (_, i) => {
-    return layerKeymaps.find((l) => l.layer === i)?.actions ?? [];
+    const keymap = layerKeymaps.find((candidate) => candidate.layer === i);
+    if (!keymap) throw new Error(`keymap read omitted layer ${i}`);
+    const expected = caps.num_rows * caps.num_cols;
+    if (keymap.actions.length !== expected) {
+      throw new Error(
+        `keymap layer ${i} returned ${keymap.actions.length} keys; expected ${expected}`,
+      );
+    }
+    return keymap.actions;
   });
 
   const [layerState, battery, connection, peripheralBattery] = await Promise.all([
@@ -218,8 +265,9 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
   const defaultLayer = layerState.defaultLayer;
   const currentLayer = Math.max(defaultLayer, ...activeLayers);
 
-  // Advanced tables — every read is capability-gated and failure-tolerant so
-  // sparse firmware degrades to hidden features, never a failed connect.
+  // Advanced tables are capability-gated. Failed advertised reads are retained
+  // as diagnostics so the workbench can open, but export cannot mistake the
+  // fallback for an intentionally empty table.
   const [
     combos,
     morse,
@@ -234,23 +282,38 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     modifierState,
   ] =
     await Promise.all([
-      caps.max_combos > 0 ? session.combos.readAll().catch(() => []) : [],
-      caps.max_morse > 0 ? session.morse.readAll().catch(() => []) : [],
-      caps.max_forks > 0 ? session.forks.readAll().catch(() => []) : [],
+      caps.max_combos > 0
+        ? requiredRead("combos", session.combos.readAll(), [])
+        : [],
+      caps.max_morse > 0
+        ? requiredRead("morse table", session.morse.readAll(), [])
+        : [],
+      caps.max_forks > 0
+        ? requiredRead("fork table", session.forks.readAll(), [])
+        : [],
       caps.macro_space_size > 0
-        ? session.macros.read().catch(() => new Uint8Array(0))
+        ? requiredRead("macro buffer", session.macros.read(), new Uint8Array(0))
         : new Uint8Array(0),
-      session.behavior.get().catch(() => null),
-      session.behavior.options().catch(() => null),
-      session.behavior.profiles().catch(() => ({ capacity: 0, total: 0, entries: [] })),
-      session.behavior.holdTriggerPositions().catch(() => null),
-      session.behavior.autoMouseLayers().catch(() => null),
+      optionalRead("behavior timing", session.behavior.get(), null),
+      optionalRead("behavior options", session.behavior.options(), null),
+      optionalRead(
+        "morse profiles",
+        session.behavior.profiles(),
+        { capacity: 0, total: 0, entries: [] },
+      ),
+      optionalRead(
+        "morse hold-trigger positions",
+        session.behavior.holdTriggerPositions(),
+        null,
+      ),
+      optionalRead("auto-mouse layers", session.behavior.autoMouseLayers(), null),
       session.device.ledIndicator().catch(() => null),
       session.device.modifierState().catch((): ModifierCombination | null => null),
     ]);
 
   return {
     session,
+    incompleteReads,
     model,
     info,
     caps,

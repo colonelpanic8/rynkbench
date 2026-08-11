@@ -10,7 +10,7 @@
 // transaction) hold the queue for their whole critical section.
 
 import type {
-  Combo,
+  ComboDefinition,
   DeviceCapabilities,
   Fork,
   KeyAction,
@@ -631,7 +631,7 @@ export class LinkSession implements RynkSession {
 
     this.combos = {
       readAll: () => this.run(() => this.readCombos()),
-      set: (index, combo) => this.run(() => client.set_combo(index, combo)),
+      set: (index, combo) => this.run(() => client.set_combo_definition(index, combo)),
     };
 
     this.morse = {
@@ -763,13 +763,13 @@ export class LinkSession implements RynkSession {
     }
   }
 
-  private async readCombos(): Promise<Combo[]> {
+  private async readCombos(): Promise<ComboDefinition[]> {
     const caps = await this.client.get_capabilities();
     return this.readSlotTable(
       caps,
       caps.max_combos,
-      async (start) => (await this.client.get_combo_bulk(start)).configs,
-      (index) => this.client.get_combo(index),
+      async (start) => (await this.client.get_combo_definition_bulk(start)).definitions,
+      (index) => this.client.get_combo_definition(index),
     );
   }
 
