@@ -382,6 +382,7 @@ class MockSession implements RynkSession {
   private battery: BatteryStatus;
   private revision = 1;
   private outputEnabled = true;
+  private outputModeState: LightingOutputModeState | null;
   private brightness: number;
   private background: LightingBackgroundState;
   private overlay = new Map<LightingLedId, OverlayEntry>();
@@ -438,6 +439,9 @@ class MockSession implements RynkSession {
       return structuredClone(cell);
     });
     this.battery = spec.battery;
+    this.outputModeState = spec.lightingOutputMode
+      ? structuredClone(spec.lightingOutputMode)
+      : null;
     this.brightness = spec.brightness;
     this.background = { ...spec.background };
     this.extensionState = spec.extensionEffects ? { ...spec.extensionEffects.initial } : null;
@@ -572,10 +576,34 @@ class MockSession implements RynkSession {
     state: () => latency(() => this.lightingState()),
     outputMode: () =>
       latency(() => {
-        if (this.spec.lightingOutputMode === undefined) {
+        if (this.outputModeState === null) {
           throw new Error("this firmware does not support lighting output-mode readback");
         }
-        return structuredClone(this.spec.lightingOutputMode);
+        return structuredClone(this.outputModeState);
+      }),
+    setWakeLayers: (layers) =>
+      latency(() => {
+        if (this.outputModeState === null) {
+          throw new Error("this firmware does not support lighting wake-layer configuration");
+        }
+        const maxMask = 2 ** this.spec.capabilities.num_layers;
+        if (!Number.isSafeInteger(layers) || layers < 0 || layers >= maxMask) {
+          throw new Error(`wake-layer mask ${layers} is outside this keyboard's layers`);
+        }
+        const wakeActive = [...this.activeLayers].some(
+          (layer) => Math.floor(layers / 2 ** layer) % 2 === 1,
+        );
+        this.outputModeState = {
+          ...this.outputModeState,
+          wake_layers: layers,
+          wake_active: wakeActive,
+          effective_enabled:
+            wakeActive ||
+            this.outputModeState.mode === "AlwaysOn" ||
+            (this.outputModeState.mode === "PoweredOnly" && this.outputModeState.powered),
+        };
+        this.touchLighting();
+        return structuredClone(this.outputModeState);
       }),
     topology: () => latency(() => this.spec.topology),
     replaceOverlay: (cells) =>
@@ -1124,16 +1152,18 @@ class MockSession implements RynkSession {
 
   private conditionalSceneStatus(): LightingConditionalSceneStatus {
     this.requireConditionalScenes();
+    const controls = structuredClone(
+      this.spec.lightingControls ?? {
+        output_toggle_user_action: undefined,
+        wake_layers: 0,
+      },
+    );
+    if (this.outputModeState !== null) controls.wake_layers = this.outputModeState.wake_layers;
     return {
       topology_revision: this.spec.topology.revision,
       cell_len: this.spec.conditionalScenes?.length ?? 0,
       chunk_capacity: SCENE_CHUNK_CAPACITY,
-      controls: structuredClone(
-        this.spec.lightingControls ?? {
-          output_toggle_user_action: undefined,
-          wake_layers: 0,
-        },
-      ),
+      controls,
     };
   }
 

@@ -50,6 +50,11 @@ key inspector retain the raw matrix row and column for diagnostics.
   default-layer changes, lighting, profiles, and advanced tables are excluded
   until their multi-write or staged operations can be reversed atomically.
 
+- **A Magic Layer is a lighting convention, not a firmware layer type.** In
+  Lighting, select an ordinary layer target, paint and apply its device-backed
+  scene, then use **MoErgo Magic Layer** to keep that scene visible when the
+  normal lighting policy turns the board off. The scene and wake-layer policy
+  are stored on the keyboard and work for both Glove80 and Go60 layouts.
 - **Tap-hold profiles are live configuration.** `Save profile` writes the
   selected slot directly to the connected keyboard; bindings that name that
   slot use the new timings immediately, without reloading a file or flashing.

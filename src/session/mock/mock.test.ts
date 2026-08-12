@@ -334,6 +334,21 @@ describe("compiled firmware lighting", () => {
       expect((await session.lighting.capabilities()).features & (1 << 10)).not.toBe(0);
     });
   });
+
+  it("durably designates ordinary layers as Magic through the wake-layer policy", async () => {
+    await withSession(glove80Board, async (session) => {
+      const layers = 2 ** 1 + 2 ** 2;
+      await expect(session.lighting.setWakeLayers(layers)).resolves.toMatchObject({
+        wake_layers: layers,
+      });
+      await expect(session.lighting.outputMode()).resolves.toMatchObject({ wake_layers: layers });
+      await expect(session.lighting.scenes.conditionalStatus()).resolves.toMatchObject({
+        controls: { wake_layers: layers },
+      });
+
+      expect((await session.lighting.scenes.readScenes()).length).toBe(10);
+    });
+  });
 });
 
 describe("runtime conditional scenes", () => {

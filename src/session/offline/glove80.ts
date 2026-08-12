@@ -31,6 +31,10 @@ export function offlineGlove80Board(snapshot?: RuntimeSnapshot): BoardSpec {
   const layers = structuredClone(snapshot?.layers ?? defaultLayers());
   const behaviors = snapshot?.behaviors;
   const lighting = snapshot?.lighting;
+  const wakeLayers = (lighting?.wake_layers ?? [2]).reduce(
+    (mask, layer) => mask + 2 ** layer,
+    0,
+  );
   const extensionEffects = structuredClone(glove80Board.extensionEffects!);
   for (const write of lighting?.effect_params ?? []) {
     const param = extensionEffects.params?.[write.effect]?.[write.index];
@@ -93,7 +97,7 @@ export function offlineGlove80Board(snapshot?: RuntimeSnapshot): BoardSpec {
     compiledScenePolicy: "EffectiveOnly",
     initialLayerPolicy: lighting?.scene_policy ?? "EffectiveOnly",
     conditionalScenes: [],
-    lightingControls: { output_toggle_user_action: undefined, wake_layers: 0 },
+    lightingControls: { output_toggle_user_action: undefined, wake_layers: wakeLayers },
     runtimeConditionalCapacity: Math.max(64, lighting?.conditional_scenes?.length ?? 0),
     runtimeConditionalPredicates: true,
     seedRuntimeConditionalScenes: structuredClone(lighting?.conditional_scenes ?? []),
@@ -103,6 +107,7 @@ export function offlineGlove80Board(snapshot?: RuntimeSnapshot): BoardSpec {
       powered: false,
       wake_active: false,
       effective_enabled: true,
+      wake_layers: wakeLayers,
     },
     extensionEffects: {
       ...extensionEffects,

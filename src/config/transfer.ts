@@ -380,6 +380,24 @@ async function writeLighting(
     skipped.push(`output mode (${desired.output_mode}; set it from the keyboard)`);
   }
 
+  const wantedWakeLayers = desired.wake_layers.reduce(
+    (mask, layer) => mask + 2 ** layer,
+    0,
+  );
+  const presentWakeLayers =
+    state.lightingOutputMode?.wake_layers ?? state.lightingControls.wake_layers;
+  if (wantedWakeLayers !== presentWakeLayers) {
+    if (state.lightingOutputMode === null) {
+      skipped.push("Magic layers (this keyboard does not support runtime wake-layer policy)");
+    } else {
+      const outputMode = await session.lighting.setWakeLayers(wantedWakeLayers);
+      dispatch({ type: "wakeLayersSet", outputMode });
+      applied.push(
+        `${desired.wake_layers.length} Magic layer${desired.wake_layers.length === 1 ? "" : "s"}`,
+      );
+    }
+  }
+
   if (state.scenePolicy !== null && desired.scene_policy !== state.scenePolicy) {
     const lightingState = await session.lighting.scenes.setLayerPolicy(desired.scene_policy);
     dispatch({ type: "scenePolicySet", state: lightingState, policy: desired.scene_policy });

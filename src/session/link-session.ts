@@ -595,6 +595,7 @@ export class LinkSession implements RynkSession {
       capabilities: () => this.run(() => client.get_lighting_capabilities()),
       state: () => this.run(() => client.get_lighting_state()),
       outputMode: () => this.run(() => this.readOutputMode()),
+      setWakeLayers: (layers) => this.run(() => this.setLightingWakeLayers(layers)),
       topology: () => this.run(() => this.readTopology()),
       replaceOverlay: (cells) => this.run(() => this.replaceOverlayCells(cells)),
       clearOverlay: () =>
@@ -1061,6 +1062,24 @@ export class LinkSession implements RynkSession {
       throw new Error("this firmware does not support lighting output-mode readback");
     }
     return this.client.get_lighting_output_mode();
+  }
+
+  private async setLightingWakeLayers(layers: number): Promise<LightingOutputModeState> {
+    await this.readOutputMode();
+    const current = await this.client.get_lighting_state();
+    try {
+      return await this.client.set_lighting_wake_layers({
+        expected_revision: current.revision,
+        layers,
+      });
+    } catch (error) {
+      if (!String(error).includes("RevisionConflict")) throw error;
+      const fresh = await this.client.get_lighting_state();
+      return this.client.set_lighting_wake_layers({
+        expected_revision: fresh.revision,
+        layers,
+      });
+    }
   }
 
   private async readExtension(): Promise<LightingExtension> {

@@ -124,6 +124,8 @@ export interface LightingOps {
   state(): Promise<LightingState>;
   /** Configured three-state output policy and its live effective state. */
   outputMode(): Promise<LightingOutputModeState>;
+  /** Durably replace the ordinary layers that temporarily wake lighting. */
+  setWakeLayers(layers: number): Promise<LightingOutputModeState>;
   topology(): Promise<LightingTopology>;
   /** Atomically replace the whole overlay (wraps the chunked transaction). */
   replaceOverlay(cells: LightingOverlayCell[]): Promise<LightingState>;
