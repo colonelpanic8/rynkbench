@@ -9,8 +9,13 @@
 // overlap slightly (Glove80 thumb clusters), so labels must never be painted
 // over by a neighbouring cap drawn later.
 
-import { useMemo } from "react";
-import type { PointerEvent as ReactPointerEvent, ReactNode, SVGProps } from "react";
+import { useMemo, useRef } from "react";
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+  SVGProps,
+} from "react";
 import type { Encoder, Key, Rect } from "../vendor/rynk-wasm/rynk_wasm";
 import type { KeyboardModel, KeyView } from "../model/keyboard";
 import type { KeyGlyph } from "./labels";
@@ -18,11 +23,18 @@ import { cx } from "./kit";
 
 export interface KeyDecor {
   glyph?: KeyGlyph;
+  /** Accessible description of the key and its current action. */
+  ariaLabel?: string;
+  ariaKeyShortcuts?: string;
   /** Per-key lighting color (CSS), rendered as a flat cap fill. */
   fill?: string;
   /** Device-wide base lighting, rendered across the full cap below labels. */
   backgroundFill?: string;
-  fillAnim?: { name: "led-blink" | "led-breathe"; periodMs: number; delayMs?: number };
+  fillAnim?: {
+    name: "led-blink" | "led-breathe";
+    periodMs: number;
+    delayMs?: number;
+  };
   staged?: boolean;
   selected?: boolean;
   pending?: boolean;
@@ -50,6 +62,15 @@ export interface KeyboardCanvasProps {
   encoderDecorFor?: (enc: Encoder) => EncoderDecor;
   onKeyPointerDown?: (key: KeyView, ev: ReactPointerEvent) => void;
   onKeyPointerEnter?: (key: KeyView, ev: ReactPointerEvent) => void;
+  onKeyKeyboardActivate?: (key: KeyView, ev: ReactKeyboardEvent) => void;
+  onKeyFocus?: (key: KeyView) => void;
+  /** Pointer drag gesture. Callers define the operation (keymap uses move). */
+  onKeyDrop?: (source: KeyView, destination: KeyView) => void;
+  onKeyDragChange?: (
+    source: KeyView | null,
+    destination: KeyView | null,
+  ) => void;
+  keyDraggable?: (key: KeyView) => boolean;
   onEncoderPointerDown?: (enc: Encoder) => void;
   onBackgroundPointerDown?: () => void;
   interactive?: boolean;
@@ -164,7 +185,9 @@ function rotatedCorners(
 
 function shapeCorners(shape: Key, inflate: number): Array<[number, number]> {
   const rects = shape.rect2 ? [shape.rect, shape.rect2] : [shape.rect];
-  return rects.flatMap((r) => rotatedCorners(r, shape.r, inflate, shape.rect.x, shape.rect.y));
+  return rects.flatMap((r) =>
+    rotatedCorners(r, shape.r, inflate, shape.rect.x, shape.rect.y),
+  );
 }
 
 function boxOf(corners: Array<[number, number]>): Box {
@@ -182,25 +205,36 @@ function boxOf(corners: Array<[number, number]>): Box {
 }
 
 function boxesTouch(a: Box, b: Box): boolean {
-  return a.minX <= b.maxX && b.minX <= a.maxX && a.minY <= b.maxY && b.minY <= a.maxY;
+  return (
+    a.minX <= b.maxX && b.minX <= a.maxX && a.minY <= b.maxY && b.minY <= a.maxY
+  );
 }
 
 /** Andrew's monotone-chain convex hull. */
 function convexHull(points: Array<[number, number]>): Array<[number, number]> {
   const pts = [...points].sort((p, q) => p[0] - q[0] || p[1] - q[1]);
   if (pts.length <= 2) return pts;
-  const cross = (o: [number, number], a: [number, number], b: [number, number]) =>
-    (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const cross = (
+    o: [number, number],
+    a: [number, number],
+    b: [number, number],
+  ) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
   const lower: Array<[number, number]> = [];
   for (const p of pts) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0)
+    while (
+      lower.length >= 2 &&
+      cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0
+    )
       lower.pop();
     lower.push(p);
   }
   const upper: Array<[number, number]> = [];
   for (let i = pts.length - 1; i >= 0; i--) {
     const p = pts[i];
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0)
+    while (
+      upper.length >= 2 &&
+      cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0
+    )
       upper.pop();
     upper.push(p);
   }
@@ -319,16 +353,21 @@ function KeyShape({
   interactive,
   onPointerDown,
   onPointerEnter,
+  onKeyboardActivate,
+  onFocus,
 }: {
   view: KeyView;
   decor: KeyDecor;
   interactive: boolean;
   onPointerDown?: (key: KeyView, ev: ReactPointerEvent) => void;
   onPointerEnter?: (key: KeyView, ev: ReactPointerEvent) => void;
+  onKeyboardActivate?: (key: KeyView, ev: ReactKeyboardEvent) => void;
+  onFocus?: (key: KeyView) => void;
 }) {
   const { shape } = view;
   const deg = shape.r;
   const clickable = interactive && !decor.disabled;
+  const keyboardInteractive = clickable && onKeyboardActivate !== undefined;
 
   const capFill = decor.fill ?? decor.backgroundFill ?? "var(--color-cap)";
 
@@ -338,7 +377,8 @@ function KeyShape({
         animationName: anim.name,
         animationDuration: `${Math.max(200, anim.periodMs)}ms`,
         animationDelay: `${anim.delayMs ?? 0}ms`,
-        animationTimingFunction: anim.name === "led-breathe" ? "ease-in-out" : "steps(1)",
+        animationTimingFunction:
+          anim.name === "led-breathe" ? "ease-in-out" : "steps(1)",
         animationIterationCount: "infinite" as const,
       }
     : undefined;
@@ -349,17 +389,43 @@ function KeyShape({
   return (
     <g
       className={`key-group${clickable ? "" : " key-static"}`}
+      data-key-row={view.row}
+      data-key-col={view.col}
       transform={`rotate(${deg} ${cx0} ${cy0})`}
       opacity={decor.disabled ? 0.38 : 1}
+      role={keyboardInteractive ? "button" : undefined}
+      tabIndex={keyboardInteractive ? 0 : undefined}
+      aria-label={keyboardInteractive ? decor.ariaLabel : undefined}
+      aria-keyshortcuts={clickable ? decor.ariaKeyShortcuts : undefined}
       onPointerDown={clickable ? (ev) => onPointerDown?.(view, ev) : undefined}
-      onPointerEnter={clickable ? (ev) => onPointerEnter?.(view, ev) : undefined}
+      onPointerEnter={
+        clickable ? (ev) => onPointerEnter?.(view, ev) : undefined
+      }
+      onFocus={keyboardInteractive ? () => onFocus?.(view) : undefined}
+      onKeyDown={
+        keyboardInteractive
+          ? (ev) => {
+              if (ev.key !== "Enter" && ev.key !== " " && ev.key !== "Escape")
+                return;
+              if (ev.key !== "Escape") ev.preventDefault();
+              onKeyboardActivate?.(view, ev);
+            }
+          : undefined
+      }
     >
       <g
         className="key-lift"
-        style={{ transform: decor.selected ? "translateY(-0.045px)" : undefined }}
+        style={{
+          transform: decor.selected ? "translateY(-0.045px)" : undefined,
+        }}
       >
         {/* cap side (depth) */}
-        <KeyRects shape={shape} inset={CAP_INSET} dy={CAP_DROP} fill="var(--color-cap-side)" />
+        <KeyRects
+          shape={shape}
+          inset={CAP_INSET}
+          dy={CAP_DROP}
+          fill="var(--color-cap-side)"
+        />
         {/* outline pass (drawn under the fill pass so unions stay clean) */}
         <KeyRects
           shape={shape}
@@ -373,7 +439,9 @@ function KeyShape({
                 : "var(--color-cap-edge)"
           }
           strokeWidth={decor.staged || decor.error ? 0.05 : 0.028}
-          strokeDasharray={decor.staged && !decor.error ? "0.1 0.07" : undefined}
+          strokeDasharray={
+            decor.staged && !decor.error ? "0.1 0.07" : undefined
+          }
         />
         {/* Lighting is deliberately a flat color swatch. Effect timing, when
             present, animates the whole swatch rather than simulating a diode. */}
@@ -382,7 +450,12 @@ function KeyShape({
           className={decor.fill ? "key-paint-pop" : undefined}
           style={fillStyle}
         >
-          <KeyRects shape={shape} inset={CAP_INSET} className="key-cap" fill={capFill} />
+          <KeyRects
+            shape={shape}
+            inset={CAP_INSET}
+            className="key-cap"
+            fill={capFill}
+          />
         </g>
 
         {/* pending / error status dot */}
@@ -417,7 +490,9 @@ function KeyRing({ view, decor }: { view: KeyView; decor: KeyDecor }) {
     >
       <g
         className="key-lift"
-        style={{ transform: decor.selected ? "translateY(-0.045px)" : undefined }}
+        style={{
+          transform: decor.selected ? "translateY(-0.045px)" : undefined,
+        }}
       >
         {/* zone hover / bulk selection emphasis */}
         {(decor.highlight || decor.inSelection) && (
@@ -482,7 +557,9 @@ function KeyLabel({ view, decor }: { view: KeyView; decor: KeyDecor }) {
     >
       <g
         className="key-lift"
-        style={{ transform: decor.selected ? "translateY(-0.045px)" : undefined }}
+        style={{
+          transform: decor.selected ? "translateY(-0.045px)" : undefined,
+        }}
       >
         <text
           x={cxc}
@@ -539,7 +616,12 @@ function EncoderShape({
       className={`key-group${interactive ? "" : " key-static"}`}
       onPointerDown={interactive ? () => onPointerDown?.(enc) : undefined}
     >
-      <circle cx={enc.x} cy={enc.y + CAP_DROP} r={0.42} fill="var(--color-cap-side)" />
+      <circle
+        cx={enc.x}
+        cy={enc.y + CAP_DROP}
+        r={0.42}
+        fill="var(--color-cap-side)"
+      />
       <circle
         cx={enc.x}
         cy={enc.y}
@@ -611,6 +693,11 @@ export function KeyboardCanvas({
   encoderDecorFor,
   onKeyPointerDown,
   onKeyPointerEnter,
+  onKeyKeyboardActivate,
+  onKeyFocus,
+  onKeyDrop,
+  onKeyDragChange,
+  keyDraggable,
   onEncoderPointerDown,
   onBackgroundPointerDown,
   interactive = true,
@@ -619,11 +706,44 @@ export function KeyboardCanvas({
   const vb = boardViewBox(model);
   const viewBox = `${vb.x} ${vb.y} ${vb.w} ${vb.h}`;
   const plates = useMemo(() => computePlates(model), [model]);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    source: KeyView;
+    destination: KeyView | null;
+    started: boolean;
+  } | null>(null);
+
+  const keyAtPoint = (clientX: number, clientY: number): KeyView | null => {
+    const element = document
+      .elementFromPoint(clientX, clientY)
+      ?.closest<SVGGElement>("[data-key-row][data-key-col]");
+    if (!element || !svgRef.current?.contains(element)) return null;
+    const row = Number(element.dataset.keyRow);
+    const col = Number(element.dataset.keyCol);
+    return model.keys.find((key) => key.row === row && key.col === col) ?? null;
+  };
+
+  const finishDrag = (pointerId: number, cancelled: boolean) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== pointerId) return;
+    dragRef.current = null;
+    if (svgRef.current?.hasPointerCapture(pointerId)) {
+      svgRef.current.releasePointerCapture(pointerId);
+    }
+    if (!cancelled && drag.started && drag.destination) {
+      onKeyDrop?.(drag.source, drag.destination);
+    }
+    onKeyDragChange?.(null, null);
+  };
 
   const decorated = model.keys.map((key) => ({ key, decor: decorFor(key) }));
 
   return (
     <svg
+      ref={svgRef}
       viewBox={viewBox}
       className={className}
       style={{ touchAction: "none", display: "block" }}
@@ -631,6 +751,34 @@ export function KeyboardCanvas({
       onPointerDown={(ev) => {
         if (ev.target === ev.currentTarget) onBackgroundPointerDown?.();
       }}
+      onPointerMove={(ev) => {
+        const drag = dragRef.current;
+        if (!drag || drag.pointerId !== ev.pointerId) return;
+        if (
+          !drag.started &&
+          Math.hypot(ev.clientX - drag.startX, ev.clientY - drag.startY) < 6
+        ) {
+          return;
+        }
+        drag.started = true;
+        ev.preventDefault();
+        const candidate = keyAtPoint(ev.clientX, ev.clientY);
+        const destination =
+          candidate &&
+          (candidate.row !== drag.source.row ||
+            candidate.col !== drag.source.col)
+            ? candidate
+            : null;
+        if (
+          destination?.row !== drag.destination?.row ||
+          destination?.col !== drag.destination?.col
+        ) {
+          drag.destination = destination;
+          onKeyDragChange?.(drag.source, destination);
+        }
+      }}
+      onPointerUp={(ev) => finishDrag(ev.pointerId, false)}
+      onPointerCancel={(ev) => finishDrag(ev.pointerId, true)}
     >
       {/* faint backplates: each physically connected cluster (a split half
           together with its thumbs) reads as one piece, statically */}
@@ -653,8 +801,23 @@ export function KeyboardCanvas({
           view={key}
           decor={decor}
           interactive={interactive}
-          onPointerDown={onKeyPointerDown}
+          onPointerDown={(view, ev) => {
+            onKeyPointerDown?.(view, ev);
+            if (!onKeyDrop || ev.button !== 0 || keyDraggable?.(view) === false)
+              return;
+            dragRef.current = {
+              pointerId: ev.pointerId,
+              startX: ev.clientX,
+              startY: ev.clientY,
+              source: view,
+              destination: null,
+              started: false,
+            };
+            svgRef.current?.setPointerCapture(ev.pointerId);
+          }}
           onPointerEnter={onKeyPointerEnter}
+          onKeyboardActivate={onKeyKeyboardActivate}
+          onFocus={onKeyFocus}
         />
       ))}
 

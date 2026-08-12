@@ -46,7 +46,8 @@
   --color-plate: oklch(17.2% 0.011 240);
 
   --font-sans: "Inter", "Inter Variable", system-ui, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+  --font-mono:
+    ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
 
   --ease-out-soft: cubic-bezier(0.25, 0.8, 0.35, 1);
 
@@ -153,6 +154,15 @@ body {
 /* Hover affordance: CSS wins over the SVG fill attribute. */
 .key-group:not(.key-static):hover .key-cap {
   fill: var(--color-hover);
+}
+
+.key-group:not(.key-static):focus-visible {
+  outline: none;
+}
+
+.key-group:not(.key-static):focus-visible .key-cap {
+  stroke: var(--color-accent);
+  stroke-width: 0.05px;
 }
 
 /* The recessed board well behind every canvas. */

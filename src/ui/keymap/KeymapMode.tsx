@@ -1,13 +1,21 @@
 // Keymap mode: layer tabs over the canvas; binding editor in the inspector.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { EncoderAction, KeyAction } from "../../vendor/rynk-wasm/rynk_wasm";
+import type {
+  EncoderAction,
+  KeyAction,
+} from "../../vendor/rynk-wasm/rynk_wasm";
 import type { KeyView } from "../../model/keyboard";
 import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
 import { keyActionGlyph, keyActionDescription } from "../labels";
 import { encoderPendingId, keyPendingId, useWorkbench } from "../state";
 import { ActionEditor } from "./ActionEditor";
+import {
+  keyClipboardShortcut,
+  parseKeyActionClipboard,
+  serializeKeyAction,
+} from "./keyManipulation";
 import { Button, SectionLabel, cx } from "../kit";
 import { StarIcon, WarningIcon, CloseIcon } from "../icons";
 
@@ -20,7 +28,9 @@ function LayerTabs() {
   useLayoutEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
-    const btn = wrap.querySelector<HTMLButtonElement>(`[data-layer="${state.uiLayer}"]`);
+    const btn = wrap.querySelector<HTMLButtonElement>(
+      `[data-layer="${state.uiLayer}"]`,
+    );
     if (btn) setUnderline({ left: btn.offsetLeft, width: btn.offsetWidth });
   }, [state.uiLayer, numLayers]);
 
@@ -52,7 +62,11 @@ function LayerTabs() {
         })}
         <div
           className="absolute -bottom-px h-0.5 rounded-full bg-accent transition-all duration-180"
-          style={{ left: underline.left, width: underline.width, transitionTimingFunction: "cubic-bezier(0.25,0.8,0.35,1)" }}
+          style={{
+            left: underline.left,
+            width: underline.width,
+            transitionTimingFunction: "cubic-bezier(0.25,0.8,0.35,1)",
+          }}
         />
       </div>
       {state.uiLayer !== state.currentLayer && (
@@ -77,13 +91,234 @@ function LayerTabs() {
 }
 
 export function KeymapCenter() {
-  const { bundle, state, dispatch } = useWorkbench();
+  const { bundle, state, dispatch, io } = useWorkbench();
   const cols = bundle.caps.num_cols;
   const layer = state.layers[state.uiLayer];
+  const [drag, setDrag] = useState<{
+    source: KeyView;
+    destination: KeyView | null;
+  } | null>(null);
+  const [keyboardMove, setKeyboardMove] = useState<{
+    layer: number;
+    source: KeyView;
+    destination: KeyView | null;
+  } | null>(null);
+  const [manipulationMessage, setManipulationMessage] = useState<string | null>(
+    null,
+  );
+  const dragLayerRef = useRef<number | null>(null);
+  const latestStateRef = useRef(state);
+  const localClipboardRef = useRef<KeyAction | null>(null);
+  latestStateRef.current = state;
+
+  useEffect(() => {
+    if (
+      dragLayerRef.current !== null &&
+      dragLayerRef.current !== state.uiLayer
+    ) {
+      setManipulationMessage(
+        "Move cancelled because the selected layer changed.",
+      );
+    }
+    dragLayerRef.current = null;
+    setDrag(null);
+    setKeyboardMove(null);
+  }, [state.uiLayer]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const shortcut = keyClipboardShortcut(event);
+      const selection = state.selection;
+      if (
+        !shortcut ||
+        selection?.type !== "key" ||
+        window.getSelection()?.isCollapsed === false
+      )
+        return;
+      const selectedLayer = state.uiLayer;
+      const { row, col } = selection;
+      const action = state.layers[selectedLayer]?.[row * cols + col];
+      if (action === undefined) return;
+      event.preventDefault();
+
+      if (shortcut === "copy") {
+        localClipboardRef.current = structuredClone(action);
+        if (!navigator.clipboard?.writeText) {
+          setManipulationMessage(
+            "Copied within Rynkbench; system clipboard access is unavailable.",
+          );
+          return;
+        }
+        void navigator.clipboard.writeText(serializeKeyAction(action)).then(
+          () =>
+            setManipulationMessage(
+              `Copied ${keyActionDescription(action)} from Layer ${selectedLayer}, r${row} c${col}.`,
+            ),
+          () =>
+            setManipulationMessage(
+              "Copied within Rynkbench; the browser did not allow system clipboard access.",
+            ),
+        );
+        return;
+      }
+
+      if (
+        state.pending[keyPendingId(selectedLayer, row, col)]?.status ===
+        "pending"
+      ) {
+        setManipulationMessage(
+          "Wait for the selected key's current write to finish before pasting.",
+        );
+        return;
+      }
+      const paste = async (pasted: KeyAction | null) => {
+        if (!pasted) {
+          setManipulationMessage(
+            "The clipboard does not contain a Rynkbench key binding.",
+          );
+          return;
+        }
+        const latestState = latestStateRef.current;
+        const latestAction =
+          latestState.layers[selectedLayer]?.[row * cols + col];
+        if (
+          latestState.pending[keyPendingId(selectedLayer, row, col)]?.status ===
+            "pending" ||
+          JSON.stringify(latestAction) !== JSON.stringify(action)
+        ) {
+          setManipulationMessage(
+            "Paste cancelled because the selected key changed.",
+          );
+          return;
+        }
+        const result = await io.setKey(selectedLayer, row, col, pasted);
+        setManipulationMessage(
+          result.ok
+            ? `Pasted ${keyActionDescription(pasted)} to Layer ${selectedLayer}, r${row} c${col}.`
+            : `Paste failed: ${result.message}`,
+        );
+      };
+      if (!navigator.clipboard?.readText) {
+        void paste(
+          localClipboardRef.current &&
+            structuredClone(localClipboardRef.current),
+        );
+        return;
+      }
+      void navigator.clipboard.readText().then(
+        (text) => paste(parseKeyActionClipboard(text)),
+        () =>
+          paste(
+            localClipboardRef.current &&
+              structuredClone(localClipboardRef.current),
+          ),
+      );
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [cols, io, state.layers, state.pending, state.selection, state.uiLayer]);
+
+  const dropKey = (
+    source: KeyView,
+    destination: KeyView,
+    selectedLayer: number,
+  ) => {
+    if (selectedLayer !== state.uiLayer) {
+      setManipulationMessage(
+        "Move cancelled because the selected layer changed.",
+      );
+      return;
+    }
+    const sourceAction =
+      state.layers[selectedLayer]?.[source.row * cols + source.col];
+    if (sourceAction === undefined || sourceAction === "No") {
+      setManipulationMessage("That key has no binding to move.");
+      return;
+    }
+    if (
+      state.pending[keyPendingId(selectedLayer, source.row, source.col)]
+        ?.status === "pending" ||
+      state.pending[
+        keyPendingId(selectedLayer, destination.row, destination.col)
+      ]?.status === "pending"
+    ) {
+      setManipulationMessage(
+        "Wait for both keys' current writes to finish before moving.",
+      );
+      return;
+    }
+
+    dispatch({
+      type: "select",
+      selection: { type: "key", row: destination.row, col: destination.col },
+    });
+    void io.moveKey(selectedLayer, source, destination).then((result) => {
+      setManipulationMessage(
+        result.ok
+          ? `Moved ${keyActionDescription(sourceAction)} to Layer ${selectedLayer}, r${destination.row} c${destination.col}.`
+          : `Move incomplete: ${result.message}`,
+      );
+    });
+  };
+
+  const keyboardActivateKey = (key: KeyView, event: React.KeyboardEvent) => {
+    if (event.key === "Escape") {
+      if (keyboardMove) {
+        setKeyboardMove(null);
+        setManipulationMessage("Keyboard move cancelled.");
+      }
+      return;
+    }
+    if (event.key === "Enter") {
+      dispatch({
+        type: "select",
+        selection: { type: "key", row: key.row, col: key.col },
+      });
+      return;
+    }
+
+    if (!keyboardMove) {
+      const action = layer?.[key.row * cols + key.col];
+      const pending =
+        state.pending[keyPendingId(state.uiLayer, key.row, key.col)];
+      if (action === undefined || action === "No") {
+        setManipulationMessage("That key has no binding to move.");
+        return;
+      }
+      if (pending?.status === "pending") {
+        setManipulationMessage(
+          "Wait for that key's current write to finish before moving.",
+        );
+        return;
+      }
+      dispatch({
+        type: "select",
+        selection: { type: "key", row: key.row, col: key.col },
+      });
+      setKeyboardMove({ layer: state.uiLayer, source: key, destination: null });
+      setManipulationMessage(
+        `Picked up ${keyActionDescription(action)}. Tab to a destination and press Space to move it, or Escape to cancel.`,
+      );
+      return;
+    }
+
+    if (
+      keyboardMove.source.row === key.row &&
+      keyboardMove.source.col === key.col
+    ) {
+      setKeyboardMove(null);
+      setManipulationMessage("Keyboard move cancelled.");
+      return;
+    }
+    const { layer: moveLayer, source } = keyboardMove;
+    setKeyboardMove(null);
+    dropKey(source, key, moveLayer);
+  };
 
   const decorFor = (key: KeyView): KeyDecor => {
     const action = layer?.[key.row * cols + key.col];
-    const pending = state.pending[keyPendingId(state.uiLayer, key.row, key.col)];
+    const pending =
+      state.pending[keyPendingId(state.uiLayer, key.row, key.col)];
     const glyph = action !== undefined ? keyActionGlyph(action) : { text: "" };
     // Enrichment label as fallback for unbound keys.
     if (!glyph.text && key.label) {
@@ -94,9 +329,27 @@ export function KeymapCenter() {
       state.selection?.type === "key" &&
       state.selection.row === key.row &&
       state.selection.col === key.col;
+    const moveDestination = drag?.destination ?? keyboardMove?.destination;
+    const dropTarget =
+      moveDestination?.row === key.row && moveDestination.col === key.col;
+    const keyboardMoveHint = keyboardMove
+      ? keyboardMove.source.row === key.row &&
+        keyboardMove.source.col === key.col
+        ? " Move source; press Space to cancel."
+        : " Press Space to move here and replace this binding."
+      : action === undefined || action === "No"
+        ? " No binding to move."
+        : " Press Space to pick up this binding for a keyboard move.";
     return {
       glyph,
+      ariaLabel: `Layer ${state.uiLayer}, row ${key.row}, column ${key.col}: ${
+        action === undefined ? "unavailable" : keyActionDescription(action)
+      }.${keyboardMoveHint}`,
+      ariaKeyShortcuts: selected
+        ? "Enter Space Escape Control+C Meta+C Control+V Meta+V"
+        : "Enter Space Escape",
       selected,
+      highlight: dropTarget,
       pending: pending?.status === "pending",
       error: pending?.status === "error",
     };
@@ -105,24 +358,109 @@ export function KeymapCenter() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 max-lg:min-h-[380px]">
       <LayerTabs />
+      <div className="flex min-h-5 items-center justify-between gap-4 px-1 text-[11.5px] text-faint">
+        <span>
+          Drag a bound key to move it; dropping replaces the destination.
+          Ctrl/Cmd+C and Ctrl/Cmd+V copy or paste the selected binding. With a
+          keyboard, press Space to pick up or drop.
+        </span>
+        <span
+          className="max-w-[46%] truncate text-right text-mute"
+          aria-live="polite"
+        >
+          {drag?.destination
+            ? `Release to move ${keyActionDescription(
+                layer?.[drag.source.row * cols + drag.source.col] ?? "No",
+              )} to r${drag.destination.row} c${drag.destination.col} and replace ${keyActionDescription(
+                layer?.[drag.destination.row * cols + drag.destination.col] ??
+                  "No",
+              )}.`
+            : keyboardMove?.destination
+              ? `Press Space to move to r${keyboardMove.destination.row} c${keyboardMove.destination.col} and replace ${keyActionDescription(
+                  layer?.[
+                    keyboardMove.destination.row * cols +
+                      keyboardMove.destination.col
+                  ] ?? "No",
+                )}.`
+              : manipulationMessage}
+        </span>
+      </div>
       <BoardWell model={bundle.model}>
         <KeyboardCanvas
           model={bundle.model}
           className="h-full w-full"
           decorFor={decorFor}
           encoderDecorFor={(enc) => ({
-            selected: state.selection?.type === "encoder" && state.selection.id === enc.id,
+            selected:
+              state.selection?.type === "encoder" &&
+              state.selection.id === enc.id,
             pending:
-              state.pending[encoderPendingId(state.uiLayer, enc.id)]?.status === "pending",
-            error: state.pending[encoderPendingId(state.uiLayer, enc.id)]?.status === "error",
+              state.pending[encoderPendingId(state.uiLayer, enc.id)]?.status ===
+              "pending",
+            error:
+              state.pending[encoderPendingId(state.uiLayer, enc.id)]?.status ===
+              "error",
           })}
-          onKeyPointerDown={(key) =>
-            dispatch({ type: "select", selection: { type: "key", row: key.row, col: key.col } })
-          }
+          onKeyPointerDown={(key, event) => {
+            const action = layer?.[key.row * cols + key.col];
+            if (
+              event.button === 0 &&
+              action !== undefined &&
+              action !== "No" &&
+              state.pending[keyPendingId(state.uiLayer, key.row, key.col)]
+                ?.status !== "pending"
+            ) {
+              dragLayerRef.current = state.uiLayer;
+            }
+            setKeyboardMove(null);
+            dispatch({
+              type: "select",
+              selection: { type: "key", row: key.row, col: key.col },
+            });
+          }}
+          onKeyKeyboardActivate={keyboardActivateKey}
+          onKeyFocus={(key) => {
+            if (!keyboardMove) return;
+            const destination =
+              keyboardMove.source.row === key.row &&
+              keyboardMove.source.col === key.col
+                ? null
+                : key;
+            setKeyboardMove({ ...keyboardMove, destination });
+          }}
+          onKeyDragChange={(source, destination) => {
+            setDrag(source ? { source, destination } : null);
+            if (!source) dragLayerRef.current = null;
+          }}
+          keyDraggable={(key) => {
+            const action = layer?.[key.row * cols + key.col];
+            return (
+              action !== undefined &&
+              action !== "No" &&
+              state.pending[keyPendingId(state.uiLayer, key.row, key.col)]
+                ?.status !== "pending"
+            );
+          }}
+          onKeyDrop={(source, destination) => {
+            const dragLayer = dragLayerRef.current;
+            if (dragLayer === null) {
+              setManipulationMessage(
+                "Move cancelled because its source layer is unavailable.",
+              );
+              return;
+            }
+            dropKey(source, destination, dragLayer);
+          }}
           onEncoderPointerDown={(enc) =>
-            dispatch({ type: "select", selection: { type: "encoder", id: enc.id } })
+            dispatch({
+              type: "select",
+              selection: { type: "encoder", id: enc.id },
+            })
           }
-          onBackgroundPointerDown={() => dispatch({ type: "select", selection: null })}
+          onBackgroundPointerDown={() => {
+            setKeyboardMove(null);
+            dispatch({ type: "select", selection: null });
+          }}
         />
       </BoardWell>
     </div>
@@ -153,7 +491,9 @@ function KeyInspector({ row, col }: { row: number; col: number }) {
               {keyActionDescription(action)}
             </div>
             {pending?.status === "pending" && (
-              <div className="text-[11.5px] text-accent">Writing to device…</div>
+              <div className="text-[11.5px] text-accent">
+                Writing to device…
+              </div>
             )}
           </div>
         </div>
@@ -167,7 +507,9 @@ function KeyInspector({ row, col }: { row: number; col: number }) {
                   <button
                     type="button"
                     className="cursor-pointer font-medium underline underline-offset-2"
-                    onClick={() => io.setKey(state.uiLayer, row, col, pending.attempted!)}
+                    onClick={() =>
+                      io.setKey(state.uiLayer, row, col, pending.attempted!)
+                    }
                   >
                     Retry
                   </button>
@@ -175,7 +517,14 @@ function KeyInspector({ row, col }: { row: number; col: number }) {
                 <button
                   type="button"
                   className="cursor-pointer text-mute underline underline-offset-2"
-                  onClick={() => dispatch({ type: "keyErrDismiss", layer: state.uiLayer, row, col })}
+                  onClick={() =>
+                    dispatch({
+                      type: "keyErrDismiss",
+                      layer: state.uiLayer,
+                      row,
+                      col,
+                    })
+                  }
                 >
                   Dismiss
                 </button>
@@ -206,8 +555,12 @@ function EncoderInspector({ id }: { id: number }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layer, id]);
 
-  const current: EncoderAction = encoder ?? { clockwise: "No", counter_clockwise: "No" };
-  const slotAction = slot === "cw" ? current.clockwise : current.counter_clockwise;
+  const current: EncoderAction = encoder ?? {
+    clockwise: "No",
+    counter_clockwise: "No",
+  };
+  const slotAction =
+    slot === "cw" ? current.clockwise : current.counter_clockwise;
 
   const commit = (action: KeyAction) => {
     const next: EncoderAction =
@@ -217,7 +570,12 @@ function EncoderInspector({ id }: { id: number }) {
     io.setEncoder(layer, id, next);
   };
 
-  const slotChip = (which: "cw" | "ccw", label: string, title: string, value: KeyAction) => (
+  const slotChip = (
+    which: "cw" | "ccw",
+    label: string,
+    title: string,
+    value: KeyAction,
+  ) => (
     <button
       type="button"
       onClick={() => setSlot(which)}
@@ -229,7 +587,9 @@ function EncoderInspector({ id }: { id: number }) {
           : "border-line bg-raised hover:border-line-strong",
       )}
     >
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-faint">{label}</span>
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-faint">
+        {label}
+      </span>
       <span className="font-mono text-[13px] text-ink">
         {keyActionGlyph(value).text || "unset"}
       </span>
@@ -241,17 +601,28 @@ function EncoderInspector({ id }: { id: number }) {
       <div>
         <div className="flex items-center justify-between">
           <SectionLabel>Encoder {id}</SectionLabel>
-          <span className="font-mono text-[11px] text-faint">layer {layer}</span>
+          <span className="font-mono text-[11px] text-faint">
+            layer {layer}
+          </span>
         </div>
         {pending?.status === "pending" && (
-          <div className="mt-1 text-[11.5px] text-accent">Writing to device…</div>
+          <div className="mt-1 text-[11.5px] text-accent">
+            Writing to device…
+          </div>
         )}
         {pending?.status === "error" && (
-          <div className="mt-1 text-[11.5px] text-danger">Write failed: {pending.message}</div>
+          <div className="mt-1 text-[11.5px] text-danger">
+            Write failed: {pending.message}
+          </div>
         )}
         <div className="mt-2 flex gap-2">
           {slotChip("cw", "CW ↻", "Clockwise", current.clockwise)}
-          {slotChip("ccw", "CCW ↺", "Counter-clockwise", current.counter_clockwise)}
+          {slotChip(
+            "ccw",
+            "CCW ↺",
+            "Counter-clockwise",
+            current.counter_clockwise,
+          )}
         </div>
       </div>
       <ActionEditor
@@ -273,9 +644,12 @@ export function KeymapInspector() {
         <div className="flex size-12 items-center justify-center rounded-xl border border-line bg-raised text-faint">
           <span className="font-mono text-[16px]">⌨</span>
         </div>
-        <div className="text-[13.5px] font-medium text-mute">Select a key to edit its binding</div>
+        <div className="text-[13.5px] font-medium text-mute">
+          Select a key to edit its binding
+        </div>
         <div className="text-[12px] leading-relaxed text-faint">
-          Click any key on the canvas. Switch layers with the tabs above the board.
+          Click or focus a key and press Enter to select it. Switch layers with
+          the tabs above the board.
         </div>
       </div>
     );

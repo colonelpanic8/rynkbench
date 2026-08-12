@@ -4,6 +4,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type {
+  KeyAction,
   LightingExtendedConditionalSceneCell,
   LightingEffect,
   LightingExtensionParam,
@@ -328,6 +329,120 @@ describe("verified status writes", () => {
 
     expect(result).toEqual({ ok: false, message: "flash busy" });
     expect(actions.at(-1)).toMatchObject({ type: "keyWriteErr", message: "flash busy" });
+  });
+
+  it("moves a binding by landing the complete action before clearing its source", async () => {
+    const source: KeyAction = {
+      TapHold: [{ Key: { Hid: "A" } }, { LayerOn: 2 }, 4],
+    };
+    const writes: Array<{ row: number; col: number; action: KeyAction }> = [];
+    let state = baseState({ layers: [[source, { Single: { Key: { Hid: "B" } } }], []] });
+    const session = {
+      keymap: {
+        setKey: async (_layer: number, row: number, col: number, action: KeyAction) => {
+          writes.push({ row, col, action });
+        },
+      },
+    } as unknown as RynkSession;
+    const io = makeIo(
+      session,
+      () => state,
+      (action) => {
+        state = reducer(state, action);
+      },
+      2,
+      () => {},
+    );
+
+    const result = await io.moveKey(0, { row: 0, col: 0 }, { row: 0, col: 1 });
+
+    expect(result).toEqual({ ok: true });
+    expect(writes).toEqual([
+      { row: 0, col: 1, action: source },
+      { row: 0, col: 0, action: "No" },
+    ]);
+    expect(state.layers[0]).toEqual(["No", source]);
+    expect(state.pending).toEqual({});
+  });
+
+  it("leaves the source untouched when the destination write fails", async () => {
+    const source: KeyAction = { Single: { Key: { Hid: "A" } } };
+    let state = baseState({ layers: [[source, "No"], []] });
+    const setKey = vi.fn(async () => {
+      throw new Error("destination busy");
+    });
+    const session = { keymap: { setKey } } as unknown as RynkSession;
+    const io = makeIo(
+      session,
+      () => state,
+      (action) => {
+        state = reducer(state, action);
+      },
+      2,
+      () => {},
+    );
+
+    const result = await io.moveKey(0, { row: 0, col: 0 }, { row: 0, col: 1 });
+
+    expect(result).toEqual({ ok: false, message: "destination busy" });
+    expect(setKey).toHaveBeenCalledTimes(1);
+    expect(state.layers[0]).toEqual([source, "No"]);
+    expect(state.pending["0:0:1"]).toMatchObject({ status: "error", attempted: source });
+  });
+
+  it("keeps a safe duplicate and retryable source error if clearing fails", async () => {
+    const source: KeyAction = { Single: { Key: { Hid: "A" } } };
+    let calls = 0;
+    let state = baseState({ layers: [[source, "No"], []] });
+    const session = {
+      keymap: {
+        setKey: async () => {
+          calls += 1;
+          if (calls === 2) throw new Error("source busy");
+        },
+      },
+    } as unknown as RynkSession;
+    const io = makeIo(
+      session,
+      () => state,
+      (action) => {
+        state = reducer(state, action);
+      },
+      2,
+      () => {},
+    );
+
+    const result = await io.moveKey(0, { row: 0, col: 0 }, { row: 0, col: 1 });
+
+    expect(result).toEqual({
+      ok: false,
+      message: "The binding was copied, but its source could not be cleared: source busy",
+    });
+    expect(state.layers[0]).toEqual([source, source]);
+    expect(state.pending["0:0:0"]).toEqual({
+      status: "error",
+      message: "source busy",
+      attempted: "No",
+    });
+  });
+
+  it("does not start a move while either key has an in-flight write", async () => {
+    const source: KeyAction = { Single: { Key: { Hid: "A" } } };
+    const state = baseState({
+      layers: [[source, "No"], []],
+      pending: { "0:0:1": { status: "pending" } },
+    });
+    const setKey = vi.fn();
+    const session = { keymap: { setKey } } as unknown as RynkSession;
+    const io = makeIo(session, () => state, () => {}, 2, () => {});
+
+    const result = await io.moveKey(0, { row: 0, col: 0 }, { row: 0, col: 1 });
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Wait for both key writes to finish before moving.",
+    });
+    expect(setKey).not.toHaveBeenCalled();
   });
 });
 
