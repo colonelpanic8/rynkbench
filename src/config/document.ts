@@ -1,8 +1,8 @@
 // Configuration documents: the seam between a file on disk and live device
 // state.
 //
-// Both supported formats — the native `glove80.toml` and the MoErgo Layout
-// Editor's JSON backup — are parsed, validated and rendered by the same Rust
+// Both supported formats — native MoErgo TOML and the MoErgo Layout Editor's
+// JSON backup — are parsed, validated and rendered by the same Rust
 // code the `moergo-control` CLI runs, compiled to wasm. Nothing here reimplements
 // the formats; this module only assembles the arguments that code needs and
 // restates its results in the workbench's own vocabulary.
@@ -25,13 +25,6 @@ import type { WorkbenchState } from "../ui/state";
 
 export type { ConfigFormat, ExtensionCatalog, ImportNote, ParsedConfig, RuntimeSnapshot };
 
-/** The matrix the document formats describe. Both are Glove80-specific: the
- *  TOML schema and the editor's 80-key walk are written against this exact
- *  grid, so a different board needs a different format, not a different
- *  catalog. */
-const ROWS = 6;
-const COLS = 14;
-
 let wasmReady: Promise<unknown> | null = null;
 
 /** One-shot loader for the vendored document module, mirroring the session's
@@ -42,14 +35,6 @@ export function initConfigWasm(): Promise<unknown> {
     throw error;
   });
   return wasmReady;
-}
-
-export function assertSupportedMatrix(rows: number, cols: number): void {
-  if (rows !== ROWS || cols !== COLS) {
-    throw new Error(
-      `Configuration files describe a ${ROWS}x${COLS} Glove80; this keyboard reports ${rows}x${cols}`,
-    );
-  }
 }
 
 /** What the connected keyboard advertises, which is what lets a file's effect,

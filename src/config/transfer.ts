@@ -7,12 +7,13 @@
 // re-importing a file a safe way to check it.
 
 import type { Dispatch } from "react";
+import { boardForTarget, transferSnapshot } from "../model/boards/transfer";
+import type { MoErgoBoard } from "../model/boards/transfer";
 import type { RynkSession } from "../session/types";
 import type { ConnectedBundle, WorkbenchAction, WorkbenchState } from "../ui/state";
 import { errorMessage } from "../ui/state";
 import type { ComboDefinition, Fork, Morse } from "../vendor/rynk-wasm/rynk_wasm";
 import {
-  assertSupportedMatrix,
   parseDocument,
   renderDocument,
   snapshotFromState,
@@ -21,10 +22,12 @@ import type { ConfigFormat, ExtensionCatalog, ImportNote, RuntimeSnapshot } from
 
 export interface ImportResult {
   format: ConfigFormat;
+  sourceBoard: MoErgoBoard;
+  targetBoard: MoErgoBoard;
+  converted: boolean;
   changedKeys: number;
-  /** How the imported layout differs from its source document. An editor export
-   *  describes a keyboard that expresses some things differently, and the parse
-   *  says which; showing nothing would make the import look lossless. */
+  /** How the imported layout differs from its source document: format
+   *  approximations plus source-board positions with no target counterpart. */
   notes: ImportNote[];
   /** What the document changed on the keyboard, in the order it was written. */
   applied: string[];
@@ -48,14 +51,22 @@ interface ImportArgs {
 
 export async function importDocument(args: ImportArgs): Promise<ImportResult> {
   const { text, session, bundle, state, dispatch, catalog } = args;
-  assertSupportedMatrix(bundle.caps.num_rows, bundle.caps.num_cols);
+  boardForTarget(bundle.info.product_name, bundle.caps.num_rows, bundle.caps.num_cols);
 
-  const { format, snapshot, notes } = parseDocument(text, catalog);
-  if (snapshot.layers.length > bundle.caps.num_layers) {
+  const { format, snapshot: sourceSnapshot, notes: parseNotes } = parseDocument(text, catalog);
+  if (sourceSnapshot.layers.length > bundle.caps.num_layers) {
     throw new Error(
-      `Layout has ${snapshot.layers.length} layers; this keyboard supports ${bundle.caps.num_layers}`,
+      `Layout has ${sourceSnapshot.layers.length} layers; this keyboard supports ${bundle.caps.num_layers}`,
     );
   }
+  const converted = transferSnapshot(
+    sourceSnapshot,
+    bundle.caps.num_rows,
+    bundle.caps.num_cols,
+    snapshotFromState(state),
+    bundle.model,
+  );
+  const snapshot = converted.snapshot;
 
   // Behaviors go first. A `TD(n)` or `TriggerMacro(n)` cell resolves through its
   // slot as soon as the key is written, so writing the keymap first would leave
@@ -65,8 +76,11 @@ export async function importDocument(args: ImportArgs): Promise<ImportResult> {
   const lighting = await writeLighting(snapshot, session, state, dispatch);
   return {
     format,
+    sourceBoard: converted.source,
+    targetBoard: converted.target,
+    converted: converted.converted,
     changedKeys,
-    notes,
+    notes: [...parseNotes, ...converted.notes],
     applied: [...behaviors.applied, ...lighting.applied],
     skipped: [...behaviors.skipped, ...lighting.skipped],
   };

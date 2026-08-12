@@ -40,9 +40,8 @@ export function errorReport(headline: string, error: unknown): TransferReport {
 }
 
 function Notes({ notes }: { notes: ImportNote[] }) {
-  // Anything unrepresentable fails the parse outright, so a report that reaches
-  // here holds approximations — but label them from the data rather than
-  // assuming, so a future permissive import cannot mislabel a dropped key.
+  // Format conversion normally reports approximations; cross-board transfer
+  // also reports source positions that have no physical destination.
   const dropped = notes.filter((note) => !note.approximated);
   const approximated = notes.filter((note) => note.approximated);
 
