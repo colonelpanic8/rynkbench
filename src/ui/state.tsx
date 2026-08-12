@@ -1305,19 +1305,24 @@ export function makeIo(
     );
   };
 
+  const rejectLayerOperation = (message: string): IoWriteResult => {
+    dispatch({ type: "layerOperationError", message });
+    return { ok: false, message };
+  };
+
   const runLayerStructure = async (
     operation: LayerStructureOperation | { type: "duplicate"; layer: number },
   ): Promise<IoWriteResult> => {
     const before = getState();
     if (before.layerBusy) return { ok: false, message: "another layer operation is running" };
     if (before.lightingBusy || Object.values(before.pending).some((item) => item.status === "pending")) {
-      return { ok: false, message: "wait for pending device writes before editing layers" };
+      return rejectLayerOperation("wait for pending device writes before editing layers");
     }
     if (Object.keys(before.layerDrafts).length > 0) {
-      return { ok: false, message: "apply or discard staged layer lighting before editing layers" };
+      return rejectLayerOperation("apply or discard staged layer lighting before editing layers");
     }
     if (!conditionalTablesEqual(before.runtimeConditionalDraft, before.runtimeConditionalScenes)) {
-      return { ok: false, message: "apply or discard staged conditional lighting before editing layers" };
+      return rejectLayerOperation("apply or discard staged conditional lighting before editing layers");
     }
     dispatch({ type: "layerOperationStart" });
     let original: LayerRewriteSnapshot | null = null;
@@ -1411,20 +1416,20 @@ export function makeIo(
         return { ok: false, message: "another layer operation is running" };
       }
       const trimmed = name.trim();
-      if (!trimmed) return { ok: false, message: "layer name must not be empty" };
+      if (!trimmed) return rejectLayerOperation("layer name must not be empty");
       if (new TextEncoder().encode(trimmed).length > 32) {
-        return { ok: false, message: "layer name must be at most 32 UTF-8 bytes" };
+        return rejectLayerOperation("layer name must be at most 32 UTF-8 bytes");
       }
       if (
         state.layerMetadata?.some(
           (candidate, index) => index !== layer && candidate.occupied && candidate.name === trimmed,
         )
       ) {
-        return { ok: false, message: `layer name '${trimmed}' is already in use` };
+        return rejectLayerOperation(`layer name '${trimmed}' is already in use`);
       }
       const metadata = state.layerMetadata?.[layer];
       if (!metadata?.occupied) {
-        return { ok: false, message: `layer ${layer} is not an occupied device layer` };
+        return rejectLayerOperation(`layer ${layer} is not an occupied device layer`);
       }
       dispatch({ type: "layerOperationStart" });
       try {
