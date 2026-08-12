@@ -39,8 +39,9 @@ import type {
   MorseProfileEntry,
   BuildInfo,
   ProtocolVersion,
+  PointingConfig,
 } from "../vendor/rynk-wasm/rynk_wasm";
-import type { RynkSession } from "../session/types";
+import type { LayerMetadata, RynkSession } from "../session/types";
 import type { KeyboardModel } from "../model/keyboard";
 import {
   initialKeyEditHistory,
@@ -48,6 +49,13 @@ import {
   type KeyEditHistory,
   type KeyEditHistoryEntry,
 } from "./history";
+import {
+  planLayerDuplicate,
+  planLayerRewrite,
+  type LayerRewrite,
+  type LayerRewriteSnapshot,
+  type LayerStructureOperation,
+} from "../layers/management";
 
 export type Mode =
   | "keymap"
@@ -88,6 +96,10 @@ export interface ConnectedBundle {
   lightingCaps: LightingCapabilities | null;
   overlayReadSupported: boolean;
   layers: KeyAction[][];
+  /** null when firmware predates persistent logical layer metadata. */
+  layerMetadata: LayerMetadata[] | null;
+  /** null when a complete runtime pointing-reference read was unavailable. */
+  pointingConfig: PointingConfig | null;
   currentLayer: number;
   defaultLayer: number;
   activeLayers: number[];
@@ -166,6 +178,8 @@ export interface WorkbenchState {
   activeLayers: number[];
   layerStateComplete: boolean;
   layers: KeyAction[][];
+  layerMetadata: LayerMetadata[] | null;
+  pointingConfig: PointingConfig | null;
   /** `${layer}:${encoderId}` → loaded encoder action. */
   encoders: Record<string, EncoderAction>;
   battery: BatteryStatus;
@@ -216,6 +230,8 @@ export interface WorkbenchState {
   keyEditHistory: KeyEditHistory;
   /** Bulk configuration transactions suspend history traversal. */
   keyEditHistorySuspended: boolean;
+  layerBusy: boolean;
+  layerError: string | null;
   lightingBusy: boolean;
   lightingError: string | null;
   /** LED ids to highlight (zone hover). */
@@ -334,6 +350,8 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     activeLayers: bundle.activeLayers,
     layerStateComplete: bundle.layerStateComplete,
     layers: bundle.layers,
+    layerMetadata: bundle.layerMetadata,
+    pointingConfig: bundle.pointingConfig,
     encoders: {},
     battery: bundle.battery,
     peripheralBattery: bundle.peripheralBattery,
@@ -359,6 +377,8 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     pending: {},
     keyEditHistory: initialKeyEditHistory(),
     keyEditHistorySuspended: false,
+    layerBusy: false,
+    layerError: null,
     lightingBusy: false,
     lightingError: null,
     hoverLeds: null,
@@ -423,6 +443,10 @@ export type WorkbenchAction =
       message: string;
     }
   | { type: "defaultLayer"; layer: number }
+  | { type: "layerOperationStart" }
+  | { type: "layerOperationApplied"; rewrite: LayerRewrite }
+  | { type: "layerOperationError"; message: string }
+  | { type: "layerMetadataSet"; layer: number; metadata: LayerMetadata }
   | {
       type: "topicLayers";
       defaultLayer: number;
@@ -647,6 +671,50 @@ export function makeWorkbenchReducer(cols: number) {
       }
       case "defaultLayer":
         return { ...state, defaultLayer: act.layer };
+      case "layerOperationStart":
+        return { ...state, layerBusy: true, layerError: null, selection: null };
+      case "layerOperationError":
+        return { ...state, layerBusy: false, layerError: act.message };
+      case "layerMetadataSet": {
+        if (!state.layerMetadata) return state;
+        const layerMetadata = state.layerMetadata.slice();
+        layerMetadata[act.layer] = act.metadata;
+        return { ...state, layerMetadata, layerBusy: false, layerError: null };
+      }
+      case "layerOperationApplied": {
+        const rewrite = act.rewrite;
+        const movedUiLayer = rewrite.order.findIndex((source) => source === state.uiLayer);
+        const uiLayer =
+          movedUiLayer >= 0
+            ? movedUiLayer
+            : Math.min(state.uiLayer, rewrite.order.length - 1);
+        return {
+          ...state,
+          layers: rewrite.layers,
+          layerMetadata: rewrite.metadata,
+          pointingConfig: rewrite.pointing,
+          defaultLayer: rewrite.defaultLayer,
+          activeLayers: rewrite.activeLayers,
+          currentLayer: Math.max(rewrite.defaultLayer, ...rewrite.activeLayers),
+          uiLayer,
+          combos: rewrite.combos,
+          morse: rewrite.morse,
+          forks: rewrite.forks,
+          behaviorOptions: rewrite.behaviorOptions,
+          autoMouseLayers: rewrite.autoMouseLayers,
+          scenes: rewrite.scenes,
+          runtimeConditionalScenes: rewrite.runtimeConditionalScenes,
+          runtimeConditionalDraft: rewrite.runtimeConditionalScenes,
+          lightingOutputMode: state.lightingOutputMode
+            ? { ...state.lightingOutputMode, wake_layers: rewrite.wakeLayers }
+            : null,
+          encoders: {},
+          layerDrafts: {},
+          pending: {},
+          layerBusy: false,
+          layerError: null,
+        };
+      }
       case "topicLayers":
         return {
           ...state,
@@ -1149,6 +1217,10 @@ export interface WorkbenchIo {
   loadEncoder(layer: number, id: number): void;
   setEncoder(layer: number, id: number, action: EncoderAction): void;
   setDefaultLayer(layer: number): void;
+  renameLayer(layer: number, name: string): Promise<IoWriteResult>;
+  duplicateLayer(layer: number): Promise<IoWriteResult>;
+  moveLayer(layer: number, to: number): Promise<IoWriteResult>;
+  deleteLayer(layer: number): Promise<IoWriteResult>;
   refreshLayerState(): void;
   applyOverlay(cells: LightingOverlayCell[]): void;
   clearOverlay(): void;
@@ -1185,6 +1257,15 @@ export interface WorkbenchIo {
   rebootToBootloader(): Promise<void>;
 }
 
+export interface LayerManagementConfig {
+  sceneCapacity: number | null;
+  conditionalSceneCapacity: number | null;
+  scenesSupported: boolean;
+  conditionalScenesSupported: boolean;
+  pointingSupported: boolean;
+  lightingOutputSupported: boolean;
+}
+
 export const WorkbenchContext = createContext<WorkbenchContextValue | null>(null);
 
 export function useWorkbench(): WorkbenchContextValue {
@@ -1198,6 +1279,139 @@ export function errorMessage(err: unknown): string {
   return String(err);
 }
 
+async function readLayerRewriteSnapshot(
+  session: RynkSession,
+  state: WorkbenchState,
+  config: LayerManagementConfig,
+): Promise<LayerRewriteSnapshot> {
+  if (state.layerMetadata === null) {
+    throw new Error("this firmware does not support persistent layer metadata");
+  }
+  if (state.behaviorOptions === null) {
+    throw new Error("behavior options could not be read, so layer references cannot be rewritten safely");
+  }
+  if (!config.pointingSupported) {
+    throw new Error("pointing configuration could not be read, so layer references cannot be rewritten safely");
+  }
+  if (state.lightingState !== null && !config.lightingOutputSupported) {
+    throw new Error("lighting wake layers could not be read, so layer references cannot be rewritten safely");
+  }
+
+  const caps = await session.device.capabilities();
+  const [metadata, layerKeymaps, layerState, combos, morse, forks, behaviorOptions, autoMouse, pointing] =
+    await Promise.all([
+      Promise.all(
+        Array.from({ length: caps.num_layers }, (_, layer) =>
+          session.keymap.getLayerMetadata(layer),
+        ),
+      ),
+      session.keymap.readAll(),
+      session.keymap.layerState(),
+      caps.max_combos > 0 ? session.combos.readAll() : Promise.resolve([]),
+      caps.max_morse > 0 ? session.morse.readAll() : Promise.resolve([]),
+      caps.max_forks > 0 ? session.forks.readAll() : Promise.resolve([]),
+      session.behavior.options(),
+      session.behavior.autoMouseLayers(),
+      session.pointing.get(),
+    ]);
+  if (!layerState.complete) {
+    throw new Error("complete active-layer state is required before editing layer structure");
+  }
+  const encoders = await Promise.all(
+    Array.from({ length: caps.num_layers }, (_, layer) =>
+      Promise.all(
+        Array.from({ length: caps.num_encoders }, (_, encoder) =>
+          session.keymap.getEncoder(encoder, layer),
+        ),
+      ),
+    ),
+  );
+  const [scenes, runtimeConditionalScenes, outputMode] = await Promise.all([
+    config.scenesSupported ? session.lighting.scenes.readScenes() : Promise.resolve([]),
+    config.conditionalScenesSupported
+      ? session.lighting.conditionalScenes.read()
+      : Promise.resolve([]),
+    config.lightingOutputSupported ? session.lighting.outputMode() : Promise.resolve(null),
+  ]);
+  const layers = Array.from({ length: caps.num_layers }, (_, layer) => {
+    const found = layerKeymaps.find((candidate) => candidate.layer === layer);
+    if (!found) throw new Error(`keymap read omitted layer ${layer}`);
+    return found.actions;
+  });
+
+  return {
+    metadata,
+    layers,
+    encoders,
+    defaultLayer: layerState.defaultLayer,
+    activeLayers: layerState.activeLayers,
+    combos,
+    morse,
+    forks,
+    behaviorOptions,
+    autoMouseLayers: autoMouse.configs,
+    scenes,
+    runtimeConditionalScenes,
+    compiledScenes: state.compiledScenes,
+    compiledConditionalScenes: state.conditionalScenes,
+    wakeLayers: outputMode?.wake_layers ?? 0,
+    pointing,
+  };
+}
+
+async function writeLayerRewriteSnapshot(
+  session: RynkSession,
+  snapshot: LayerRewriteSnapshot,
+  config: LayerManagementConfig,
+): Promise<void> {
+  await session.keymap.replaceAll(
+    snapshot.layers.map((actions, layer) => ({ layer, actions })),
+  );
+  for (let layer = 0; layer < snapshot.encoders.length; layer += 1) {
+    for (let encoder = 0; encoder < snapshot.encoders[layer].length; encoder += 1) {
+      await session.keymap.setEncoder(encoder, layer, snapshot.encoders[layer][encoder]);
+    }
+  }
+  for (let index = 0; index < snapshot.combos.length; index += 1) {
+    await session.combos.set(index, snapshot.combos[index]);
+  }
+  for (let index = 0; index < snapshot.morse.length; index += 1) {
+    await session.morse.set(index, snapshot.morse[index]);
+  }
+  for (let index = 0; index < snapshot.forks.length; index += 1) {
+    await session.forks.set(index, snapshot.forks[index]);
+  }
+  if (snapshot.behaviorOptions) await session.behavior.setOptions(snapshot.behaviorOptions);
+  await session.behavior.setAutoMouseLayers(snapshot.autoMouseLayers);
+  if (config.scenesSupported) await session.lighting.scenes.replaceScenes(snapshot.scenes);
+  if (config.conditionalScenesSupported) {
+    await session.lighting.conditionalScenes.replace(snapshot.runtimeConditionalScenes);
+  }
+  if (snapshot.pointing) {
+    const current = await session.pointing.get();
+    await session.pointing.set({ ...snapshot.pointing, revision: current.revision });
+  }
+  if (config.lightingOutputSupported) await session.lighting.setWakeLayers(snapshot.wakeLayers);
+  await session.keymap.setDefaultLayer(snapshot.defaultLayer);
+  for (let layer = 0; layer < snapshot.metadata.length; layer += 1) {
+    await session.keymap.setLayerMetadata(layer, snapshot.metadata[layer]);
+  }
+}
+
+function assertLayerRewriteReadback(expected: LayerRewriteSnapshot, actual: LayerRewriteSnapshot): void {
+  const comparable = (snapshot: LayerRewriteSnapshot) => ({
+    ...snapshot,
+    compiledScenes: [],
+    compiledConditionalScenes: [],
+    pointing: snapshot.pointing
+      ? { ...snapshot.pointing, revision: 0 }
+      : null,
+  });
+  if (JSON.stringify(comparable(expected)) !== JSON.stringify(comparable(actual))) {
+    throw new Error("layer transaction read-back did not match the requested rewrite");
+  }
+}
+
 /** Build the io facade. `session` writes; `dispatch` narrates. */
 export function makeIo(
   session: RynkSession,
@@ -1208,6 +1422,14 @@ export function makeIo(
   scenesSupported = false,
   extensionSupported = false,
   conditionalScenesSupported = false,
+  layerConfig: LayerManagementConfig = {
+    sceneCapacity: null,
+    conditionalSceneCapacity: null,
+    scenesSupported: false,
+    conditionalScenesSupported: false,
+    pointingSupported: false,
+    lightingOutputSupported: false,
+  },
 ): WorkbenchIo {
   let keyEditSequence = 0;
   let directKeyWritesPending = 0;
@@ -1221,6 +1443,71 @@ export function makeIo(
       (items) => dispatch({ type: "extensionParamsLoaded", effect, items }),
       () => dispatch({ type: "extensionParamsLoaded", effect, items: [] }),
     );
+  };
+
+  const rejectLayerOperation = (message: string): IoWriteResult => {
+    dispatch({ type: "layerOperationError", message });
+    return { ok: false, message };
+  };
+
+  const runLayerStructure = async (
+    operation: LayerStructureOperation | { type: "duplicate"; layer: number },
+  ): Promise<IoWriteResult> => {
+    const before = getState();
+    if (before.layerBusy) return { ok: false, message: "another layer operation is running" };
+    if (
+      before.lightingBusy ||
+      Object.values(before.pending).some((item) => item.status === "pending")
+    ) {
+      return rejectLayerOperation("wait for pending device writes before editing layers");
+    }
+    if (Object.keys(before.layerDrafts).length > 0) {
+      return rejectLayerOperation("apply or discard staged layer lighting before editing layers");
+    }
+    if (!conditionalTablesEqual(before.runtimeConditionalDraft, before.runtimeConditionalScenes)) {
+      return rejectLayerOperation("apply or discard staged conditional lighting before editing layers");
+    }
+    dispatch({ type: "layerOperationStart" });
+    let original: LayerRewriteSnapshot | null = null;
+    try {
+      original = await readLayerRewriteSnapshot(session, getState(), layerConfig);
+      let plan: LayerRewrite;
+      if (operation.type === "duplicate") {
+        const baseName = original.metadata[operation.layer]?.name;
+        if (!baseName) throw new Error(`layer ${operation.layer} is not occupied`);
+        const existing = new Set(
+          original.metadata.filter((slot) => slot.occupied).map((slot) => slot.name),
+        );
+        let name = `${baseName} copy`;
+        for (let suffix = 2; existing.has(name); suffix += 1) name = `${baseName} copy ${suffix}`;
+        plan = planLayerDuplicate(
+          original,
+          operation.layer,
+          name,
+          layerConfig.sceneCapacity,
+          layerConfig.conditionalSceneCapacity,
+        );
+      } else {
+        plan = planLayerRewrite(original, operation);
+      }
+      await writeLayerRewriteSnapshot(session, plan, layerConfig);
+      const readback = await readLayerRewriteSnapshot(session, getState(), layerConfig);
+      assertLayerRewriteReadback(plan, readback);
+      dispatch({ type: "keyHistoryClear" });
+      dispatch({ type: "layerOperationApplied", rewrite: { ...readback, order: plan.order } });
+      return { ok: true };
+    } catch (error) {
+      let message = errorMessage(error);
+      if (original) {
+        try {
+          await writeLayerRewriteSnapshot(session, original, layerConfig);
+        } catch (rollbackError) {
+          message += `; rollback also failed: ${errorMessage(rollbackError)}`;
+        }
+      }
+      dispatch({ type: "layerOperationError", message });
+      return { ok: false, message };
+    }
   };
 
   const setKey = (
@@ -1389,6 +1676,51 @@ export function makeIo(
       session.keymap.setDefaultLayer(layer).catch(() => {
         dispatch({ type: "defaultLayer", layer: prev });
       });
+    },
+    async renameLayer(layer, name) {
+      const state = getState();
+      if (state.layerBusy) {
+        return { ok: false, message: "another layer operation is running" };
+      }
+      const trimmed = name.trim();
+      if (!trimmed) return rejectLayerOperation("layer name must not be empty");
+      if (new TextEncoder().encode(trimmed).length > 32) {
+        return rejectLayerOperation("layer name must be at most 32 UTF-8 bytes");
+      }
+      if (
+        state.layerMetadata?.some(
+          (candidate, index) => index !== layer && candidate.occupied && candidate.name === trimmed,
+        )
+      ) {
+        return rejectLayerOperation(`layer name '${trimmed}' is already in use`);
+      }
+      const metadata = state.layerMetadata?.[layer];
+      if (!metadata?.occupied) {
+        return rejectLayerOperation(`layer ${layer} is not an occupied device layer`);
+      }
+      dispatch({ type: "layerOperationStart" });
+      try {
+        await session.keymap.setLayerMetadata(layer, { occupied: true, name: trimmed });
+        const readback = await session.keymap.getLayerMetadata(layer);
+        if (!readback.occupied || readback.name !== trimmed) {
+          throw new Error("layer name read-back did not match the write");
+        }
+        dispatch({ type: "layerMetadataSet", layer, metadata: readback });
+        return { ok: true };
+      } catch (error) {
+        const message = errorMessage(error);
+        dispatch({ type: "layerOperationError", message });
+        return { ok: false, message };
+      }
+    },
+    duplicateLayer(layer) {
+      return runLayerStructure({ type: "duplicate", layer });
+    },
+    moveLayer(layer, to) {
+      return runLayerStructure({ type: "move", layer, to });
+    },
+    deleteLayer(layer) {
+      return runLayerStructure({ type: "delete", layer });
     },
     refreshLayerState() {
       session.keymap.layerState().then(

@@ -66,9 +66,9 @@
           buildPhase = ''
             runHook preBuild
             export HOME="$TMPDIR/home"
-            # 32 MiB: rustc overflows its default stack compiling `syn` and
-            # asks for exactly this much in the SIGSEGV report.
-            export RUST_MIN_STACK=33554432
+            # rustc reports this requirement when compiling the generated
+            # client's proc-macro dependency graph.
+            export RUST_MIN_STACK=67108864
             mkdir -p "$HOME"
             pushd rynk
             wasm-pack build --release --target web --mode no-install \
@@ -116,7 +116,7 @@
           buildPhase = ''
             runHook preBuild
             export HOME="$TMPDIR/home"
-            export RUST_MIN_STACK=33554432
+            export RUST_MIN_STACK=67108864
             mkdir -p "$HOME"
             wasm-pack build --release --target web --mode no-install \
               --out-dir pkg crates/moergo-config-wasm

@@ -132,6 +132,15 @@ export function Workbench({
         bundle.sceneStatus !== null,
         bundle.lightingExtension !== null,
         bundle.runtimeConditionalStatus !== null,
+        {
+          sceneCapacity: bundle.sceneStatus?.capacity ?? null,
+          conditionalSceneCapacity: bundle.runtimeConditionalStatus?.capacity ?? null,
+          scenesSupported: bundle.sceneStatus !== null,
+          conditionalScenesSupported: bundle.runtimeConditionalStatus !== null,
+          pointingSupported: bundle.pointingConfig !== null,
+          lightingOutputSupported:
+            bundle.lightingState !== null && bundle.lightingOutputMode !== null,
+        },
       ),
     [
       bundle.session,
@@ -140,6 +149,9 @@ export function Workbench({
       bundle.sceneStatus,
       bundle.lightingExtension,
       bundle.runtimeConditionalStatus,
+      bundle.pointingConfig,
+      bundle.lightingState,
+      bundle.lightingOutputMode,
     ],
   );
 
@@ -222,7 +234,17 @@ export function Workbench({
 
   return (
     <WorkbenchContext value={ctx}>
-      <div className="flex h-full flex-col">
+      <div className="relative flex h-full flex-col" aria-busy={state.layerBusy}>
+        {state.layerBusy && (
+          <div
+            className="absolute inset-0 z-50 flex items-center justify-center bg-well/70 backdrop-blur-[1px]"
+            role="status"
+          >
+            <div className="rounded-xl border border-line bg-panel px-4 py-3 text-[13px] text-ink shadow-lg">
+              Rewriting and verifying layers on the keyboard…
+            </div>
+          </div>
+        )}
         <TopBar />
         <div className="flex min-h-0 flex-1">
           <ModeRail

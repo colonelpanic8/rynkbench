@@ -22,8 +22,10 @@ import type {
   LightingSceneStatus,
   LightingState,
   ModifierCombination,
+  PointingConfig,
 } from "./vendor/rynk-wasm/rynk_wasm";
 import type {
+  LayerMetadata,
   LightingTopology,
   RynkSession,
   SessionProvider,
@@ -249,6 +251,21 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     }
     return keymap.actions;
   });
+  let layerMetadata: LayerMetadata[] | null = null;
+  try {
+    layerMetadata = await Promise.all(
+      Array.from({ length: caps.num_layers }, (_, layer) =>
+        session.keymap.getLayerMetadata(layer),
+      ),
+    );
+  } catch (error) {
+    if (!unsupported(error)) incompleteReads.push(`layer metadata: ${errorMessage(error)}`);
+  }
+  const pointingConfig = await optionalRead<PointingConfig | null>(
+    "pointing configuration",
+    session.pointing.get(),
+    null,
+  );
 
   const [layerState, battery, connection, peripheralBattery] = await Promise.all([
     session.keymap.layerState(),
@@ -322,6 +339,8 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     lightingCaps,
     overlayReadSupported,
     layers,
+    layerMetadata,
+    pointingConfig,
     currentLayer,
     defaultLayer,
     activeLayers,

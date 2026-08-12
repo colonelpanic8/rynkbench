@@ -17,14 +17,24 @@ import {
   parseKeyActionClipboard,
   serializeKeyAction,
 } from "./keyManipulation";
-import { Button, SectionLabel, cx } from "../kit";
-import { StarIcon, WarningIcon, CloseIcon } from "../icons";
+import { Button, SectionLabel, TextInput, cx } from "../kit";
+import { StarIcon, WarningIcon, CloseIcon, PlusIcon, TrashIcon } from "../icons";
 
 function LayerTabs() {
   const { bundle, state, dispatch, io } = useWorkbench();
   const numLayers = bundle.caps.num_layers;
+  const occupiedLayers = state.layerMetadata
+    ? state.layerMetadata.flatMap((metadata, layer) => (metadata.occupied ? [layer] : []))
+    : Array.from({ length: numLayers }, (_, layer) => layer);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [underline, setUnderline] = useState({ left: 0, width: 0 });
+  const [renaming, setRenaming] = useState(false);
+  const [name, setName] = useState("");
+
+  useEffect(() => {
+    setRenaming(false);
+    setName(state.layerMetadata?.[state.uiLayer]?.name ?? `Layer ${state.uiLayer}`);
+  }, [state.uiLayer, state.layerMetadata]);
 
   useLayoutEffect(() => {
     const wrap = wrapRef.current;
@@ -33,13 +43,21 @@ function LayerTabs() {
       `[data-layer="${state.uiLayer}"]`,
     );
     if (btn) setUnderline({ left: btn.offsetLeft, width: btn.offsetWidth });
-  }, [state.uiLayer, numLayers]);
+  }, [state.uiLayer, occupiedLayers.length]);
+
+  const selectedName = state.layerMetadata?.[state.uiLayer]?.name ?? `Layer ${state.uiLayer}`;
+  const structureSupported =
+    state.layerMetadata !== null &&
+    state.pointingConfig !== null &&
+    state.behaviorOptions !== null &&
+    (state.lightingState === null || state.lightingOutputMode !== null);
 
   return (
     <div className="flex items-center gap-3 px-1">
       <div ref={wrapRef} className="relative flex items-center gap-1">
-        {Array.from({ length: numLayers }, (_, n) => {
+        {occupiedLayers.map((n) => {
           const isDefault = n === state.defaultLayer;
+          const label = state.layerMetadata?.[n]?.name ?? `Layer ${n}`;
           return (
             <button
               key={n}
@@ -50,9 +68,9 @@ function LayerTabs() {
                 "relative flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors duration-150",
                 n === state.uiLayer ? "text-ink" : "text-faint hover:text-mute",
               )}
-              title={`Layer ${n}${isDefault ? " · default" : ""}`}
+              title={`${label} · physical layer ${n}${isDefault ? " · default" : ""}`}
             >
-              <span className="tnum">Layer {n}</span>
+              <span>{label}</span>
               {isDefault && (
                 <span title="Default layer" className="inline-flex">
                   <StarIcon size={11} filled className="text-warn" />
@@ -72,10 +90,85 @@ function LayerTabs() {
       </div>
       {state.uiLayer !== state.currentLayer && (
         <span className="text-[11.5px] text-faint">
-          Editing Layer {state.uiLayer} · Layer {state.currentLayer} is live
+          Editing {selectedName} · {state.layerMetadata?.[state.currentLayer]?.name ?? `Layer ${state.currentLayer}`} is live
         </span>
       )}
       <div className="flex-1" />
+      {state.layerMetadata !== null &&
+        (renaming ? (
+          <form
+            className="flex items-center gap-1.5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void io.renameLayer(state.uiLayer, name).then((result) => {
+                if (result.ok) setRenaming(false);
+              });
+            }}
+          >
+            <TextInput
+              autoFocus
+              value={name}
+              maxLength={32}
+              className="w-40 py-1"
+              aria-label="Layer name"
+              onChange={(event) => setName(event.target.value)}
+            />
+            <Button type="submit" variant="primary" className="py-1" disabled={state.layerBusy}>
+              Save
+            </Button>
+            <Button variant="ghost" className="py-1" onClick={() => setRenaming(false)}>
+              Cancel
+            </Button>
+          </form>
+        ) : (
+          <Button variant="ghost" className="text-[12px]" onClick={() => setRenaming(true)}>
+            Rename
+          </Button>
+        ))}
+      {structureSupported && !renaming && (
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            className="px-2 text-[12px]"
+            title="Move layer left"
+            disabled={state.layerBusy || state.uiLayer === 0}
+            onClick={() => void io.moveLayer(state.uiLayer, state.uiLayer - 1)}
+          >
+            ←
+          </Button>
+          <Button
+            variant="ghost"
+            className="px-2 text-[12px]"
+            title="Move layer right"
+            disabled={state.layerBusy || state.uiLayer === occupiedLayers.length - 1}
+            onClick={() => void io.moveLayer(state.uiLayer, state.uiLayer + 1)}
+          >
+            →
+          </Button>
+          <Button
+            variant="ghost"
+            className="px-2 text-[12px]"
+            title="Duplicate layer"
+            disabled={state.layerBusy || occupiedLayers.length >= numLayers}
+            onClick={() => void io.duplicateLayer(state.uiLayer)}
+          >
+            <PlusIcon size={12} /> Duplicate
+          </Button>
+          <Button
+            variant="ghost"
+            className="px-2 text-[12px] text-danger"
+            title="Delete and compact this layer"
+            disabled={state.layerBusy || occupiedLayers.length <= 1}
+            onClick={() => {
+              if (window.confirm(`Delete ${selectedName}? Layer references will be rewritten first.`)) {
+                void io.deleteLayer(state.uiLayer);
+              }
+            }}
+          >
+            <TrashIcon size={12} />
+          </Button>
+        </div>
+      )}
       {state.uiLayer !== state.defaultLayer && (
         <Button
           variant="ghost"
@@ -86,6 +179,11 @@ function LayerTabs() {
           <StarIcon size={12} />
           Make default
         </Button>
+      )}
+      {state.layerError && (
+        <span className="max-w-64 text-[11px] text-danger" title={state.layerError}>
+          {state.layerError}
+        </span>
       )}
     </div>
   );

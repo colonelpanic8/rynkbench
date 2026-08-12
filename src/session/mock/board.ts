@@ -54,6 +54,7 @@ import type {
   MorseProfile,
   MorseProfileEntry,
   MouseButtons,
+  PointingConfig,
   ProtocolVersion,
   SplitCentralLatencyPolicy,
   SplitCentralLatencyState,
@@ -67,8 +68,10 @@ import type {
   ForkOps,
   KeymapOps,
   LightingOps,
+  LayerMetadata,
   MacroOps,
   MorseOps,
+  PointingOps,
   RynkSession,
   SessionKind,
   SessionProvider,
@@ -87,6 +90,8 @@ export interface BoardSpec {
   topology: LightingTopology;
   /** Layer-major, row-major defaults; num_layers × (num_rows × num_cols). */
   defaultLayers: KeyAction[][];
+  /** Occupied logical layer names. Remaining fixed-capacity slots are vacant. */
+  layerNames?: string[];
   /** Initial authoritative layer state. The default layer is always added to
    * the active set. */
   initialDefaultLayer?: number;
@@ -140,6 +145,8 @@ export interface BoardSpec {
   runtimeConditionalPredicates?: boolean;
   /** Three-state output policy readback. Omit for older simulated firmware. */
   lightingOutputMode?: LightingOutputModeState;
+  /** Omit to simulate firmware without runtime pointing configuration. */
+  pointingConfig?: PointingConfig;
   /** Host-selectable extension effect pack (static name lists plus the boot
    *  selection). Omit to simulate firmware without EXTENSION_EFFECTS. */
   extensionEffects?: {
@@ -375,6 +382,7 @@ class MockSession implements RynkSession {
   private readonly spec: BoardSpec;
   private readonly layers: KeyAction[][];
   private readonly encoders: EncoderAction[][];
+  private readonly layerMetadata: LayerMetadata[];
   private readonly knownLeds: Set<LightingLedId>;
   private base = 0;
   private current = 0;
@@ -405,6 +413,7 @@ class MockSession implements RynkSession {
   private morseProfiles: MorseProfileEntry[];
   private holdTriggerPositions: MorseHoldTriggerPosition[];
   private autoMouseLayers: AutoMouseLayerConfig[];
+  private pointingConfig: PointingConfig | null;
   private readonly indicator: LedIndicator;
   private ble: BleStatus;
   private readonly matrixBitmap: Uint8Array;
@@ -423,6 +432,12 @@ class MockSession implements RynkSession {
     this.spec = spec;
     this.label = spec.info.product_name;
     this.layers = spec.defaultLayers.map((actions) => [...actions]);
+    const names = spec.layerNames ?? spec.defaultLayers.map((_, layer) => `Layer ${layer}`);
+    this.layerMetadata = spec.defaultLayers.map((_, layer) =>
+      layer < names.length
+        ? { occupied: true, name: names[layer] }
+        : { occupied: false, name: "" },
+    );
     this.base = this.checkLayer(spec.initialDefaultLayer ?? 0);
     this.activeLayers = new Set((spec.initialActiveLayers ?? [this.base]).map((layer) => this.checkLayer(layer)));
     this.activeLayers.add(this.base);
@@ -479,6 +494,7 @@ class MockSession implements RynkSession {
     this.holdTriggerPositions = structuredClone(spec.seedHoldTriggerPositions ?? []);
     this.checkHoldTriggerPositions(this.holdTriggerPositions);
     this.autoMouseLayers = structuredClone(spec.seedAutoMouseLayers ?? []);
+    this.pointingConfig = spec.pointingConfig ? structuredClone(spec.pointingConfig) : null;
     this.indicator = { ...spec.ledIndicator };
     this.ble = { ...spec.connection.ble };
     this.matrixBitmap = new Uint8Array(caps.num_rows * Math.ceil(caps.num_cols / 8));
@@ -544,6 +560,18 @@ class MockSession implements RynkSession {
   readonly keymap: KeymapOps = {
     readAll: () =>
       latency(() => this.layers.map((actions, layer) => ({ layer, actions: [...actions] }))),
+    replaceAll: (layers) =>
+      latency(() => {
+        if (layers.length !== this.layers.length) throw new Error("incomplete keymap rewrite");
+        for (let layer = 0; layer < layers.length; layer += 1) {
+          if (layers[layer].layer !== layer || layers[layer].actions.length !== this.layers[layer].length) {
+            throw new Error(`malformed keymap layer ${layer}`);
+          }
+        }
+        for (let layer = 0; layer < layers.length; layer += 1) {
+          this.layers[layer] = structuredClone(layers[layer].actions);
+        }
+      }),
     setKey: (layer, row, col, action) =>
       latency(() => {
         this.layers[this.checkLayer(layer)][this.keyIndex(row, col)] = action;
@@ -568,6 +596,16 @@ class MockSession implements RynkSession {
         this.activeLayers = new Set([this.base]);
         this.current = layer;
         this.emit({ LayerChange: layer });
+      }),
+    getLayerMetadata: (layer) =>
+      latency(() => structuredClone(this.layerMetadata[this.checkLayer(layer)])),
+    setLayerMetadata: (layer, metadata) =>
+      latency(() => {
+        this.checkLayer(layer);
+        if (metadata.occupied === (metadata.name.length === 0)) {
+          throw new Error("occupied layers must have a name and vacant layers must not");
+        }
+        this.layerMetadata[layer] = structuredClone(metadata);
       }),
   };
 
@@ -843,6 +881,27 @@ class MockSession implements RynkSession {
           throw new Error(`auto mouse has ${configs.length} layers, capacity ${capacity}`);
         }
         this.autoMouseLayers = structuredClone(configs);
+      }),
+  };
+
+  readonly pointing: PointingOps = {
+    get: () =>
+      latency(() => {
+        if (this.pointingConfig === null) {
+          throw new Error("this firmware has no runtime pointing configuration");
+        }
+        return structuredClone(this.pointingConfig);
+      }),
+    set: (config) =>
+      latency(() => {
+        if (this.pointingConfig === null) {
+          throw new Error("this firmware has no runtime pointing configuration");
+        }
+        if (config.revision !== this.pointingConfig.revision) {
+          throw new Error("pointing configuration revision changed");
+        }
+        this.pointingConfig = { ...structuredClone(config), revision: config.revision + 1 };
+        return structuredClone(this.pointingConfig);
       }),
   };
 
