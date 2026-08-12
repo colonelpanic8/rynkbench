@@ -12,6 +12,11 @@ import type { KeyView } from "../../model/keyboard";
 import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
 import { keyActionGlyph } from "../labels";
+import {
+  keyAddressLabel,
+  keyAtPosition,
+  keyHoverTitle,
+} from "../key-address";
 import { ActionEditor, SlotPicker } from "../keymap/ActionEditor";
 import { slotPendingId, useWorkbench } from "../state";
 import { Button, Chip, InspectorShell, SectionLabel, cx } from "../kit";
@@ -47,10 +52,22 @@ function TriggerChip({ action, onRemove }: { action: KeyAction; onRemove: () => 
   );
 }
 
-function PositionChip({ position, onRemove }: { position: MatrixPosition; onRemove: () => void }) {
+function PositionChip({
+  position,
+  keys,
+  onRemove,
+}: {
+  position: MatrixPosition;
+  keys: readonly KeyView[];
+  onRemove: () => void;
+}) {
+  const key = keyAtPosition(keys, position);
   return (
-    <span className="inline-flex items-center gap-1 rounded-md border border-cap-edge bg-cap px-2 py-1 font-mono text-[12.5px] text-cap-ink">
-      r{position.row}c{position.col}
+    <span
+      title={keyHoverTitle(key)}
+      className="inline-flex items-center gap-1 rounded-md border border-cap-edge bg-cap px-2 py-1 font-mono text-[12.5px] text-cap-ink"
+    >
+      {keyAddressLabel(key)}
       <button
         type="button"
         title="Remove trigger key"
@@ -231,7 +248,11 @@ export function CombosTab({
                   const displayed = index === sel && draft ? draft : combo;
                   return comboIsActions(displayed)
                     ? displayed.Actions.actions.map((a) => keyActionGlyph(a).text || "·").join(" + ") || "—"
-                    : displayed.Positions.positions.map((p) => `r${p.row}c${p.col}`).join(" + ") || "—";
+                    : displayed.Positions.positions
+                        .map((position) =>
+                          keyAddressLabel(keyAtPosition(bundle.model.keys, position)),
+                        )
+                        .join(" + ") || "—";
                 })()}
                 <span className="mx-1.5 text-faint">→</span>
                 {keyActionGlyph(comboOutput(index === sel && draft ? draft : combo)).text || "·"}
@@ -291,6 +312,7 @@ export function CombosTab({
                       <PositionChip
                         key={`${position.row}:${position.col}`}
                         position={position}
+                        keys={bundle.model.keys}
                         onRemove={() => setDraft({
                           Positions: {
                             ...draft.Positions,

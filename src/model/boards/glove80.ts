@@ -3,6 +3,7 @@
 // firmware's Vial grid; positions 5, 8, 75, 78 are matrix holes).
 
 import type { BoardEnrichment } from "../keyboard";
+import { buildMoergoAddresses, type MatrixPosition } from "./moergo";
 
 export const GLOVE80_ROWS = 6;
 export const GLOVE80_COLS = 14;
@@ -32,6 +33,15 @@ export const GLOVE80_GRID: readonly (number | null)[] = [
   // r5: outer bottom row + lower thumbs
   64, 65, 66, 67, 68, null, 71, 72, null, 75, 76, 77, 78, 79,
 ];
+
+export const GLOVE80_MATRIX_POSITIONS: readonly MatrixPosition[] = GLOVE80_GRID.flatMap(
+  (logical, grid) =>
+    logical === null
+      ? []
+      : [{ row: Math.floor(grid / GLOVE80_COLS), col: grid % GLOVE80_COLS }],
+);
+
+export const GLOVE80_ADDRESSES = buildMoergoAddresses(GLOVE80_MATRIX_POSITIONS);
 
 function buildLabels(): Record<string, string> {
   const labels: Record<string, string> = {};
@@ -140,4 +150,5 @@ export const GLOVE80_BOARD_KEYS: Map<number, Glove80Key> = buildBoardKeys();
 export const glove80Enrichment: BoardEnrichment = {
   displayName: "Glove80",
   labels: buildLabels(),
+  addresses: GLOVE80_ADDRESSES,
 };

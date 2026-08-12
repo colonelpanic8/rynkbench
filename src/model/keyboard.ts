@@ -10,9 +10,11 @@ import type { LightingLedId } from "../vendor/rynk-wasm/rynk_wasm";
 import type { LightingTopology } from "../session/types";
 
 export interface KeyView {
-  /** Matrix identity — the stable address for keymap operations. */
+  /** Matrix identity — the wire address for keymap operations. */
   row: number;
   col: number;
+  /** Stable, support-friendly physical address, when known for this board. */
+  address?: string;
   /** Outline in key-units: center rect, clockwise rotation in degrees about
    *  the main rect's center, optional second rect for L-shaped keys. Straight
    *  from the device layout. */
@@ -40,6 +42,8 @@ export interface KeyboardModel {
 export interface BoardEnrichment {
   displayName?: string;
   labels?: Record<string, string>;
+  /** Support-friendly physical addresses, keyed by matrix "row,col". */
+  addresses?: Record<string, string>;
 }
 
 // Wire semantics (rmk-config layout.rs walk()): rect.x/y is the key's final
@@ -90,12 +94,14 @@ export function buildKeyboardModel(
   }
 
   const labels = options?.enrichment?.labels ?? {};
+  const addresses = options?.enrichment?.addresses ?? {};
   const keys: KeyView[] = variant.keys.map((shape) => {
     const at = `${shape.row},${shape.col}`;
     const led = ledByMatrix.get(at);
     return {
       row: shape.row,
       col: shape.col,
+      address: addresses[at],
       shape,
       ledId: led?.ledId,
       zoneIds: led?.zoneIds ?? [],

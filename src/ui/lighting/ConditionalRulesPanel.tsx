@@ -25,6 +25,7 @@ import { cssEmissiveRgb } from "../color";
 import { describeRuleConditions, runtimeConditionalSupported } from "./firmwareRules";
 import { describeEffect, effectRgb } from "./effect";
 import { EffectEditor } from "./EffectEditor";
+import { keyAddressWithLegend } from "../key-address";
 import { appendRule, moveRule, newRule, removeRule, replaceRule } from "./rules";
 import type { Rule, Rules } from "./rules";
 
@@ -85,7 +86,7 @@ export function ConditionalRulesPanel() {
     const labels = new Map<number, string>();
     for (const key of bundle.model.keys) {
       if (key.ledId !== undefined) {
-        labels.set(key.ledId, key.label || `${key.row},${key.col}`);
+        labels.set(key.ledId, keyAddressWithLegend(key));
       }
     }
     return labels;

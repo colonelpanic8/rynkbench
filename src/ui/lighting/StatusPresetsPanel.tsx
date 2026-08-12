@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { KeyView } from "../../model/keyboard";
 import { Button, SectionLabel } from "../kit";
+import { keyAddressLabel, keyHoverTitle } from "../key-address";
 import { useWorkbench } from "../state";
 import {
   GLOVE80_CONNECTION_KEYS,
@@ -205,10 +206,11 @@ export function StatusPresetsPanel() {
         <Button
           variant="outline"
           className="mt-2 w-full"
+          title={selectedKey ? keyHoverTitle(selectedKey) : undefined}
           disabled={!predicatesSupported || selectedKey === null || state.lightingBusy}
           onClick={installConnectionKey}
         >
-          {selectedKey ? `Configure ${selectedKey.label ?? `r${selectedKey.row},c${selectedKey.col}`}` : "Select one key"}
+          {selectedKey ? `Configure ${keyAddressLabel(selectedKey)}` : "Select one key"}
         </Button>
       </div>
 

@@ -14,6 +14,7 @@ import type { PointerEvent as ReactPointerEvent, ReactNode, SVGProps } from "rea
 import type { Encoder, Key, Rect } from "../vendor/rynk-wasm/rynk_wasm";
 import type { KeyboardModel, KeyView } from "../model/keyboard";
 import type { KeyGlyph } from "./labels";
+import { keyHoverTitle } from "./key-address";
 import { cx } from "./kit";
 
 export interface KeyDecor {
@@ -349,11 +350,13 @@ function KeyShape({
   return (
     <g
       className={`key-group${clickable ? "" : " key-static"}`}
+      aria-label={keyHoverTitle(view)}
       transform={`rotate(${deg} ${cx0} ${cy0})`}
       opacity={decor.disabled ? 0.38 : 1}
       onPointerDown={clickable ? (ev) => onPointerDown?.(view, ev) : undefined}
       onPointerEnter={clickable ? (ev) => onPointerEnter?.(view, ev) : undefined}
     >
+      <title>{keyHoverTitle(view)}</title>
       <g
         className="key-lift"
         style={{ transform: decor.selected ? "translateY(-0.045px)" : undefined }}

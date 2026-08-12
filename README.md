@@ -28,6 +28,16 @@ keymap and per-key lighting live — no install, nothing leaves your machine.
 - **Simulated boards** — demo a split ergo, an ortholinear 60, and a dev stub
   with no hardware attached, so the whole UI is explorable offline.
 
+### Physical key addresses
+
+Known MoErgo boards show stable physical addresses anywhere a key is selected
+or identified. `LH` and `RH` name the half; finger columns count from the thumb
+side outward (`C1` through `C6`) and rows count from the top down. For example,
+`RH-C1R3` is the right half's inner finger column on its third row. Thumb keys
+count outer-to-inner as `T1` onward; the Glove80 numbers its upper three-key fan
+before its lower fan, while the Go60 has one three-key fan. Hover text and the
+key inspector retain the raw matrix row and column for diagnostics.
+
 ## Behavior and indicator notes
 
 - **Tap-hold profiles are live configuration.** `Save profile` writes the
