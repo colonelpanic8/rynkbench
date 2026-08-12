@@ -18,9 +18,9 @@ describe("enrichmentFor", () => {
     expect(enrichment?.labels?.["2,1"]).toBe("Q");
   });
 
-  // The Go60 firmware declares the Glove80's vendor and product ids, so a
-  // match on those alone would hand a 5x14 board the Glove80's 6x14 legends.
-  it("leaves another MoErgo board behind the same USB identity unenriched", () => {
-    expect(enrichmentFor(moergo("Go60"))).toBeUndefined();
+  it("recognizes Go60 separately behind the shared USB identity", () => {
+    const enrichment = enrichmentFor(moergo("Go60"));
+    expect(enrichment?.displayName).toBe("Go60");
+    expect(enrichment?.labels?.["1,1"]).toBe("Q");
   });
 });

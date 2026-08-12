@@ -18,6 +18,8 @@ import type { TransferReport } from "./TransferReport";
 import { BatteryGlyph, PowerIcon, Wordmark } from "./icons";
 import { KIND_LABEL } from "./session-labels";
 
+const BOARD_LABEL = { glove80: "Glove80", go60: "Go60" } as const;
+
 function BatteryReadout({ battery, split }: { battery: BatteryStatus; split: boolean }) {
   const available = battery !== "Unavailable" ? battery.Available : null;
   const level = available?.level ?? null;
@@ -83,8 +85,11 @@ export function TopBar() {
         dispatch,
         catalog: await catalog(),
       });
-      imported.current = text;
-      if (offline) setWorkspaceName(file.name);
+      // A document for the other board cannot safely serve as this board's
+      // later export template: its matrix and layer grids have a different
+      // shape. Same-board imports still retain labels and editor-owned JSON.
+      imported.current = result.converted ? null : text;
+      if (offline && !result.converted) setWorkspaceName(file.name);
       const parts = [
         result.changedKeys > 0
           ? `${result.changedKeys} key${result.changedKeys === 1 ? "" : "s"}`
@@ -93,10 +98,14 @@ export function TopBar() {
       ].filter((part) => part !== null);
       const headline =
         parts.length === 0
-          ? offline
+          ? result.converted
+            ? `${file.name}'s ${BOARD_LABEL[result.sourceBoard]} layout already matches this ${BOARD_LABEL[result.targetBoard]} on every shared key`
+            : offline
             ? `${file.name} already matches this workspace`
             : `${file.name} already matches the keyboard`
-          : `Imported ${parts.join(", ")} from ${file.name}`;
+          : result.converted
+            ? `Transferred ${parts.join(", ")} from ${BOARD_LABEL[result.sourceBoard]} to ${BOARD_LABEL[result.targetBoard]} using ${file.name}`
+            : `Imported ${parts.join(", ")} from ${file.name}`;
       // Anything the document asked for that could not be written, and anything
       // the import had to approximate, is a caveat on an otherwise clean result
       // — so say so in the headline rather than only in the detail below it.
@@ -198,10 +207,10 @@ export function TopBar() {
         title={
           offline
             ? "Open another Glove80 TOML or MoErgo JSON document into this workspace"
-            : "Import a Glove80 TOML or MoErgo JSON backup, writing only what differs from the keyboard"
+            : "Import a Glove80 or Go60 TOML (or MoErgo JSON), automatically transferring shared physical keys between boards"
         }
       >
-        {transfer === "importing" ? "Opening…" : offline ? "Open" : "Import"}
+        {transfer === "importing" ? "Opening…" : offline ? "Open" : "Import layout"}
       </Button>
       <Button
         variant="ghost"

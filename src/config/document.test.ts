@@ -81,6 +81,21 @@ speed = 108
 Drops = 11
 `;
 
+const MINIMAL_GO60 = `rows = 5
+default_layer = 0
+
+[[layer]]
+id = "base"
+name = "Base"
+keys = """
+KC_A KC_B KC_C KC_D KC_E KC_F KC_G KC_H KC_I KC_J KC_K KC_L KC_M KC_N
+KC_A KC_B KC_C KC_D KC_E KC_F KC_G KC_H KC_I KC_J KC_K KC_L KC_M KC_N
+KC_A KC_B KC_C KC_D KC_E KC_F KC_G KC_H KC_I KC_J KC_K KC_L KC_M KC_N
+KC_A KC_B KC_C KC_D KC_E KC_F -- -- KC_I KC_J KC_K KC_L KC_M KC_N
+-- -- KC_C KC_D KC_E -- -- -- -- KC_J KC_K KC_L -- --
+"""
+`;
+
 describe("detectFormat", () => {
   it("tells the two document formats apart by their first character", () => {
     expect(detectFormat(MINIMAL)).toBe("toml");
@@ -89,6 +104,13 @@ describe("detectFormat", () => {
 });
 
 describe("parseDocument", () => {
+  it("preserves a Go60 TOML's declared 5x14 matrix for transfer", () => {
+    const { format, snapshot } = parseDocument(MINIMAL_GO60, CATALOG);
+    expect(format).toBe("toml");
+    expect(snapshot.layers).toHaveLength(1);
+    expect(snapshot.layers[0]).toHaveLength(70);
+  });
+
   it("opens and exactly round-trips the semantic TailorKey configuration", () => {
     const source = readFileSync(
       "src/config/fixtures/tailorkey-v52-bilateral.toml",
