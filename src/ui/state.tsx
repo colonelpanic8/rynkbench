@@ -1125,6 +1125,11 @@ export interface WorkbenchIo {
   ): Promise<IoWriteResult>;
   undoKeyEdit(): Promise<IoWriteResult>;
   redoKeyEdit(): Promise<IoWriteResult>;
+  moveKey(
+    layer: number,
+    source: { row: number; col: number },
+    destination: { row: number; col: number },
+  ): Promise<IoWriteResult>;
   loadEncoder(layer: number, id: number): void;
   setEncoder(layer: number, id: number, action: EncoderAction): void;
   setDefaultLayer(layer: number): void;
@@ -1201,6 +1206,54 @@ export function makeIo(
     );
   };
 
+  const setKey = (
+    layer: number,
+    row: number,
+    col: number,
+    action: KeyAction,
+    options?: { history?: "record" | "invalidate" },
+  ): Promise<IoWriteResult> => {
+    if (keyHistoryWritePending) {
+      return Promise.resolve({ ok: false, message: "Undo or redo is in progress" });
+    }
+    const prev = getState().layers[layer][row * cols + col];
+    const sequence = ++keyEditSequence;
+    directKeyWritesPending += 1;
+    dispatch({ type: "keyWriteStart", layer, row, col, action });
+    return session.keymap
+      .setKey(layer, row, col, action)
+      .then(
+        () => {
+          dispatch({ type: "keyWriteOk", layer, row, col });
+          if (options?.history === "invalidate") {
+            dispatch({ type: "keyHistoryClear" });
+          } else {
+            dispatch({
+              type: "keyHistoryRecord",
+              entry: { sequence, layer, row, col, before: prev, after: action },
+            });
+          }
+          return { ok: true } as const;
+        },
+        (err) => {
+          const message = errorMessage(err);
+          dispatch({
+            type: "keyWriteErr",
+            layer,
+            row,
+            col,
+            prev,
+            attempted: action,
+            message,
+          });
+          return { ok: false, message } as const;
+        },
+      )
+      .finally(() => {
+        directKeyWritesPending -= 1;
+      });
+  };
+
   const travelKeyHistory = async (
     direction: "undo" | "redo",
   ): Promise<IoWriteResult> => {
@@ -1256,49 +1309,47 @@ export function makeIo(
   };
 
   return {
-    setKey(layer, row, col, action, options) {
-      if (keyHistoryWritePending) {
-        return Promise.resolve({ ok: false, message: "Undo or redo is in progress" });
-      }
-      const prev = getState().layers[layer][row * cols + col];
-      const sequence = ++keyEditSequence;
-      directKeyWritesPending += 1;
-      dispatch({ type: "keyWriteStart", layer, row, col, action });
-      return session.keymap.setKey(layer, row, col, action).then(
-        () => {
-          dispatch({ type: "keyWriteOk", layer, row, col });
-          if (options?.history === "invalidate") {
-            dispatch({ type: "keyHistoryClear" });
-          } else {
-            dispatch({
-              type: "keyHistoryRecord",
-              entry: { sequence, layer, row, col, before: prev, after: action },
-            });
-          }
-          return { ok: true } as const;
-        },
-        (err) => {
-          const message = errorMessage(err);
-          dispatch({
-            type: "keyWriteErr",
-            layer,
-            row,
-            col,
-            prev,
-            attempted: action,
-            message,
-          });
-          return { ok: false, message } as const;
-        },
-      ).finally(() => {
-        directKeyWritesPending -= 1;
-      });
-    },
+    setKey,
     undoKeyEdit() {
       return travelKeyHistory("undo");
     },
     redoKeyEdit() {
       return travelKeyHistory("redo");
+    },
+    async moveKey(layer, source, destination) {
+      if (source.row === destination.row && source.col === destination.col) return { ok: true };
+      const state = getState();
+      const sourcePending = state.pending[keyPendingId(layer, source.row, source.col)];
+      const destinationPending = state.pending[
+        keyPendingId(layer, destination.row, destination.col)
+      ];
+      if (sourcePending?.status === "pending" || destinationPending?.status === "pending") {
+        return { ok: false, message: "Wait for both key writes to finish before moving." };
+      }
+
+      const action = state.layers[layer]?.[source.row * cols + source.col];
+      if (action === undefined || action === "No") {
+        return { ok: false, message: "The source key has no binding to move." };
+      }
+
+      // Land the binding before clearing its source. A destination failure
+      // therefore rolls back normally without ever losing the original.
+      const destinationResult = await setKey(
+        layer,
+        destination.row,
+        destination.col,
+        action,
+      );
+      if (!destinationResult.ok) return destinationResult;
+
+      const sourceResult = await setKey(layer, source.row, source.col, "No");
+      if (!sourceResult.ok) {
+        return {
+          ok: false,
+          message: `The binding was copied, but its source could not be cleared: ${sourceResult.message}`,
+        };
+      }
+      return { ok: true };
     },
     loadEncoder(layer, id) {
       session.keymap.getEncoder(id, layer).then(
