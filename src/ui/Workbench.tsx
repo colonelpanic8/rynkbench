@@ -4,6 +4,8 @@ import { useEffect, useMemo, useReducer, useRef } from "react";
 import type { ConnectedBundle, Mode } from "./state";
 import {
   WorkbenchContext,
+  canTravelKeyEditHistory,
+  hasPendingConfigurationWrite,
   initialWorkbenchState,
   makeIo,
   makeWorkbenchReducer,
@@ -17,6 +19,7 @@ import { AdvancedMode } from "./advanced/AdvancedMode";
 import { ProfilesMode } from "./ProfilesMode";
 import { DeviceMode } from "./device/DeviceMode";
 import { InspectorShell, cx } from "./kit";
+import { historyShortcut, keyEditHistoryLabel } from "./history";
 import {
   CombinatorIcon,
   DeviceIcon,
@@ -140,6 +143,47 @@ export function Workbench({
     ],
   );
 
+  const historyBusy = hasPendingConfigurationWrite(state);
+  const historyOperation = state.keyEditHistory.operation;
+  const undoEntry = state.keyEditHistory.past.at(-1);
+  const redoEntry = state.keyEditHistory.future.at(-1);
+  const history = useMemo(
+    () => ({
+      canUndo: canTravelKeyEditHistory(state, "undo"),
+      canRedo: canTravelKeyEditHistory(state, "redo"),
+      phase: historyOperation
+        ? historyOperation.direction === "undo"
+          ? ("undoing" as const)
+          : ("redoing" as const)
+        : historyBusy
+          ? ("writing" as const)
+          : ("idle" as const),
+      error: state.keyEditHistory.error,
+      undoLabel: undoEntry ? keyEditHistoryLabel(undoEntry) : null,
+      redoLabel: redoEntry ? keyEditHistoryLabel(redoEntry) : null,
+      undo: async () => {
+        await io.undoKeyEdit();
+      },
+      redo: async () => {
+        await io.redoKeyEdit();
+      },
+      clear: () => dispatch({ type: "keyHistoryClear" }),
+    }),
+    [historyBusy, historyOperation, io, redoEntry, state, undoEntry],
+  );
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const shortcut = historyShortcut(event);
+      if (!shortcut || !canTravelKeyEditHistory(stateRef.current, shortcut)) return;
+      event.preventDefault();
+      if (shortcut === "undo") void io.undoKeyEdit();
+      else void io.redoKeyEdit();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [io]);
+
   // Server-push topics.
   useEffect(() => {
     bundle.session.onTopic((event) => {
@@ -172,8 +216,8 @@ export function Workbench({
   }, [bundle.session, bundle.caps.lighting_enabled, io, onUnexpectedDisconnect]);
 
   const ctx = useMemo(
-    () => ({ bundle, state, dispatch, io }),
-    [bundle, state, io],
+    () => ({ bundle, state, dispatch, io, history }),
+    [bundle, state, io, history],
   );
 
   return (

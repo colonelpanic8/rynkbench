@@ -42,6 +42,12 @@ import type {
 } from "../vendor/rynk-wasm/rynk_wasm";
 import type { RynkSession } from "../session/types";
 import type { KeyboardModel } from "../model/keyboard";
+import {
+  initialKeyEditHistory,
+  reduceKeyEditHistory,
+  type KeyEditHistory,
+  type KeyEditHistoryEntry,
+} from "./history";
 
 export type Mode =
   | "keymap"
@@ -205,6 +211,11 @@ export interface WorkbenchState {
   selection: Selection | null;
   /** `${layer}:${row}:${col}` or `e:${layer}:${id}` → write status. */
   pending: Record<string, PendingInfo>;
+  /** Successful direct matrix-key edits only. Compound presets, imports,
+   *  encoders, lighting, and advanced tables deliberately do not enter it. */
+  keyEditHistory: KeyEditHistory;
+  /** Bulk configuration transactions suspend history traversal. */
+  keyEditHistorySuspended: boolean;
   lightingBusy: boolean;
   lightingError: string | null;
   /** LED ids to highlight (zone hover). */
@@ -346,6 +357,8 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     compiledScenePolicy: bundle.compiledSceneStatus?.policy ?? null,
     selection: null,
     pending: {},
+    keyEditHistory: initialKeyEditHistory(),
+    keyEditHistorySuspended: false,
     lightingBusy: false,
     lightingError: null,
     hoverLeds: null,
@@ -384,6 +397,21 @@ export type WorkbenchAction =
       message: string;
     }
   | { type: "keyErrDismiss"; layer: number; row: number; col: number }
+  | { type: "keyHistoryRecord"; entry: KeyEditHistoryEntry }
+  | {
+      type: "keyHistoryStart";
+      direction: "undo" | "redo";
+      entry: KeyEditHistoryEntry;
+    }
+  | {
+      type: "keyHistoryFinish";
+      direction: "undo" | "redo";
+      entry: KeyEditHistoryEntry;
+    }
+  | { type: "keyHistoryFail"; direction: "undo" | "redo"; message: string }
+  | { type: "keyHistoryClear" }
+  | { type: "keyHistorySuspend"; suspended: boolean }
+  | { type: "keyHistoryErrorDismiss" }
   | { type: "encoderLoaded"; layer: number; id: number; action: EncoderAction }
   | { type: "encoderWriteStart"; layer: number; id: number; action: EncoderAction }
   | { type: "encoderWriteOk"; layer: number; id: number }
@@ -539,6 +567,55 @@ export function makeWorkbenchReducer(cols: number) {
         const { [id]: _gone, ...pending } = state.pending;
         return { ...state, pending };
       }
+      case "keyHistoryRecord":
+        return {
+          ...state,
+          keyEditHistory: reduceKeyEditHistory(state.keyEditHistory, {
+            type: "record",
+            entry: act.entry,
+          }),
+        };
+      case "keyHistoryStart":
+        return {
+          ...state,
+          keyEditHistory: reduceKeyEditHistory(state.keyEditHistory, {
+            type: "start",
+            direction: act.direction,
+            entry: act.entry,
+          }),
+        };
+      case "keyHistoryFinish":
+        return {
+          ...state,
+          keyEditHistory: reduceKeyEditHistory(state.keyEditHistory, {
+            type: "finish",
+            direction: act.direction,
+            entry: act.entry,
+          }),
+        };
+      case "keyHistoryFail":
+        return {
+          ...state,
+          keyEditHistory: reduceKeyEditHistory(state.keyEditHistory, {
+            type: "fail",
+            direction: act.direction,
+            message: act.message,
+          }),
+        };
+      case "keyHistoryClear":
+        return {
+          ...state,
+          keyEditHistory: reduceKeyEditHistory(state.keyEditHistory, { type: "clear" }),
+        };
+      case "keyHistorySuspend":
+        return { ...state, keyEditHistorySuspended: act.suspended };
+      case "keyHistoryErrorDismiss":
+        return {
+          ...state,
+          keyEditHistory: reduceKeyEditHistory(state.keyEditHistory, {
+            type: "dismissError",
+          }),
+        };
       case "encoderLoaded":
         return {
           ...state,
@@ -999,18 +1076,55 @@ export function activeLightingBase(state: WorkbenchState): Record<number, Lighti
     : layerSceneCells(state.scenes, state.lightingTarget);
 }
 
+export function hasPendingConfigurationWrite(state: WorkbenchState): boolean {
+  return (
+    state.keyEditHistorySuspended ||
+    state.lightingBusy ||
+    Object.values(state.pending).some((item) => item.status === "pending")
+  );
+}
+
+export function canTravelKeyEditHistory(
+  state: WorkbenchState,
+  direction: "undo" | "redo",
+): boolean {
+  if (state.keyEditHistory.operation || hasPendingConfigurationWrite(state)) return false;
+  return direction === "undo"
+    ? state.keyEditHistory.past.length > 0
+    : state.keyEditHistory.future.length > 0;
+}
+
 export interface WorkbenchContextValue {
   bundle: ConnectedBundle;
   state: WorkbenchState;
   dispatch: Dispatch<WorkbenchAction>;
   /** Bound async operations (optimistic writes, lighting transactions). */
   io: WorkbenchIo;
+  history: {
+    canUndo: boolean;
+    canRedo: boolean;
+    phase: "idle" | "writing" | "undoing" | "redoing";
+    error: string | null;
+    undoLabel: string | null;
+    redoLabel: string | null;
+    undo(): Promise<void>;
+    redo(): Promise<void>;
+    clear(): void;
+  };
 }
 
 export type IoWriteResult = { ok: true } | { ok: false; message: string };
 
 export interface WorkbenchIo {
-  setKey(layer: number, row: number, col: number, action: KeyAction): Promise<IoWriteResult>;
+  setKey(
+    layer: number,
+    row: number,
+    col: number,
+    action: KeyAction,
+    options?: { history?: "record" | "invalidate" },
+  ): Promise<IoWriteResult>;
+  undoKeyEdit(): Promise<IoWriteResult>;
+  redoKeyEdit(): Promise<IoWriteResult>;
   loadEncoder(layer: number, id: number): void;
   setEncoder(layer: number, id: number, action: EncoderAction): void;
   setDefaultLayer(layer: number): void;
@@ -1073,6 +1187,10 @@ export function makeIo(
   extensionSupported = false,
   conditionalScenesSupported = false,
 ): WorkbenchIo {
+  let keyEditSequence = 0;
+  let directKeyWritesPending = 0;
+  let keyHistoryWritePending = false;
+
   // Feature detection lives here: firmware predating per-effect parameters
   // rejects the request outright, which is recorded as "no parameters" and
   // renders as no extra controls rather than an error.
@@ -1083,13 +1201,80 @@ export function makeIo(
     );
   };
 
+  const travelKeyHistory = async (
+    direction: "undo" | "redo",
+  ): Promise<IoWriteResult> => {
+    const state = getState();
+    if (
+      keyHistoryWritePending ||
+      directKeyWritesPending > 0 ||
+      !canTravelKeyEditHistory(state, direction)
+    ) {
+      return { ok: false, message: "Key edit history is not available while a write is pending" };
+    }
+    const stack = direction === "undo" ? state.keyEditHistory.past : state.keyEditHistory.future;
+    const entry = stack.at(-1);
+    if (!entry) return { ok: false, message: `Nothing to ${direction}` };
+
+    const action = direction === "undo" ? entry.before : entry.after;
+    const previous = state.layers[entry.layer][entry.row * cols + entry.col];
+    keyHistoryWritePending = true;
+    dispatch({ type: "keyHistoryStart", direction, entry });
+    dispatch({
+      type: "keyWriteStart",
+      layer: entry.layer,
+      row: entry.row,
+      col: entry.col,
+      action,
+    });
+    try {
+      await session.keymap.setKey(entry.layer, entry.row, entry.col, action);
+      dispatch({
+        type: "keyWriteOk",
+        layer: entry.layer,
+        row: entry.row,
+        col: entry.col,
+      });
+      dispatch({ type: "keyHistoryFinish", direction, entry });
+      return { ok: true };
+    } catch (error) {
+      const message = errorMessage(error);
+      dispatch({
+        type: "keyWriteErr",
+        layer: entry.layer,
+        row: entry.row,
+        col: entry.col,
+        prev: previous,
+        attempted: action,
+        message,
+      });
+      dispatch({ type: "keyHistoryFail", direction, message });
+      return { ok: false, message };
+    } finally {
+      keyHistoryWritePending = false;
+    }
+  };
+
   return {
-    setKey(layer, row, col, action) {
+    setKey(layer, row, col, action, options) {
+      if (keyHistoryWritePending) {
+        return Promise.resolve({ ok: false, message: "Undo or redo is in progress" });
+      }
       const prev = getState().layers[layer][row * cols + col];
+      const sequence = ++keyEditSequence;
+      directKeyWritesPending += 1;
       dispatch({ type: "keyWriteStart", layer, row, col, action });
       return session.keymap.setKey(layer, row, col, action).then(
         () => {
           dispatch({ type: "keyWriteOk", layer, row, col });
+          if (options?.history === "invalidate") {
+            dispatch({ type: "keyHistoryClear" });
+          } else {
+            dispatch({
+              type: "keyHistoryRecord",
+              entry: { sequence, layer, row, col, before: prev, after: action },
+            });
+          }
           return { ok: true } as const;
         },
         (err) => {
@@ -1105,7 +1290,15 @@ export function makeIo(
           });
           return { ok: false, message } as const;
         },
-      );
+      ).finally(() => {
+        directKeyWritesPending -= 1;
+      });
+    },
+    undoKeyEdit() {
+      return travelKeyHistory("undo");
+    },
+    redoKeyEdit() {
+      return travelKeyHistory("redo");
     },
     loadEncoder(layer, id) {
       session.keymap.getEncoder(id, layer).then(

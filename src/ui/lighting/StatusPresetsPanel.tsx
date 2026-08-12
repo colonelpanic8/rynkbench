@@ -82,7 +82,8 @@ export function StatusPresetsPanel() {
     setMessage("Installing and verifying…");
     const result = await writeGlove80StatusSetup(
       {
-        setKey: (preset, action) => io.setKey(preset.layer, preset.row, preset.col, action),
+        setKey: (preset, action) =>
+          io.setKey(preset.layer, preset.row, preset.col, action, { history: "invalidate" }),
         applyRules: (next) => io.applyConditionalScenes(next),
       },
       state.runtimeConditionalDraft,
@@ -106,6 +107,7 @@ export function StatusPresetsPanel() {
       selectedKey.row,
       selectedKey.col,
       connectionKeyAction(connectionKind),
+      { history: "invalidate" },
     );
     if (!keyResult.ok) {
       setMessage(`Installation failed: ${keyResult.message}`);

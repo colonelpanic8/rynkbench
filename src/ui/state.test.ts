@@ -4,6 +4,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type {
+  KeyAction,
   LightingExtendedConditionalSceneCell,
   LightingEffect,
   LightingExtensionParam,
@@ -12,6 +13,7 @@ import type {
   ModifierCombination,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import type { RynkSession } from "../session/types";
+import { initialKeyEditHistory } from "./history";
 import {
   activeLightingBase,
   activeLightingDraft,
@@ -69,6 +71,8 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     compiledScenePolicy: "EffectiveOnly",
     selection: null,
     pending: {},
+    keyEditHistory: initialKeyEditHistory(),
+    keyEditHistorySuspended: false,
     lightingBusy: false,
     lightingError: null,
     hoverLeds: null,
@@ -328,6 +332,124 @@ describe("verified status writes", () => {
 
     expect(result).toEqual({ ok: false, message: "flash busy" });
     expect(actions.at(-1)).toMatchObject({ type: "keyWriteErr", message: "flash busy" });
+  });
+});
+
+describe("device-backed direct key history", () => {
+  const key = (name: "A" | "B" | "C"): KeyAction => ({ Single: { Key: { Hid: name } } });
+
+  function keyHarness(write: (action: KeyAction) => Promise<void>) {
+    let state = baseState({ layers: [["No", "No"], ["No", "No"]] });
+    const dispatch = (action: WorkbenchAction) => {
+      state = reducer(state, action);
+    };
+    const session = {
+      keymap: {
+        setKey: async (_layer: number, _row: number, _col: number, action: KeyAction) =>
+          write(action),
+      },
+    } as unknown as RynkSession;
+    return {
+      io: makeIo(session, () => state, dispatch, 2, () => {}),
+      state: () => state,
+    };
+  }
+
+  it("undoes and redoes by writing the prior and later actions to the session", async () => {
+    const writes: KeyAction[] = [];
+    const { io, state } = keyHarness(async (action) => {
+      writes.push(action);
+    });
+    const assigned = key("A");
+
+    await io.setKey(0, 0, 0, assigned);
+    expect(state().keyEditHistory).toMatchObject({ past: [{ before: "No", after: assigned }] });
+
+    await io.undoKeyEdit();
+    expect(state().layers[0][0]).toBe("No");
+    expect(state().keyEditHistory).toMatchObject({ past: [], future: [{ after: assigned }] });
+
+    await io.redoKeyEdit();
+    expect(state().layers[0][0]).toEqual(assigned);
+    expect(writes).toEqual([assigned, "No", assigned]);
+  });
+
+  it("keeps the undo entry and exposes errors when the reverse write fails", async () => {
+    let fail = false;
+    const { io, state } = keyHarness(async () => {
+      if (fail) throw new Error("device busy");
+    });
+    const assigned = key("B");
+    await io.setKey(0, 0, 0, assigned);
+    fail = true;
+
+    const result = await io.undoKeyEdit();
+
+    expect(result).toEqual({ ok: false, message: "device busy" });
+    expect(state().layers[0][0]).toEqual(assigned);
+    expect(state().keyEditHistory).toMatchObject({
+      past: [{ after: assigned }],
+      future: [],
+      operation: null,
+      error: "Undo failed: device busy",
+    });
+    expect(state().pending["0:0:0"]).toMatchObject({ status: "error", message: "device busy" });
+  });
+
+  it("clears redo after a successful divergent edit but not a failed one", async () => {
+    let fail = false;
+    const { io, state } = keyHarness(async () => {
+      if (fail) throw new Error("device busy");
+    });
+    await io.setKey(0, 0, 0, key("A"));
+    await io.undoKeyEdit();
+
+    fail = true;
+    await io.setKey(0, 0, 1, key("B"));
+    expect(state().keyEditHistory.future).toHaveLength(1);
+
+    fail = false;
+    await io.setKey(0, 0, 1, key("C"));
+    expect(state().keyEditHistory.future).toEqual([]);
+    expect(state().keyEditHistory.past.at(-1)).toMatchObject({ col: 1, after: key("C") });
+  });
+
+  it("refuses traversal while another configuration write is pending", async () => {
+    let release: (() => void) | undefined;
+    let writes = 0;
+    const { io, state } = keyHarness(async () => {
+      writes += 1;
+      if (writes === 2) await new Promise<void>((resolve) => (release = resolve));
+    });
+    await io.setKey(0, 0, 0, key("A"));
+
+    const pending = io.setKey(0, 0, 1, key("B"));
+    expect(state().pending["0:0:1"]).toEqual({ status: "pending" });
+    await expect(io.undoKeyEdit()).resolves.toEqual({
+      ok: false,
+      message: "Key edit history is not available while a write is pending",
+    });
+
+    release?.();
+    await pending;
+  });
+
+  it("invalidates history for compound writes and does not record synchronization", async () => {
+    const { io, state } = keyHarness(async () => {});
+    await io.setKey(0, 0, 0, key("A"));
+    expect(state().keyEditHistory.past).toHaveLength(1);
+
+    await io.setKey(0, 0, 0, key("B"), { history: "invalidate" });
+    expect(state().keyEditHistory.past).toEqual([]);
+
+    const synchronized = reducer(state(), {
+      type: "keyWriteStart",
+      layer: 0,
+      row: 0,
+      col: 1,
+      action: key("B"),
+    });
+    expect(synchronized.keyEditHistory.past).toEqual([]);
   });
 });
 

@@ -5,7 +5,9 @@ speak the **Rynk** protocol. Connect over Web Serial or WebHID and edit your
 keymap and per-key lighting live — no install, nothing leaves your machine.
 
 - **Keymap editing** — per-layer bindings, tap-hold, layer-tap, and the rest of
-  RMK's action set, rendered on the board's real geometry.
+  RMK's action set, rendered on the board's real geometry. Successful direct
+  key assignments can be undone and redone from the top bar or with the usual
+  Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, and Ctrl+Y shortcuts.
 - **Lighting** — a paint-on-the-board overlay plus on-device *layer scenes*:
   lighting that lives on the keyboard, composites natively as layers activate,
   and survives disconnect and reboot.
@@ -29,6 +31,12 @@ keymap and per-key lighting live — no install, nothing leaves your machine.
   with no hardware attached, so the whole UI is explorable offline.
 
 ## Behavior and indicator notes
+
+- **Undo/redo currently covers direct matrix-key assignments only.** Each undo
+  and redo writes the corresponding binding to the keyboard; it is not a
+  browser-only preview. Imports, guided status presets, encoder bindings,
+  default-layer changes, lighting, profiles, and advanced tables are excluded
+  until their multi-write or staged operations can be reversed atomically.
 
 - **Tap-hold profiles are live configuration.** `Save profile` writes the
   selected slot directly to the connected keyboard; bindings that name that

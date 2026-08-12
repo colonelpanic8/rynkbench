@@ -161,6 +161,24 @@ export function PowerIcon(props: IconProps) {
   );
 }
 
+export function UndoIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M5.5 4.2L2.2 7.1l3.3 2.9" />
+      <path d="M2.5 7.1h6.2a4.3 4.3 0 0 1 4.3 4.3v1" />
+    </svg>
+  );
+}
+
+export function RedoIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M10.5 4.2l3.3 2.9-3.3 2.9" />
+      <path d="M13.5 7.1H7.3A4.3 4.3 0 0 0 3 11.4v1" />
+    </svg>
+  );
+}
+
 export function WarningIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

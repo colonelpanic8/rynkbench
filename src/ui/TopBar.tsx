@@ -15,7 +15,7 @@ import { useWorkbench } from "./state";
 import { Chip, Button } from "./kit";
 import { errorReport, TransferReportPanel } from "./TransferReport";
 import type { TransferReport } from "./TransferReport";
-import { BatteryGlyph, PowerIcon, Wordmark } from "./icons";
+import { BatteryGlyph, PowerIcon, RedoIcon, UndoIcon, Wordmark } from "./icons";
 import { KIND_LABEL } from "./session-labels";
 
 function BatteryReadout({ battery, split }: { battery: BatteryStatus; split: boolean }) {
@@ -40,7 +40,7 @@ function BatteryReadout({ battery, split }: { battery: BatteryStatus; split: boo
 }
 
 export function TopBar() {
-  const { bundle, state, dispatch, io } = useWorkbench();
+  const { bundle, state, dispatch, io, history } = useWorkbench();
   const offline = bundle.session.kind === "offline";
   const fileInput = useRef<HTMLInputElement>(null);
   /** The last document imported, kept verbatim. An export reuses it for the
@@ -71,6 +71,9 @@ export function TopBar() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    // Imports are bulk, cross-feature writes outside direct-key history.
+    dispatch({ type: "keyHistorySuspend", suspended: true });
+    history.clear();
     setTransfer("importing");
     setReport(null);
     try {
@@ -113,6 +116,8 @@ export function TopBar() {
     } catch (error) {
       setReport(errorReport(`Could not import ${file.name}`, error));
     } finally {
+      history.clear();
+      dispatch({ type: "keyHistorySuspend", suspended: false });
       setTransfer(null);
     }
   };
@@ -170,6 +175,61 @@ export function TopBar() {
       <div className="flex-1" />
 
       <div
+        className="flex items-center gap-0.5"
+        title="History covers individual key binding edits only. Imports, encoder bindings, default layers, lighting, profiles, and advanced settings are not included."
+      >
+        <Button
+          variant="ghost"
+          className="px-2"
+          disabled={!history.canUndo}
+          onClick={() => void history.undo()}
+          aria-label="Undo key binding edit"
+          title={
+            history.undoLabel
+              ? `Undo key binding edit · ${history.undoLabel} · Ctrl/⌘ Z`
+              : "No key binding edit to undo"
+          }
+        >
+          <UndoIcon size={15} />
+          Undo key
+        </Button>
+        <Button
+          variant="ghost"
+          className="px-2"
+          disabled={!history.canRedo}
+          onClick={() => void history.redo()}
+          aria-label="Redo key binding edit"
+          title={
+            history.redoLabel
+              ? `Redo key binding edit · ${history.redoLabel} · Ctrl/⌘ Shift Z or Ctrl Y`
+              : "No key binding edit to redo"
+          }
+        >
+          <RedoIcon size={15} />
+          Redo key
+        </Button>
+      </div>
+
+      {history.phase !== "idle" && (
+        <span className="text-[11.5px] text-accent" role="status">
+          {history.phase === "writing"
+            ? "Saving configuration…"
+            : history.phase === "undoing"
+              ? "Undoing key…"
+              : "Redoing key…"}
+        </span>
+      )}
+      {history.error && (
+        <span
+          className="max-w-48 truncate text-[11.5px] text-danger"
+          role="alert"
+          title={history.error}
+        >
+          {history.error}
+        </span>
+      )}
+
+      <div
         key={activeLabel}
         className="animate-pop"
         title={`Active layers: ${activeLabel}. Default layer: ${state.defaultLayer}.`}
@@ -193,7 +253,7 @@ export function TopBar() {
       />
       <Button
         variant="ghost"
-        disabled={transfer !== null}
+        disabled={transfer !== null || history.phase !== "idle"}
         onClick={() => fileInput.current?.click()}
         title={
           offline
