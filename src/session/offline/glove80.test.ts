@@ -23,7 +23,7 @@ describe("offline Glove80 workspace", () => {
       lighting: {
         brightness: 177,
         output_mode: "AlwaysOn",
-        wake_layers: [2],
+        wake_layers: [1],
         scene_policy: "ActiveStack",
         background: {
           enabled: false,
@@ -74,6 +74,7 @@ describe("offline Glove80 workspace", () => {
     expect(board.initialDefaultLayer).toBe(1);
     expect(board.brightness).toBe(177);
     expect(board.initialLayerPolicy).toBe("ActiveStack");
+    expect(board.lightingOutputMode?.wake_layers).toBe(2 ** 1);
     expect(board.morseProfileCount).toBe(24);
     expect(board.seedMorseProfiles).toEqual(snapshot.behaviors?.morse_profiles);
     expect(board.seedHoldTriggerPositions).toEqual([{ profile: 255, row: 3, col: 8 }]);
@@ -86,6 +87,7 @@ describe("offline Glove80 workspace", () => {
       entries: snapshot.behaviors?.morse_profiles,
     });
     expect(await session.macros.read()).toEqual(new Uint8Array([1, 2, 3, ...Array(509).fill(0)]));
+    expect(await session.lighting.outputMode()).toMatchObject({ wake_layers: 2 ** 1 });
     await session.close();
   });
 });

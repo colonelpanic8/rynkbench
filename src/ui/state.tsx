@@ -441,6 +441,7 @@ export type WorkbenchAction =
   | { type: "hoverLeds"; leds: number[] | null }
   | { type: "lightingSelect"; leds: number[]; mode?: "replace" | "add" | "remove" }
   | { type: "lightingStateSet"; state: LightingState }
+  | { type: "wakeLayersSet"; outputMode: LightingOutputModeState }
   | { type: "slotWriteStart"; kind: SlotKind; index: number; value: ComboDefinition | Morse | Fork }
   | { type: "slotWriteOk"; kind: SlotKind; index: number }
   | {
@@ -594,6 +595,10 @@ export function makeWorkbenchReducer(cols: number) {
           ...state,
           lightingState: act.state,
           lightingOutputMode: act.outputMode ?? state.lightingOutputMode,
+          lightingControls:
+            act.outputMode === undefined || act.outputMode === null
+              ? state.lightingControls
+              : { ...state.lightingControls, wake_layers: act.outputMode.wake_layers },
           lightingExtension: act.extension ?? state.lightingExtension,
           lightingExtensionLayers: act.extensionLayers ?? state.lightingExtensionLayers,
           applied,
@@ -707,6 +712,17 @@ export function makeWorkbenchReducer(cols: number) {
           ...state,
           lightingState: act.state,
           scenePolicy: act.policy,
+          lightingBusy: false,
+          lightingError: null,
+        };
+      case "wakeLayersSet":
+        return {
+          ...state,
+          lightingOutputMode: act.outputMode,
+          lightingControls: {
+            ...state.lightingControls,
+            wake_layers: act.outputMode.wake_layers,
+          },
           lightingBusy: false,
           lightingError: null,
         };
@@ -1022,6 +1038,7 @@ export interface WorkbenchIo {
   /** Replace the on-device scene table (only when scenes are supported). */
   applyScenes(cells: LightingSceneCell[]): void;
   setScenePolicy(policy: LightingLayerPolicy): void;
+  setWakeLayers(layers: number): void;
   /** Atomically replace the mutable conditional table with this exact order
    *  (only when the firmware has such a table). */
   applyConditionalScenes(
@@ -1235,6 +1252,13 @@ export function makeIo(
       dispatch({ type: "lightingBusy", busy: true, error: null });
       session.lighting.scenes.setLayerPolicy(policy).then(
         (lightingState) => dispatch({ type: "scenePolicySet", state: lightingState, policy }),
+        (err) => dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
+      );
+    },
+    setWakeLayers(layers) {
+      dispatch({ type: "lightingBusy", busy: true, error: null });
+      session.lighting.setWakeLayers(layers).then(
+        (outputMode) => dispatch({ type: "wakeLayersSet", outputMode }),
         (err) => dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
       );
     },

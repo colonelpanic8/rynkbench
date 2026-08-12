@@ -19,14 +19,9 @@ import {
   pressedMatrixIndices,
   reportedShiftState,
 } from "./characters";
+import { layersInMask } from "../lighting/wakeLayers";
 
 const MATRIX_POLL_MS = 100;
-
-function layersInMask(mask: number, count: number): number[] {
-  return Array.from({ length: count }, (_, layer) => layer).filter(
-    (layer) => Math.floor(mask / 2 ** layer) % 2 === 1,
-  );
-}
 
 function effectColor(effect: LightingEffect): string {
   if ("Solid" in effect) return cssEmissiveRgb(effect.Solid.color);

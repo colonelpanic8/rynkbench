@@ -19,6 +19,7 @@ import type {
 import { useWorkbench } from "../state";
 import { Button, SectionLabel, TextInput, cx } from "../kit";
 import { TrashIcon } from "../icons";
+import { maskHasLayer, setLayerInMask } from "./wakeLayers";
 
 interface LayerPreset {
   name: string;
@@ -105,6 +106,9 @@ function DeviceScenes({ status }: { status: LightingSceneStatus }) {
   // Presets left in this browser by pre-scene firmware sessions.
   const [localPresets, setLocalPresets] = useState<PresetMap>(() => load(serial).presets);
   const localCount = Object.keys(localPresets).length;
+  const targetLayer = state.lightingTarget === "overlay" ? null : state.lightingTarget;
+  const wakeLayers = state.lightingOutputMode?.wake_layers ?? state.lightingControls.wake_layers;
+  const targetIsMagic = targetLayer !== null && maskHasLayer(wakeLayers, targetLayer);
 
   /** Layers with a local preset take that preset; the rest pass through. */
   const copyLocalPresets = () => {
@@ -154,6 +158,45 @@ function DeviceScenes({ status }: { status: LightingSceneStatus }) {
             ))}
           </div>
         </div>
+
+        {state.lightingOutputMode !== null && (
+          <div className="rounded-lg border border-accent/25 bg-accent-dim/10 p-2.5">
+            <div className="text-[12.5px] font-medium text-ink">MoErgo Magic Layer</div>
+            <p className="mt-1 text-[10.5px] leading-relaxed text-faint">
+              Magic is a convention, not a special layer type: it is an ordinary layer whose
+              stored scene stays visible when normal lighting is turned off.
+            </p>
+            {targetLayer === null ? (
+              <p className="mt-2 text-[11.5px] text-mute">
+                Select a layer target above the keyboard to configure its scene and Magic setting.
+              </p>
+            ) : (
+              <>
+                <Button
+                  variant={targetIsMagic ? "outline" : "primary"}
+                  className="mt-2 w-full py-1"
+                  disabled={state.lightingBusy}
+                  title={
+                    targetIsMagic
+                      ? `Let Layer ${targetLayer} follow the normal lighting output policy`
+                      : `Keep Layer ${targetLayer}'s scene visible while normal lighting is off`
+                  }
+                  onClick={() =>
+                    io.setWakeLayers(setLayerInMask(wakeLayers, targetLayer, !targetIsMagic))
+                  }
+                >
+                  {targetIsMagic
+                    ? `L${targetLayer} is Magic · remove designation`
+                    : `Use L${targetLayer} as a Magic Layer`}
+                </Button>
+                <p className="mt-1.5 text-[10.5px] leading-relaxed text-faint">
+                  Paint and apply L{targetLayer}&apos;s scene above. The scene and Magic setting are
+                  stored on the keyboard and survive reboot.
+                </p>
+              </>
+            )}
+          </div>
+        )}
 
         {localCount > 0 && (
           <Button

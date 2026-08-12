@@ -252,6 +252,29 @@ describe("layer-state snapshots", () => {
   });
 });
 
+describe("Magic-layer policy", () => {
+  it("updates both output-mode readback and the configured-controls summary", () => {
+    const outputMode = {
+      mode: "AlwaysOff" as const,
+      powered: false,
+      wake_active: true,
+      effective_enabled: true,
+      powered_only_scope: "Local" as const,
+      cycle_user_action: undefined,
+      wake_layers: 2 ** 2,
+      indicator: undefined,
+    };
+    const next = reducer(baseState({ lightingBusy: true }), {
+      type: "wakeLayersSet",
+      outputMode,
+    });
+
+    expect(next.lightingOutputMode).toEqual(outputMode);
+    expect(next.lightingControls.wake_layers).toBe(2 ** 2);
+    expect(next.lightingBusy).toBe(false);
+  });
+});
+
 describe("verified status writes", () => {
   const statusRule = (ledId: number, red: number): LightingExtendedConditionalSceneCell => ({
     cell: {

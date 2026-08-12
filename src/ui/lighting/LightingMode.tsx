@@ -28,6 +28,7 @@ import { Button, InspectorShell, SectionLabel, cx } from "../kit";
 import { EraserIcon, MarqueeIcon, SparkleIcon, SpinnerIcon, WarningIcon } from "../icons";
 import { effectiveAction } from "../live/compositor";
 import { targetPreviewEffects } from "./preview";
+import { layersInMask, maskHasLayer } from "./wakeLayers";
 import { conditionalRuleMatches, describeConditions, firmwarePreviewCells } from "./firmwareRules";
 import { effectRgb } from "./effect";
 import { NumberField } from "./EffectEditor";
@@ -59,16 +60,6 @@ const DEFAULT_BRUSH: Brush = {
 };
 
 const BLACK_EFFECT: LightingEffect = { Solid: { color: { r: 0, g: 0, b: 0 } } };
-
-function maskHasLayer(mask: number, layer: number): boolean {
-  return Math.floor(mask / 2 ** layer) % 2 === 1;
-}
-
-function layersInMask(mask: number, count: number): number[] {
-  return Array.from({ length: count }, (_, layer) => layer).filter((layer) =>
-    maskHasLayer(mask, layer),
-  );
-}
 
 function sceneLayerMap(
   scenes: LightingSceneCell[],
@@ -273,8 +264,8 @@ function FirmwareRulesPanel() {
 
   const outputMode = state.lightingOutputMode;
   if (total === 0 && outputMode === null) return null;
-  const { output_toggle_user_action: toggleAction, wake_layers: wakeLayers } =
-    state.lightingControls;
+  const { output_toggle_user_action: toggleAction } = state.lightingControls;
+  const wakeLayers = state.lightingOutputMode?.wake_layers ?? state.lightingControls.wake_layers;
   const wakeLayerList = layersInMask(wakeLayers, bundle.caps.num_layers);
   return (
     <div>
