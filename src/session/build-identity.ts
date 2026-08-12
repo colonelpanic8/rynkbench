@@ -14,12 +14,12 @@
  * not prove compatibility, but it makes a mismatch visible, which is the
  * difference between a mystifying decode failure and an obvious one.
  */
-import configRev from "../vendor/glove80-config-wasm/build-rev.json";
+import configRev from "../vendor/moergo-config-wasm/build-rev.json";
 import rynkRev from "../vendor/rynk-wasm/build-rev.json";
 
 /** A source pin recorded by the flake when it built a wasm package. */
 export interface PinnedRev {
-  /** Flake input name, e.g. `rmk` or `glove80-rmk`. */
+  /** Flake input name, e.g. `rmk` or `moergo-rmk`. */
   input: string;
   /** Full commit the input resolved to. */
   rev: string;
@@ -32,7 +32,7 @@ export const CLIENT_REVS: PinnedRev[] = [rynkRev, configRev];
 export interface FirmwareBuild {
   /** Downstream configuration commit, when the label names one. */
   config?: string;
-  /** Application package name and semver, e.g. `glove80-rmk` / `0.1.0`. */
+  /** Board package name and semver, e.g. `glove80-rmk` / `0.1.0`. */
   app?: string;
   appVersion?: string;
   /** Application source commit. */
@@ -47,7 +47,7 @@ export interface FirmwareBuild {
  * Read a firmware build label.
  *
  * The label is deliberately application-defined, so this recognizes the shape
- * glove80-rmk emits and degrades to `{}` for anything else rather than
+ * moergo-rmk emits and degrades to `{}` for anything else rather than
  * inventing structure. Callers must still show the raw label.
  */
 export function parseBuildLabel(label: string): FirmwareBuild {
@@ -97,7 +97,7 @@ export function compareRevs(build: FirmwareBuild): {
     return namesSameCommit(firmware, pinned) ? "same" : "different";
   };
   return {
-    app: agree(build.appRev, pin("glove80-rmk")),
+    app: agree(build.appRev, pin("moergo-rmk")),
     rmk: agree(build.rmk, pin("rmk")),
   };
 }

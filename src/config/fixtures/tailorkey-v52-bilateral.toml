@@ -10,7 +10,7 @@
 # - the remaining 12 user-visible layers, 20 combo slots and six true macros
 #   retain the source layout's actions.
 #
-# The file itself is runtime state and is applied through glove80-control. The
+# The file itself is runtime state and is applied through moergo-control. The
 # three transparent MouseSlow/MouseFast/MouseWarp layers require these compiled
 # input-scale entries to reproduce TailorKey's momentary 1/9x, 3x and 12x mouse
 # movement and scrolling exactly; mouse layer scaling is not a runtime command:

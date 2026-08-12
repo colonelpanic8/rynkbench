@@ -14,7 +14,7 @@
     "pretest": "npm run wasm",
     "test": "vitest run",
     "wasm:rynk": "nix build .#rynk-wasm --out-link src/vendor/rynk-wasm",
-    "wasm:config": "nix build .#glove80-config-wasm --out-link src/vendor/glove80-config-wasm"
+    "wasm:config": "nix build .#moergo-config-wasm --out-link src/vendor/moergo-config-wasm"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

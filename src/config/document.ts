@@ -3,7 +3,7 @@
 //
 // Both supported formats — the native `glove80.toml` and the MoErgo Layout
 // Editor's JSON backup — are parsed, validated and rendered by the same Rust
-// code the `glove80-control` CLI runs, compiled to wasm. Nothing here reimplements
+// code the `moergo-control` CLI runs, compiled to wasm. Nothing here reimplements
 // the formats; this module only assembles the arguments that code needs and
 // restates its results in the workbench's own vocabulary.
 
@@ -11,7 +11,7 @@ import wasmInit, {
   detect_config_format,
   parse_config_document,
   render_config_as,
-} from "../vendor/glove80-config-wasm/glove80_config_wasm";
+} from "../vendor/moergo-config-wasm/moergo_config_wasm";
 import type {
   ConfigFormat,
   EffectParamSet,
@@ -19,7 +19,7 @@ import type {
   ImportNote,
   ParsedConfig,
   RuntimeSnapshot,
-} from "../vendor/glove80-config-wasm/glove80_config_wasm";
+} from "../vendor/moergo-config-wasm/moergo_config_wasm";
 import type { RynkSession } from "../session/types";
 import type { WorkbenchState } from "../ui/state";
 
@@ -83,12 +83,16 @@ export async function loadCatalog(
  *  of a MoErgo document anyway. */
 export function snapshotFromState(state: WorkbenchState): RuntimeSnapshot {
   const lightingState = state.lightingState;
+  const wakeMask = state.lightingOutputMode?.wake_layers ?? state.lightingControls?.wake_layers ?? 0;
   const lighting =
     lightingState === null || state.scenePolicy === null
       ? undefined
       : {
           brightness: lightingState.output_brightness,
           output_mode: state.lightingOutputMode?.mode ?? "AlwaysOn",
+          wake_layers: state.layers.flatMap((_, layer) =>
+            ((wakeMask >>> layer) & 1) === 1 ? [layer] : [],
+          ),
           scene_policy: state.scenePolicy,
           background: lightingState.background,
           effects: state.lightingExtension?.state,

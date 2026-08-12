@@ -23,6 +23,7 @@ describe("offline Glove80 workspace", () => {
       lighting: {
         brightness: 177,
         output_mode: "AlwaysOn",
+        wake_layers: [2],
         scene_policy: "ActiveStack",
         background: {
           enabled: false,

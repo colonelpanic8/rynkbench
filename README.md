@@ -21,7 +21,7 @@ keymap and per-key lighting live — no install, nothing leaves your machine.
   without connecting a keyboard, then download `glove80.toml` or MoErgo JSON.
   Connected keyboards can import the same files by writing only runtime
   differences. Both paths use the same validation and conversion model as
-  `glove80-control`; Morse, combo, fork, macro, profile, and lighting tables
+  `moergo-control`; Morse, combo, fork, macro, profile, and lighting tables
   travel with the keymap.
 - **Split tuning** — inspect and adjust the volatile powered/battery BLE latency
   policy on compatible split centrals.
@@ -51,7 +51,7 @@ keymap and per-key lighting live — no install, nothing leaves your machine.
 - **Status setup installs those rules for you.** In Lighting, use **Select** to
   choose one connection key or five battery-bar keys, then use **Status setup**
   to bind the action and install the ordered indicator rules. On a Glove80, the
-  complete Magic-layer layout from `glove80-config`—two battery bars, three BLE
+  complete Magic-layer layout from `moergo-config`—two battery bars, three BLE
   profile keys, and the USB key—is available as a single preset.
 
 Web Serial and WebHID need a Chromium-based browser (Chrome or Edge); Firefox
@@ -133,7 +133,7 @@ nix build                     # result/ contains the deployable site
 ```
 
 The flake follows the fork's `assembled` branch, while `flake.lock` pins the exact
-commit used by `glove80-rmk` for reproducible builds. Update it with
+commit used by `moergo-rmk` for reproducible builds. Update it with
 `nix flake update rmk`.
 
 ## License

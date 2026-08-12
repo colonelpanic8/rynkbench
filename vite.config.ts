@@ -13,7 +13,7 @@ const projectRoot = fileURLToPath(new URL(".", import.meta.url));
 // name — miss one and its `.wasm` is served as a 403, which surfaces in the
 // browser as the thoroughly unhelpful "Failed to execute 'compile' on
 // 'WebAssembly': HTTP status code is not ok".
-const wasmRoots = ["rynk-wasm", "glove80-config-wasm"].map((pkg) =>
+const wasmRoots = ["rynk-wasm", "moergo-config-wasm"].map((pkg) =>
   realpathSync(new URL(`./src/vendor/${pkg}`, import.meta.url)),
 );
 

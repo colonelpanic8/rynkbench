@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
-import { initSync } from "../vendor/glove80-config-wasm/glove80_config_wasm";
+import { initSync } from "../vendor/moergo-config-wasm/moergo_config_wasm";
 import type { ExtensionCatalog } from "./document";
 import { detectFormat, parseDocument, renderDocument, snapshotFromState } from "./document";
 import { exportDocument } from "./transfer";
@@ -12,7 +12,7 @@ import type { Morse } from "../vendor/rynk-wasm/rynk_wasm";
 // over directly instead.
 beforeAll(() => {
   initSync({
-    module: readFileSync("src/vendor/glove80-config-wasm/glove80_config_wasm_bg.wasm"),
+    module: readFileSync("src/vendor/moergo-config-wasm/moergo_config_wasm_bg.wasm"),
   });
 });
 
@@ -30,7 +30,7 @@ const CATALOG: ExtensionCatalog = {
 
 /** A MoErgo document of `layerCount` transparent layers, plus whatever behavior
  *  tables the case under test needs. The importer's own correctness is covered
- *  against the real editor exports in glove80-config; what matters here is that
+ *  against the real editor exports in moergo-config; what matters here is that
  *  the results cross the wasm ABI intact. */
 const moergo = (extra: Record<string, unknown>, layerCount = 1) =>
   JSON.stringify({

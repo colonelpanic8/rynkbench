@@ -39,19 +39,19 @@
         "type": "github"
       }
     },
-    "glove80-rmk": {
+    "moergo-rmk": {
       "flake": false,
       "locked": {
-        "lastModified": 1786426825,
-        "narHash": "sha256-LXt6veeBRM8V63sRPU3GwpoWeikFPbVopv1WE2CDZh4=",
+        "lastModified": 1786504694,
+        "narHash": "sha256-cDeCuuqwjKbucTmeRJ5JzftJCvzrwWKFOfotc2hCPQc=",
         "owner": "colonelpanic8",
-        "repo": "glove80-rmk",
-        "rev": "e71213c62a3777cea4a84579ab540389d1a76580",
+        "repo": "moergo-rmk",
+        "rev": "55373c9158fcb9a8a694c585a1df42a8987e6f3a",
         "type": "github"
       },
       "original": {
         "owner": "colonelpanic8",
-        "repo": "glove80-rmk",
+        "repo": "moergo-rmk",
         "type": "github"
       }
     },
@@ -74,11 +74,11 @@
     "rmk": {
       "flake": false,
       "locked": {
-        "lastModified": 1786377134,
-        "narHash": "sha256-ql9HF7eJj40jIPOvYgc1wmS02q0YkEuuMJchma3ERVI=",
+        "lastModified": 1786490838,
+        "narHash": "sha256-4xPG8MOhCLK+QgIqZeLhElbKS+3tgcd2AN6b/HLA+Ho=",
         "owner": "colonelpanic8",
         "repo": "rmk",
-        "rev": "93a370ecb4261dd71dbf39bed202a6f0281bba02",
+        "rev": "98149f6dc3f87fe4f64885fce7fea6fea93e8add",
         "type": "github"
       },
       "original": {
@@ -92,7 +92,7 @@
       "inputs": {
         "fenix": "fenix",
         "flake-utils": "flake-utils",
-        "glove80-rmk": "glove80-rmk",
+        "moergo-rmk": "moergo-rmk",
         "nixpkgs": "nixpkgs",
         "rmk": "rmk"
       }
