@@ -9,6 +9,7 @@ import type { KeyView } from "../../model/keyboard";
 import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
 import { keyActionGlyph, keyActionDescription } from "../labels";
+import { keyAddressLabel, matrixKeyLabel } from "../key-address";
 import { encoderPendingId, keyPendingId, useWorkbench } from "../state";
 import { ActionEditor } from "./ActionEditor";
 import {
@@ -472,14 +473,19 @@ function KeyInspector({ row, col }: { row: number; col: number }) {
   const cols = bundle.caps.num_cols;
   const action = state.layers[state.uiLayer]?.[row * cols + col] ?? "No";
   const pending = state.pending[keyPendingId(state.uiLayer, row, col)];
+  const key = bundle.model.keys.find((candidate) => candidate.row === row && candidate.col === col);
+  const addressable = key ?? { row, col };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div>
         <div className="flex items-center justify-between">
           <SectionLabel>Selected key</SectionLabel>
-          <span className="font-mono text-[11px] text-faint">
-            r{row} · c{col} · layer {state.uiLayer}
+          <span className="flex flex-col items-end font-mono">
+            <span className="text-[12px] text-ink">{keyAddressLabel(addressable)}</span>
+            <span className="text-[10.5px] text-faint">
+              matrix {matrixKeyLabel(addressable)} · layer {state.uiLayer}
+            </span>
           </span>
         </div>
         <div className="mt-2 flex items-center gap-3 rounded-xl border border-line bg-raised px-3.5 py-3">

@@ -19,6 +19,7 @@ import type {
 import type { Encoder, Key, Rect } from "../vendor/rynk-wasm/rynk_wasm";
 import type { KeyboardModel, KeyView } from "../model/keyboard";
 import type { KeyGlyph } from "./labels";
+import { keyHoverTitle } from "./key-address";
 import { cx } from "./kit";
 
 export interface KeyDecor {
@@ -395,7 +396,7 @@ function KeyShape({
       opacity={decor.disabled ? 0.38 : 1}
       role={keyboardInteractive ? "button" : undefined}
       tabIndex={keyboardInteractive ? 0 : undefined}
-      aria-label={keyboardInteractive ? decor.ariaLabel : undefined}
+      aria-label={decor.ariaLabel ?? keyHoverTitle(view)}
       aria-keyshortcuts={clickable ? decor.ariaKeyShortcuts : undefined}
       onPointerDown={clickable ? (ev) => onPointerDown?.(view, ev) : undefined}
       onPointerEnter={
@@ -413,6 +414,7 @@ function KeyShape({
           : undefined
       }
     >
+      <title>{keyHoverTitle(view)}</title>
       <g
         className="key-lift"
         style={{

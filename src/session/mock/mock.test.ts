@@ -1120,11 +1120,14 @@ describe("keyboard model assembly", () => {
         expect(key.ledId).toBeDefined();
         expect(key.zoneIds.length).toBeGreaterThan(0);
         expect(key.label).toBeDefined();
+        expect(key.address).toBeDefined();
       }
       const q = model.keys.find((key) => key.row === 2 && key.col === 1);
       expect(q?.label).toBe("Q");
+      expect(q?.address).toBe("LH-C5R3");
       const thumbZones = model.keys.find((key) => key.row === 0 && key.col === 6)?.zoneIds;
       expect(thumbZones).toContain(2);
+      expect(model.keys.find((key) => key.row === 0 && key.col === 6)?.address).toBe("LH-T1");
       const reportedThumb = layout.variants[0].keys.find((key) => key.row === 0 && key.col === 6);
       const renderedThumb = model.keys.find((key) => key.row === 0 && key.col === 6);
       expect(renderedThumb?.shape).toEqual(reportedThumb);
@@ -1142,6 +1145,7 @@ describe("keyboard model assembly", () => {
       const model = buildKeyboardModel(layout, topology, { enrichment: enrichmentFor(info) });
       expect(model.name).toBe("Ortho 60");
       expect(model.keys).toHaveLength(60);
+      expect(model.keys.every((key) => key.address === undefined)).toBe(true);
       expect(model.encoders).toHaveLength(1);
       expect(model.bounds.maxX - model.bounds.minX).toBe(12);
       for (const key of model.keys) expect(key.ledId).toBeDefined();

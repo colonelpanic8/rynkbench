@@ -9,6 +9,7 @@ import type {
 import type { KeyView } from "../../model/keyboard";
 import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
+import { keyAddressLabel, keyAddressWithLegend } from "../key-address";
 import { keyActionGlyph } from "../labels";
 import type { LightingTarget } from "../state";
 import {
@@ -222,7 +223,7 @@ function FirmwareRulesPanel() {
   const labels = useMemo(() => {
     const result = new Map<number, string>();
     for (const key of bundle.model.keys) {
-      if (key.ledId !== undefined) result.set(key.ledId, key.label || `LED ${key.ledId}`);
+      if (key.ledId !== undefined) result.set(key.ledId, keyAddressWithLegend(key));
     }
     return result;
   }, [bundle.model]);
@@ -459,6 +460,9 @@ export function LightingMode() {
   }, [bundle.model]);
 
   const selectionSet = useMemo(() => new Set(state.lightingSelection), [state.lightingSelection]);
+  const selectedKey = state.lightingSelection.length === 1
+    ? bundle.model.keys.find((key) => key.ledId === state.lightingSelection[0])
+    : undefined;
   const hoverSet = useMemo(
     () => (state.hoverLeds ? new Set(state.hoverLeds) : null),
     [state.hoverLeds],
@@ -568,6 +572,7 @@ export function LightingMode() {
             {visibleCount} lit
             {isLayerTarget && compiledCount > 0 ? ` · ${compiledCount} firmware defaults` : ""}
             {` · ${stagedCount} staged`}
+            {selectedKey ? ` · ${keyAddressLabel(selectedKey)} selected` : ""}
           </span>
           {isLayerTarget && sceneStatus && (
             <span className="tnum text-[11.5px] text-faint">

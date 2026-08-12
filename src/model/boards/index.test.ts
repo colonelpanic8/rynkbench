@@ -16,11 +16,17 @@ describe("enrichmentFor", () => {
     const enrichment = enrichmentFor(moergo("Glove80"));
     expect(enrichment?.displayName).toBe("Glove80");
     expect(enrichment?.labels?.["2,1"]).toBe("Q");
+    expect(enrichment?.addresses?.["2,5"]).toBe("LH-C1R3");
   });
 
   it("recognizes Go60 separately behind the shared USB identity", () => {
     const enrichment = enrichmentFor(moergo("Go60"));
     expect(enrichment?.displayName).toBe("Go60");
     expect(enrichment?.labels?.["1,1"]).toBe("Q");
+    expect(enrichment?.addresses?.["2,8"]).toBe("RH-C1R3");
+  });
+
+  it("leaves an unknown MoErgo board behind the shared USB identity unenriched", () => {
+    expect(enrichmentFor(moergo("Future80"))).toBeUndefined();
   });
 });
