@@ -65,6 +65,7 @@ import type {
   MorseProfileEntry,
   MorseProfileState,
   PeripheralStatus,
+  PointingConfig,
   ProtocolVersion,
   SplitCentralLatencyPolicy,
   SplitCentralLatencyState,
@@ -107,9 +108,17 @@ export interface LayerSnapshot {
   complete: boolean;
 }
 
+/** Persistent logical metadata for one fixed firmware layer slot. */
+export interface LayerMetadata {
+  occupied: boolean;
+  name: string;
+}
+
 export interface KeymapOps {
   /** Read every layer. Row-major within each layer. */
   readAll(): Promise<LayerKeymap[]>;
+  /** Rewrite every fixed-capacity layer, using bulk transfer when available. */
+  replaceAll(layers: LayerKeymap[]): Promise<void>;
   setKey(layer: number, row: number, col: number, action: KeyAction): Promise<void>;
   getEncoder(encoderId: number, layer: number): Promise<EncoderAction>;
   setEncoder(encoderId: number, layer: number, action: EncoderAction): Promise<void>;
@@ -117,6 +126,8 @@ export interface KeymapOps {
   defaultLayer(): Promise<number>;
   layerState(): Promise<LayerSnapshot>;
   setDefaultLayer(layer: number): Promise<void>;
+  getLayerMetadata(layer: number): Promise<LayerMetadata>;
+  setLayerMetadata(layer: number, metadata: LayerMetadata): Promise<void>;
 }
 
 export interface LightingOps {
@@ -131,6 +142,8 @@ export interface LightingOps {
   readOverlay(): Promise<LightingOverlayCell[]>;
   /** Mutate background/output state; revision handshake is the backend's job. */
   setState(state: LightingMutableState): Promise<LightingState>;
+  /** Persist the bitmask of layers that wake lighting while active. */
+  setWakeLayers(layers: number): Promise<LightingOutputModeState>;
   /** Extension discovery: firmware-provided name-list sizes plus live state.
    *  Supported iff the firmware advertises EXTENSION_EFFECTS; unsupported
    *  firmware rejects with a descriptive error. */
@@ -238,6 +251,11 @@ export interface BehaviorOps {
   setAutoMouseLayers(configs: AutoMouseLayerConfig[]): Promise<void>;
 }
 
+export interface PointingOps {
+  get(): Promise<PointingConfig>;
+  set(config: PointingConfig): Promise<PointingConfig>;
+}
+
 export interface DeviceOps {
   info(): Promise<DeviceInfo>;
   capabilities(): Promise<DeviceCapabilities>;
@@ -277,6 +295,7 @@ export interface RynkSession {
   readonly forks: ForkOps;
   readonly macros: MacroOps;
   readonly behavior: BehaviorOps;
+  readonly pointing: PointingOps;
   /** Register the single handler for server-push topic events. */
   onTopic(handler: (event: TopicEvent) => void): void;
   /** Register the single handler called when the link drops unexpectedly. */

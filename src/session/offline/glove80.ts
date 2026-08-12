@@ -57,6 +57,7 @@ export function offlineGlove80Board(snapshot?: RuntimeSnapshot): BoardSpec {
       preferred: "Usb",
     },
     defaultLayers: layers,
+    layerNames: layers.map((_, layer) => glove80Board.layerNames?.[layer] ?? `Layer ${layer}`),
     defaultEncoders: Array.from({ length: layers.length }, () => []),
     initialDefaultLayer: snapshot?.default_layer ?? 0,
     initialActiveLayers: [snapshot?.default_layer ?? 0],

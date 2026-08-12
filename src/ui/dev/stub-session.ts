@@ -293,6 +293,7 @@ class StubSession implements RynkSession {
   readonly label = "Dev stub · Stub Ortho 48";
 
   private layers: KeyAction[][] = [buildLayer0(), buildLayer1(), buildLayer2(), buildLayer3()];
+  private layerNames = ["Base", "Navigation", "Symbols", "Media"];
   private encoderMap = new Map<string, EncoderAction>();
   private overlay = new Map<number, LightingOverlayCell>();
   private lightingRevision = 1;
@@ -563,6 +564,10 @@ class StubSession implements RynkSession {
         actions: structuredClone(actions),
       }));
     },
+    replaceAll: async (layers: LayerKeymap[]): Promise<void> => {
+      await lag();
+      this.layers = layers.map((layer) => structuredClone(layer.actions));
+    },
     setKey: async (layer: number, row: number, col: number, action: KeyAction): Promise<void> => {
       await lag();
       this.layers[layer][row * COLS + col] = structuredClone(action);
@@ -602,6 +607,14 @@ class StubSession implements RynkSession {
       this.currentLayerNum = layer;
       // Demonstrates the live layer chip.
       setTimeout(() => this.emit({ LayerChange: layer }), 120);
+    },
+    getLayerMetadata: async (layer: number) => {
+      await lag();
+      return { occupied: true, name: this.layerNames[layer] };
+    },
+    setLayerMetadata: async (layer: number, metadata: { occupied: boolean; name: string }) => {
+      await lag();
+      this.layerNames[layer] = metadata.name;
     },
   };
 
@@ -660,6 +673,9 @@ class StubSession implements RynkSession {
       this.background = { ...state.background };
       this.lightingRevision += 1;
       return this.lightingStateNow();
+    },
+    setWakeLayers: async (): Promise<never> => {
+      throw new Error("this firmware does not support lighting wake layers");
     },
     // The stub predates extension effects; the panel stays hidden.
     extension: async (): Promise<never> => {
@@ -725,6 +741,15 @@ class StubSession implements RynkSession {
       replace: async (): Promise<never> => {
         throw new Error("this firmware does not support runtime conditional scenes");
       },
+    },
+  };
+
+  pointing = {
+    get: async (): Promise<never> => {
+      throw new Error("this firmware has no runtime pointing configuration");
+    },
+    set: async (): Promise<never> => {
+      throw new Error("this firmware has no runtime pointing configuration");
     },
   };
 

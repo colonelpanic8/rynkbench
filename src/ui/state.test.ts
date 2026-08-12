@@ -46,6 +46,8 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     activeLayers: [0],
     layerStateComplete: true,
     layers: [[], []],
+    layerMetadata: null,
+    pointingConfig: null,
     encoders: {},
     battery: "Unavailable",
     peripheralBattery: "Unavailable",
@@ -69,6 +71,8 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     compiledScenePolicy: "EffectiveOnly",
     selection: null,
     pending: {},
+    layerBusy: false,
+    layerError: null,
     lightingBusy: false,
     lightingError: null,
     hoverLeds: null,
@@ -720,6 +724,45 @@ describe("modifier-state snapshots", () => {
     };
     const next = reducer(baseState(), { type: "topicModifier", modifiers });
     expect(next.modifierState).toEqual(modifiers);
+  });
+});
+
+describe("layer management state", () => {
+  it("keeps the selected logical layer selected after a reorder", () => {
+    const state = baseState({
+      uiLayer: 1,
+      layerMetadata: [
+        { occupied: true, name: "Base" },
+        { occupied: true, name: "Nav" },
+      ],
+    });
+    const next = reducer(state, {
+      type: "layerOperationApplied",
+      rewrite: {
+        order: [1, 0],
+        metadata: [
+          { occupied: true, name: "Nav" },
+          { occupied: true, name: "Base" },
+        ],
+        layers: state.layers,
+        encoders: [[], []],
+        defaultLayer: 1,
+        activeLayers: [1],
+        combos: [],
+        morse: [],
+        forks: [],
+        behaviorOptions: null,
+        autoMouseLayers: [],
+        scenes: [],
+        runtimeConditionalScenes: [],
+        compiledScenes: [],
+        compiledConditionalScenes: [],
+        wakeLayers: 0,
+        pointing: null,
+      },
+    });
+
+    expect(next.uiLayer).toBe(0);
   });
 });
 

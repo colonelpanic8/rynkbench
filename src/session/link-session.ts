@@ -39,6 +39,7 @@ import type {
   LightingSceneStatus,
   LightingState,
   Morse,
+  PointingConfig,
   RynkClient,
   TopicEvent,
 } from "../vendor/rynk-wasm/rynk_wasm";
@@ -54,6 +55,7 @@ import type {
   LightingTopology,
   MacroOps,
   MorseOps,
+  PointingOps,
   RynkSession,
   SessionKind,
 } from "./types";
@@ -524,6 +526,7 @@ export class LinkSession implements RynkSession {
   readonly forks: ForkOps;
   readonly macros: MacroOps;
   readonly behavior: BehaviorOps;
+  readonly pointing: PointingOps;
 
   private readonly client: RynkClient;
   private readonly link: RynkByteLink;
@@ -581,6 +584,7 @@ export class LinkSession implements RynkSession {
 
     this.keymap = {
       readAll: () => this.run(() => this.readAllLayers()),
+      replaceAll: (layers) => this.run(() => this.replaceAllLayers(layers)),
       setKey: (layer, row, col, action) => this.run(() => client.set_key(layer, row, col, action)),
       getEncoder: (encoderId, layer) => this.run(() => client.get_encoder(encoderId, layer)),
       setEncoder: (encoderId, layer, action) =>
@@ -589,6 +593,9 @@ export class LinkSession implements RynkSession {
       defaultLayer: () => this.run(() => client.get_default_layer()),
       layerState: () => this.run(() => this.readLayerState()),
       setDefaultLayer: (layer) => this.run(() => client.set_default_layer(layer)),
+      getLayerMetadata: (layer) => this.run(() => client.get_layer_metadata(layer)),
+      setLayerMetadata: (layer, metadata) =>
+        this.run(() => client.set_layer_metadata(layer, metadata)),
     };
 
     this.lighting = {
@@ -604,6 +611,14 @@ export class LinkSession implements RynkSession {
         }),
       readOverlay: () => this.run(() => readLightingOverlay(client)),
       setState: (state) => this.run(() => this.setLightingState(state)),
+      setWakeLayers: (layers) =>
+        this.run(async () => {
+          const state = await client.get_lighting_state();
+          return client.set_lighting_wake_layers({
+            expected_revision: state.revision,
+            layers,
+          });
+        }),
       extension: () => this.run(() => this.readExtension()),
       extensionLayers: () => this.run(() => this.client.get_lighting_extension_layers()),
       extensionNames: (kind) => this.run(() => this.readExtensionNames(kind)),
@@ -664,6 +679,11 @@ export class LinkSession implements RynkSession {
       autoMouseLayers: () => this.run(() => client.get_auto_mouse_layer_configs()),
       setAutoMouseLayers: (configs) =>
         this.run(() => client.set_auto_mouse_layer_configs({ configs })),
+    };
+
+    this.pointing = {
+      get: () => this.run(() => client.get_pointing_config()),
+      set: (config: PointingConfig) => this.run(() => client.set_pointing_config(config)),
     };
   }
 
@@ -746,6 +766,44 @@ export class LinkSession implements RynkSession {
       layers.push({ layer, actions });
     }
     return layers;
+  }
+
+  private async replaceAllLayers(layers: LayerKeymap[]): Promise<void> {
+    const caps = await this.client.get_capabilities();
+    const perLayer = caps.num_rows * caps.num_cols;
+    if (layers.length !== caps.num_layers) {
+      throw new Error(`keymap write has ${layers.length} layers; expected ${caps.num_layers}`);
+    }
+    let bulkCapacity = 0;
+    if (caps.bulk_transfer_supported && perLayer > 0) {
+      bulkCapacity = (await this.client.get_keymap_bulk(0, 0, 0)).actions.length;
+      if (bulkCapacity < 1) throw new Error("keymap bulk endpoint returned an empty page");
+    }
+    for (let layer = 0; layer < caps.num_layers; layer += 1) {
+      const actions = layers[layer]?.actions;
+      if (layers[layer]?.layer !== layer || actions.length !== perLayer) {
+        throw new Error(`keymap write omitted or malformed layer ${layer}`);
+      }
+      if (bulkCapacity > 0) {
+        for (let start = 0; start < perLayer; start += bulkCapacity) {
+          await this.client.set_keymap_bulk({
+            layer,
+            start_row: Math.floor(start / caps.num_cols),
+            start_col: start % caps.num_cols,
+            actions: actions.slice(start, start + bulkCapacity),
+          });
+        }
+      } else {
+        for (let key = 0; key < perLayer; key += 1) {
+          await this.client.set_key(
+            layer,
+            Math.floor(key / caps.num_cols),
+            key % caps.num_cols,
+            actions[key],
+          );
+        }
+      }
+    }
   }
 
   private async readLayerState(): Promise<LayerSnapshot> {
