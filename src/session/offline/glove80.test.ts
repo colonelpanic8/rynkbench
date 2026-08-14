@@ -4,6 +4,18 @@ import { offlineGlove80Board, openOfflineGlove80 } from "./glove80";
 
 const layer = () => Array.from({ length: 6 * 14 }, () => "No" as const);
 
+const snapshotBehaviors = (): NonNullable<RuntimeSnapshot["behaviors"]> => ({
+  config: undefined,
+  options: undefined,
+  morse_profiles: [],
+  hold_trigger_positions: [],
+  auto_mouse_layers: [],
+  morses: [],
+  combos: [],
+  macros: [],
+  forks: [],
+});
+
 describe("offline Glove80 workspace", () => {
   it("creates a clean six-layer document rather than the seeded demo", () => {
     const board = offlineGlove80Board();
@@ -89,5 +101,31 @@ describe("offline Glove80 workspace", () => {
     expect(await session.macros.read()).toEqual(new Uint8Array([1, 2, 3, ...Array(509).fill(0)]));
     expect(await session.lighting.outputMode()).toMatchObject({ wake_layers: 2 ** 1 });
     await session.close();
+  });
+
+  it("labels layers from the document rather than the board's stock names", async () => {
+    const named: RuntimeSnapshot = {
+      default_layer: 0,
+      layers: [layer(), layer()],
+      layer_names: [
+        { occupied: true, name: "Alpha" },
+        { occupied: true, name: "Symbols" },
+      ],
+      lighting: undefined,
+      behaviors: snapshotBehaviors(),
+    };
+    expect(offlineGlove80Board(named).layerNames).toEqual(["Alpha", "Symbols"]);
+
+    const session = openOfflineGlove80(named);
+    expect(await session.keymap.getLayerMetadata(1)).toEqual({
+      occupied: true,
+      name: "Symbols",
+    });
+    await session.close();
+
+    // A document that says nothing about names keeps the board's labels.
+    expect(offlineGlove80Board({ ...named, layer_names: undefined }).layerNames).toEqual(
+      offlineGlove80Board().layerNames?.slice(0, 2),
+    );
   });
 });

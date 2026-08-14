@@ -94,6 +94,9 @@ export function snapshotFromState(state: WorkbenchState): RuntimeSnapshot {
   return {
     default_layer: state.defaultLayer,
     layers: state.layers,
+    // Firmware without the metadata endpoints reads as `undefined`, which
+    // leaves an export taking its layer labels from the file being replaced.
+    layer_names: state.layerMetadata ?? undefined,
     lighting,
     // Live state always describes all three, so an export never renders a file
     // that would read as "leave them alone" when it meant to record them.
@@ -126,7 +129,7 @@ export function parseDocument(text: string, catalog: ExtensionCatalog): ParsedCo
 }
 
 /** Render live state as a document. `previous` is the file being replaced: it
- *  carries the layer labels the firmware does not store, and for MoErgo output
+ *  carries the labels the firmware does not store, and for MoErgo output
  *  it is also the template that preserves the editor-owned sections — macros,
  *  combos, custom behaviors, the document's identity — that Rynk never sees. */
 export function renderDocument(

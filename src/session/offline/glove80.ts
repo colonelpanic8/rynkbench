@@ -61,7 +61,14 @@ export function offlineGlove80Board(snapshot?: RuntimeSnapshot): BoardSpec {
       preferred: "Usb",
     },
     defaultLayers: layers,
-    layerNames: layers.map((_, layer) => glove80Board.layerNames?.[layer] ?? `Layer ${layer}`),
+    // A parsed document names its own layers; only a document that says
+    // nothing falls back to the board's stock labels.
+    layerNames: layers.map(
+      (_, layer) =>
+        snapshot?.layer_names?.[layer]?.name ||
+        glove80Board.layerNames?.[layer] ||
+        `Layer ${layer}`,
+    ),
     defaultEncoders: Array.from({ length: layers.length }, () => []),
     initialDefaultLayer: snapshot?.default_layer ?? 0,
     initialActiveLayers: [snapshot?.default_layer ?? 0],
