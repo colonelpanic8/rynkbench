@@ -42,11 +42,11 @@
     "moergo-rmk": {
       "flake": false,
       "locked": {
-        "lastModified": 1786746830,
+        "lastModified": 1786749968,
         "narHash": "sha256-TH1c+ILs6mXiL5UNz4JhVq5TT8zfBLSNruZPwiVWMSw=",
         "owner": "colonelpanic8",
         "repo": "moergo-rmk",
-        "rev": "c7f441f1a285aa15b36ca4a27e1a34e932b77468",
+        "rev": "e9af946a3465f9fceddbe0faaf90e0c6f2971792",
         "type": "github"
       },
       "original": {
