@@ -153,6 +153,34 @@ describe("per-target lighting drafts", () => {
     expect(stagedBetween(activeLightingDraft(s), activeLightingBase(s)).size).toBe(0);
   });
 
+  it("an explicit target edits that layer without moving the selected target", () => {
+    // Keymap mode edits the layer it is showing while Lighting mode stays on
+    // whatever tab the user left it on; neither may drag the other along.
+    let s = baseState({ scenes: [{ layer: 1, led_id: 5, effect: solid(9) }] });
+    s = reducer(s, {
+      type: "paint",
+      cells: [{ led_id: 7, effect: solid(7), ttl_ms: undefined }],
+      target: 1,
+    });
+
+    expect(s.lightingTarget).toBe("overlay");
+    expect(s.draft).toEqual({});
+    expect(s.layerDrafts[1]).toEqual({
+      5: { led_id: 5, effect: solid(9), ttl_ms: undefined },
+      7: { led_id: 7, effect: solid(7), ttl_ms: undefined },
+    });
+
+    s = reducer(s, { type: "erase", ledIds: [5], target: 1 });
+    expect(s.layerDrafts[1]).toEqual({ 7: { led_id: 7, effect: solid(7), ttl_ms: undefined } });
+    expect(s.lightingTarget).toBe("overlay");
+
+    s = reducer(s, { type: "draftReset", target: 1 });
+    expect(s.layerDrafts[1]).toEqual({ 5: { led_id: 5, effect: solid(9), ttl_ms: undefined } });
+    expect(s.lightingTarget).toBe("overlay");
+    // The overlay draft never moved while all of that happened.
+    expect(s.draft).toEqual({});
+  });
+
   it("scenesApplied re-syncs clean layer drafts but keeps dirty ones", () => {
     let s = baseState({ scenes: [{ layer: 0, led_id: 2, effect: solid(3) }] });
     // Seed layer 0 (clean) and layer 1 (dirty).

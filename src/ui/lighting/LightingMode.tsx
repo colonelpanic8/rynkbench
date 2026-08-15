@@ -31,7 +31,7 @@ import { effectiveAction } from "../live/compositor";
 import { targetPreviewEffects } from "./preview";
 import { layersInMask, maskHasLayer } from "./wakeLayers";
 import { conditionalRuleMatches, describeConditions, firmwarePreviewCells } from "./firmwareRules";
-import { effectRgb } from "./effect";
+import { effectAnim, effectColor } from "./decor";
 import { NumberField } from "./EffectEditor";
 
 type EffectKind = "Solid" | "Blink" | "Breathe";
@@ -106,22 +106,6 @@ function brushCell(brush: Brush, ledId: number, allowTtl: boolean): LightingOver
     effect: brushEffect(brush),
     ttl_ms: allowTtl && brush.ttlOn ? brush.ttlMs : undefined,
   };
-}
-
-function effectColor(effect: LightingEffect): string {
-  return cssEmissiveRgb(effectRgb(effect));
-}
-
-function effectAnim(effect: LightingEffect): KeyDecor["fillAnim"] {
-  if ("Blink" in effect)
-    return { name: "led-blink", periodMs: effect.Blink.period_ms, delayMs: effect.Blink.phase_ms };
-  if ("Breathe" in effect)
-    return {
-      name: "led-breathe",
-      periodMs: effect.Breathe.period_ms,
-      delayMs: effect.Breathe.phase_ms,
-    };
-  return undefined;
 }
 
 /** Overlay + per-layer edit targets, styled like Keymap mode's layer tabs.

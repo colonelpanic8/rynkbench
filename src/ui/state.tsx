@@ -469,9 +469,11 @@ export type WorkbenchAction =
       runtimeConditional?: LightingExtendedConditionalSceneCell[];
     }
   | { type: "lightingTarget"; target: LightingTarget }
-  | { type: "paint"; cells: LightingOverlayCell[] }
-  | { type: "erase"; ledIds: number[] }
-  | { type: "draftReset" }
+  /** `target` edits a specific draft without moving Lighting mode's selected
+   *  target; omitted, it edits whatever that target currently is. */
+  | { type: "paint"; cells: LightingOverlayCell[]; target?: LightingTarget }
+  | { type: "erase"; ledIds: number[]; target?: LightingTarget }
+  | { type: "draftReset"; target?: LightingTarget }
   | { type: "lightingBusy"; busy: boolean; error?: string | null }
   | { type: "overlayApplied"; state: LightingState; cells: LightingOverlayCell[] }
   | { type: "scenesApplied"; state: LightingState; cells: LightingSceneCell[] }
@@ -773,7 +775,8 @@ export function makeWorkbenchReducer(cols: number) {
             : {}),
         };
       case "paint": {
-        const draft = { ...targetDraft(state, state.lightingTarget) };
+        const target = act.target ?? state.lightingTarget;
+        const draft = { ...targetDraft(state, target) };
         const paintTick = { ...state.paintTick };
         for (const cell of act.cells) {
           draft[cell.led_id] = cell;
@@ -781,28 +784,30 @@ export function makeWorkbenchReducer(cols: number) {
         }
         return {
           ...state,
-          ...setTargetDraft(state, state.lightingTarget, draft),
+          ...setTargetDraft(state, target, draft),
           paintTick,
           lightingError: null,
         };
       }
       case "erase": {
-        const draft = { ...targetDraft(state, state.lightingTarget) };
+        const target = act.target ?? state.lightingTarget;
+        const draft = { ...targetDraft(state, target) };
         const paintTick = { ...state.paintTick };
         for (const id of act.ledIds) {
           delete draft[id];
           paintTick[id] = (paintTick[id] ?? 0) + 1;
         }
-        return { ...state, ...setTargetDraft(state, state.lightingTarget, draft), paintTick };
+        return { ...state, ...setTargetDraft(state, target, draft), paintTick };
       }
       case "draftReset": {
+        const target = act.target ?? state.lightingTarget;
         const reset =
-          state.lightingTarget === "overlay"
+          target === "overlay"
             ? { ...state.applied }
-            : layerSceneCells(state.scenes, state.lightingTarget);
+            : layerSceneCells(state.scenes, target);
         return {
           ...state,
-          ...setTargetDraft(state, state.lightingTarget, reset),
+          ...setTargetDraft(state, target, reset),
           lightingError: null,
         };
       }
@@ -1147,17 +1152,32 @@ export function stagedBetween(
   return out;
 }
 
+/** The draft a given target edits (overlay draft, or that layer's). */
+export function lightingDraftFor(
+  state: WorkbenchState,
+  target: LightingTarget,
+): Record<number, LightingOverlayCell> {
+  return targetDraft(state, target);
+}
+
+/** The baseline a given target stages against: the on-device overlay, or that
+ *  layer's stored scene cells. */
+export function lightingBaseFor(
+  state: WorkbenchState,
+  target: LightingTarget,
+): Record<number, LightingOverlayCell> {
+  return target === "overlay" ? state.applied : layerSceneCells(state.scenes, target);
+}
+
 /** The draft the active target edits (overlay draft, or the selected layer's). */
 export function activeLightingDraft(state: WorkbenchState): Record<number, LightingOverlayCell> {
-  return targetDraft(state, state.lightingTarget);
+  return lightingDraftFor(state, state.lightingTarget);
 }
 
 /** The baseline the active target stages against: the on-device overlay, or
  *  the selected layer's stored scene cells. */
 export function activeLightingBase(state: WorkbenchState): Record<number, LightingOverlayCell> {
-  return state.lightingTarget === "overlay"
-    ? state.applied
-    : layerSceneCells(state.scenes, state.lightingTarget);
+  return lightingBaseFor(state, state.lightingTarget);
 }
 
 export function hasPendingConfigurationWrite(state: WorkbenchState): boolean {
