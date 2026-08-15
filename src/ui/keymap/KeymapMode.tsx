@@ -1,6 +1,6 @@
 // Keymap mode: layer tabs over the canvas; binding editor in the inspector.
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   EncoderAction,
   KeyAction,
@@ -10,8 +10,17 @@ import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
 import { keyActionGlyph, keyActionDescription } from "../labels";
 import { keyAddressLabel, matrixKeyLabel } from "../key-address";
-import { encoderPendingId, keyPendingId, useWorkbench } from "../state";
+import {
+  encoderPendingId,
+  keyPendingId,
+  lightingBaseFor,
+  lightingDraftFor,
+  stagedBetween,
+  useWorkbench,
+} from "../state";
 import { ActionEditor } from "./ActionEditor";
+import { LayerLighting } from "./LayerLighting";
+import { effectAnim, effectColor } from "../lighting/decor";
 import {
   keyClipboardShortcut,
   parseKeyActionClipboard,
@@ -193,6 +202,8 @@ export function KeymapCenter() {
   const { bundle, state, dispatch, io } = useWorkbench();
   const cols = bundle.caps.num_cols;
   const layer = state.layers[state.uiLayer];
+  const scenesSupported = bundle.sceneStatus !== null;
+  const [showLighting, setShowLighting] = useState(true);
   const [drag, setDrag] = useState<{
     source: KeyView;
     destination: KeyView | null;
@@ -414,10 +425,23 @@ export function KeymapCenter() {
     dropKey(source, key, moveLayer);
   };
 
+  // The layer's staged scene, previewed under the legends so bindings and
+  // lighting can be judged together. Lighting mode remains the place to paint.
+  const lit = scenesSupported && showLighting;
+  const sceneDraft = lit ? lightingDraftFor(state, state.uiLayer) : null;
+  const sceneStaged = useMemo(
+    () =>
+      lit ? stagedBetween(lightingDraftFor(state, state.uiLayer), lightingBaseFor(state, state.uiLayer)) : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lit, state.layerDrafts, state.scenes, state.uiLayer],
+  );
+
   const decorFor = (key: KeyView): KeyDecor => {
     const action = layer?.[key.row * cols + key.col];
     const pending =
       state.pending[keyPendingId(state.uiLayer, key.row, key.col)];
+    const sceneCell =
+      sceneDraft && key.ledId !== undefined ? sceneDraft[key.ledId] : undefined;
     const glyph = action !== undefined ? keyActionGlyph(action) : { text: "" };
     // Enrichment label as fallback for unbound keys.
     if (!glyph.text && key.label) {
@@ -451,6 +475,9 @@ export function KeymapCenter() {
       highlight: dropTarget,
       pending: pending?.status === "pending",
       error: pending?.status === "error",
+      fill: sceneCell ? effectColor(sceneCell.effect) : undefined,
+      fillAnim: sceneCell ? effectAnim(sceneCell.effect) : undefined,
+      staged: key.ledId !== undefined && (sceneStaged?.has(key.ledId) ?? false),
     };
   };
 
@@ -458,10 +485,23 @@ export function KeymapCenter() {
     <div className="flex min-h-0 flex-1 flex-col gap-3 max-lg:min-h-[380px]">
       <LayerTabs />
       <div className="flex min-h-5 items-center justify-between gap-4 px-1 text-[11.5px] text-faint">
-        <span>
-          Drag a bound key to move it; dropping replaces the destination.
-          Ctrl/Cmd+C and Ctrl/Cmd+V copy or paste the selected binding. With a
-          keyboard, press Space to pick up or drop.
+        <span className="flex items-center gap-3">
+          {scenesSupported && (
+            <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={showLighting}
+                onChange={(event) => setShowLighting(event.target.checked)}
+                className="accent-(--color-accent)"
+              />
+              Show layer lighting
+            </label>
+          )}
+          <span>
+            Drag a bound key to move it; dropping replaces the destination.
+            Ctrl/Cmd+C and Ctrl/Cmd+V copy or paste the selected binding. With a
+            keyboard, press Space to pick up or drop.
+          </span>
         </span>
         <span
           className="max-w-[46%] truncate text-right text-mute"
@@ -643,6 +683,7 @@ function KeyInspector({ row, col }: { row: number; col: number }) {
         numLayers={bundle.caps.num_layers}
         onCommit={(next) => io.setKey(state.uiLayer, row, col, next)}
       />
+      <LayerLighting ledId={key?.ledId} />
     </div>
   );
 }
