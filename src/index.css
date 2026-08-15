@@ -199,3 +199,14 @@ input:focus-visible,
   outline-offset: 1.5px;
   border-radius: 6px;
 }
+
+/* Canvas keys live in SVG user units, where an outline pixel is a whole key
+   wide: the ring above (and the browser's native one) would paint as a giant
+   halo around the focused cap. Mark keyboard focus on the cap itself instead. */
+.key-group:focus {
+  outline: none;
+}
+.key-group:focus-visible .key-cap {
+  stroke: var(--color-accent);
+  stroke-width: 0.045;
+}

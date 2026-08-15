@@ -18,7 +18,7 @@ import { effectColor } from "../lighting/decor";
 import type { Hsv } from "../color";
 import { hsvToRgb, rgbToHsv } from "../color";
 import { Button, SectionLabel, cx } from "../kit";
-import { SpinnerIcon, WarningIcon } from "../icons";
+import { ChevronRightIcon, SpinnerIcon, WarningIcon } from "../icons";
 
 const BLACK_EFFECT: LightingEffect = { Solid: { color: { r: 0, g: 0, b: 0 } } };
 
@@ -48,6 +48,7 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
   const { bundle, state, dispatch, io } = useWorkbench();
   const layer = state.uiLayer;
   const sceneStatus = bundle.sceneStatus;
+  const [open, setOpen] = useState(false);
   const [brush, setBrush] = useState<Brush>(DEFAULT_BRUSH);
 
   const draft = lightingDraftFor(state, layer);
@@ -108,14 +109,36 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
 
   return (
     <div className="border-t border-line-soft pt-4">
-      <div className="flex items-center justify-between">
-        <SectionLabel>Layer lighting</SectionLabel>
+      {/* Collapsed by default: the binding editor is the inspector's primary
+          tool, and this section is tall enough to push it out of view. */}
+      <button
+        type="button"
+        className="flex w-full cursor-pointer items-center justify-between"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <span className="flex items-center gap-2">
+          <ChevronRightIcon
+            size={11}
+            className={cx("text-faint transition-transform duration-120", open && "rotate-90")}
+          />
+          <SectionLabel>Layer lighting</SectionLabel>
+          {current && (
+            <span
+              className="size-3 rounded-sm border border-cap-edge"
+              style={{ background: effectColor(current.effect) }}
+            />
+          )}
+          {ledId !== undefined && staged.has(ledId) && (
+            <span className="text-[11px] text-accent">staged</span>
+          )}
+        </span>
         <span className="tnum text-[11px] text-faint">
           {state.scenes.length}/{sceneStatus.capacity} cells
         </span>
-      </div>
+      </button>
 
-      {ledId === undefined ? (
+      {!open ? null : ledId === undefined ? (
         <p className="mt-1.5 text-[11.5px] leading-relaxed text-faint">
           This key has no LED, so it cannot carry a scene cell.
         </p>
@@ -228,46 +251,50 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
         </>
       )}
 
-      {state.lightingError && (
-        <div className="mt-2 flex items-center gap-2 text-[12px] text-danger">
-          <WarningIcon size={13} />
-          <span className="min-w-0 flex-1 truncate" title={state.lightingError}>
-            {state.lightingError}
-          </span>
-        </div>
+      {open && (
+        <>
+          {state.lightingError && (
+            <div className="mt-2 flex items-center gap-2 text-[12px] text-danger">
+              <WarningIcon size={13} />
+              <span className="min-w-0 flex-1 truncate" title={state.lightingError}>
+                {state.lightingError}
+              </span>
+            </div>
+          )}
+
+          <div className="mt-3 flex items-center gap-2">
+            <Button
+              variant="primary"
+              className="flex-1"
+              disabled={staged.size === 0 || state.lightingBusy}
+              title={`Replace ${layerName}'s stored scene with the staged canvas`}
+              onClick={applyLayer}
+            >
+              {state.lightingBusy && <SpinnerIcon size={13} />}
+              Apply{staged.size > 0 ? ` · ${staged.size} staged` : ""}
+            </Button>
+            <Button
+              variant="ghost"
+              disabled={staged.size === 0 || state.lightingBusy}
+              title="Throw away staged edits and return to the stored scene"
+              onClick={() => dispatch({ type: "draftReset", target: layer })}
+            >
+              Discard
+            </Button>
+          </div>
+
+          <button
+            type="button"
+            className="mt-2 w-full cursor-pointer text-[11.5px] text-faint transition-colors duration-120 hover:text-mute"
+            onClick={() => {
+              dispatch({ type: "lightingTarget", target: layer });
+              dispatch({ type: "mode", mode: "lighting" });
+            }}
+          >
+            Open {layerName} in Lighting for brushes, zones and rules
+          </button>
+        </>
       )}
-
-      <div className="mt-3 flex items-center gap-2">
-        <Button
-          variant="primary"
-          className="flex-1"
-          disabled={staged.size === 0 || state.lightingBusy}
-          title={`Replace ${layerName}'s stored scene with the staged canvas`}
-          onClick={applyLayer}
-        >
-          {state.lightingBusy && <SpinnerIcon size={13} />}
-          Apply{staged.size > 0 ? ` · ${staged.size} staged` : ""}
-        </Button>
-        <Button
-          variant="ghost"
-          disabled={staged.size === 0 || state.lightingBusy}
-          title="Throw away staged edits and return to the stored scene"
-          onClick={() => dispatch({ type: "draftReset", target: layer })}
-        >
-          Discard
-        </Button>
-      </div>
-
-      <button
-        type="button"
-        className="mt-2 w-full cursor-pointer text-[11.5px] text-faint transition-colors duration-120 hover:text-mute"
-        onClick={() => {
-          dispatch({ type: "lightingTarget", target: layer });
-          dispatch({ type: "mode", mode: "lighting" });
-        }}
-      >
-        Open {layerName} in Lighting for brushes, zones and rules
-      </button>
     </div>
   );
 }

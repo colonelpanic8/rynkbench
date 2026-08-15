@@ -615,7 +615,7 @@ function KeyInspector({ row, col }: { row: number; col: number }) {
   const addressable = key ?? { row, col };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <div className="flex flex-col gap-4">
       <div>
         <div className="flex items-center justify-between">
           <SectionLabel>Selected key</SectionLabel>
@@ -677,12 +677,16 @@ function KeyInspector({ row, col }: { row: number; col: number }) {
           </div>
         )}
       </div>
-      <ActionEditor
-        key={`${state.uiLayer}:${row}:${col}`}
-        current={action}
-        numLayers={bundle.caps.num_layers}
-        onCommit={(next) => io.setKey(state.uiLayer, row, col, next)}
-      />
+      {/* fixed-height frame: the editor manages its own scrolling, so it must
+          not flex-shrink against the lighting section below */}
+      <div className="flex h-[360px] shrink-0 flex-col">
+        <ActionEditor
+          key={`${state.uiLayer}:${row}:${col}`}
+          current={action}
+          numLayers={bundle.caps.num_layers}
+          onCommit={(next) => io.setKey(state.uiLayer, row, col, next)}
+        />
+      </div>
       <LayerLighting ledId={key?.ledId} />
     </div>
   );
@@ -742,7 +746,7 @@ function EncoderInspector({ id }: { id: number }) {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <div className="flex flex-col gap-4">
       <div>
         <div className="flex items-center justify-between">
           <SectionLabel>Encoder {id}</SectionLabel>
@@ -770,12 +774,14 @@ function EncoderInspector({ id }: { id: number }) {
           )}
         </div>
       </div>
-      <ActionEditor
-        key={`${layer}:${id}:${slot}`}
-        current={slotAction}
-        numLayers={bundle.caps.num_layers}
-        onCommit={commit}
-      />
+      <div className="flex h-[360px] shrink-0 flex-col">
+        <ActionEditor
+          key={`${layer}:${id}:${slot}`}
+          current={slotAction}
+          numLayers={bundle.caps.num_layers}
+          onCommit={commit}
+        />
+      </div>
     </div>
   );
 }
@@ -801,7 +807,7 @@ export function KeymapInspector() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex flex-col">
       <div className="mb-2 flex justify-end">
         <button
           type="button"
