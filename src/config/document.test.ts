@@ -104,6 +104,17 @@ describe("detectFormat", () => {
 });
 
 describe("parseDocument", () => {
+  it("carries each configured layer's name as occupied metadata", () => {
+    expect(parseDocument(MINIMAL, CATALOG).snapshot.layer_names).toEqual([
+      { occupied: true, name: "Base" },
+    ]);
+    const backup = moergo({}, 2);
+    expect(parseDocument(backup, CATALOG).snapshot.layer_names).toEqual([
+      { occupied: true, name: "Layer 0" },
+      { occupied: true, name: "Layer 1" },
+    ]);
+  });
+
   it("preserves a Go60 TOML's declared 5x14 matrix for transfer", () => {
     const { format, snapshot } = parseDocument(MINIMAL_GO60, CATALOG);
     expect(format).toBe("toml");
@@ -460,18 +471,21 @@ describe("snapshotFromState", () => {
       combos: [],
       forks: liveForks,
       macroBytes: new Uint8Array(),
+      layerMetadata: [{ occupied: true, name: "Renamed" }],
     } as unknown as WorkbenchState;
 
     const snapshot = snapshotFromState(state);
     expect(snapshot.behaviors?.morses).toEqual(state.morse);
+    expect(snapshot.layer_names).toEqual([{ occupied: true, name: "Renamed" }]);
     const text = renderDocument(snapshot, CATALOG, "toml", MINIMAL);
     const again = parseDocument(text, CATALOG);
     expect(again.snapshot.layers).toEqual(parsed.snapshot.layers);
     expect(again.snapshot.lighting?.effects).toEqual(lighting.effects);
     expect(again.snapshot.lighting?.background).toEqual(lighting.background);
-    // The user's own layer labels survive, because the document being replaced
-    // is what supplies them — the firmware stores none.
+    // The document being replaced supplies the layer id; the name comes from
+    // the keyboard's own persistent metadata, which wins over the old label.
     expect(text).toContain('id = "base"');
+    expect(text).toContain('name = "Renamed"');
     // The morse survives with its timing intact, which is the whole point of
     // rendering the table rather than only the keymap that indexes it.
     expect(again.snapshot.behaviors?.morses).toEqual(LIVE_MORSE);

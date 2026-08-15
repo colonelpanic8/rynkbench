@@ -129,9 +129,10 @@ export function parseDocument(text: string, catalog: ExtensionCatalog): ParsedCo
 }
 
 /** Render live state as a document. `previous` is the file being replaced: it
- *  carries the labels the firmware does not store, and for MoErgo output
- *  it is also the template that preserves the editor-owned sections — macros,
- *  combos, custom behaviors, the document's identity — that Rynk never sees. */
+ *  carries the layer ids, and the labels for slots the firmware reports vacant
+ *  or does not store; for MoErgo output it is also the template that preserves
+ *  the editor-owned sections — macros, combos, custom behaviors, the
+ *  document's identity — that Rynk never sees. */
 export function renderDocument(
   snapshot: RuntimeSnapshot,
   catalog: ExtensionCatalog,
