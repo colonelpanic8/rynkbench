@@ -73,6 +73,7 @@ export async function importDocument(args: ImportArgs): Promise<ImportResult> {
   // those cells pointing at whatever the previous layout left behind.
   const behaviors = await writeBehaviors(snapshot, session, bundle, state, dispatch);
   const changedKeys = await writeChangedKeys(snapshot, session, bundle, state, dispatch);
+  const names = await writeLayerNames(snapshot, session, state, dispatch);
   const lighting = await writeLighting(snapshot, session, state, dispatch);
   return {
     format,
@@ -81,8 +82,8 @@ export async function importDocument(args: ImportArgs): Promise<ImportResult> {
     converted: converted.converted,
     changedKeys,
     notes: [...parseNotes, ...converted.notes],
-    applied: [...behaviors.applied, ...lighting.applied],
-    skipped: [...behaviors.skipped, ...lighting.skipped],
+    applied: [...behaviors.applied, ...names.applied, ...lighting.applied],
+    skipped: [...behaviors.skipped, ...names.skipped, ...lighting.skipped],
   };
 }
 
@@ -343,6 +344,41 @@ async function writeChangedKeys(
     dispatch({ type: "defaultLayer", layer: snapshot.default_layer });
   }
   return changed;
+}
+
+/** Occupy and label the layer slots the document configures.
+ *
+ *  Names follow the keymap so a slot already holds its keys by the time it is
+ *  labelled and becomes visible in the layer tabs. Trailing slots the file does
+ *  not list keep their metadata, matching how their keys are left alone. */
+async function writeLayerNames(
+  snapshot: RuntimeSnapshot,
+  session: RynkSession,
+  state: WorkbenchState,
+  dispatch: Dispatch<WorkbenchAction>,
+): Promise<{ applied: string[]; skipped: string[] }> {
+  const applied: string[] = [];
+  const skipped: string[] = [];
+  const wanted = snapshot.layer_names;
+  if (wanted === undefined) return { applied, skipped };
+  if (state.layerMetadata === null) {
+    skipped.push("layer names (this keyboard does not store layer metadata)");
+    return { applied, skipped };
+  }
+  let changed = 0;
+  for (let layer = 0; layer < wanted.length; layer += 1) {
+    const metadata = wanted[layer];
+    if (same(metadata, state.layerMetadata[layer])) continue;
+    try {
+      await session.keymap.setLayerMetadata(layer, metadata);
+      dispatch({ type: "layerMetadataSet", layer, metadata });
+      changed += 1;
+    } catch (error) {
+      throw new Error(`Writing layer ${layer} name: ${errorMessage(error)}`);
+    }
+  }
+  if (changed > 0) applied.push(`${changed} layer name${changed === 1 ? "" : "s"}`);
+  return { applied, skipped };
 }
 
 /** Apply the lighting a document carries. A MoErgo backup carries none, so this
