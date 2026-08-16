@@ -36,9 +36,9 @@ export const CTRL_GUI_SWAP: TransformSpec = {
   }),
 };
 
-export type AlphaLayout = "colemak" | "colemak-dh" | "dvorak";
+export type AlphaLayout = "qwerty" | "colemak" | "colemak-dh" | "dvorak";
 
-const ALPHA_ROWS: Record<"qwerty" | AlphaLayout, string> = {
+const ALPHA_ROWS: Record<AlphaLayout, string> = {
   qwerty: "qwertyuiop asdfghjkl;' zxcvbnm,./ -=[]",
   colemak: "qwfpgjluy; arstdhneio' zxcvbkm,./ -=[]",
   "colemak-dh": "qwfpbjluy; arstgmneio' zxcdvkh,./ -=[]",
@@ -61,16 +61,16 @@ function hidForChar(c: string): HidKeyCode {
   return CHAR_HID[c] ?? (c.toUpperCase() as HidKeyCode);
 }
 
-/** QWERTY-position → target-layout map. Source bindings must be QWERTY. */
-export function alphaSpec(layout: AlphaLayout): TransformSpec {
+/** Keycode substitution taking a `from`-layout keymap to the `to` layout:
+ *  the keycodes at each shared physical position trade places. Composed
+ *  through the row tables, so any layout pair works in either direction. */
+export function layoutSpec(from: AlphaLayout, to: AlphaLayout): TransformSpec {
   const hid: HidMap = {};
-  const source = ALPHA_ROWS.qwerty;
-  const target = ALPHA_ROWS[layout];
+  const source = ALPHA_ROWS[from];
+  const target = ALPHA_ROWS[to];
   for (let i = 0; i < source.length; i++) {
-    const from = source[i];
-    const to = target[i];
-    if (from === " " || from === to) continue;
-    hid[hidForChar(from)] = hidForChar(to);
+    if (source[i] === " " || source[i] === target[i]) continue;
+    hid[hidForChar(source[i])] = hidForChar(target[i]);
   }
   return { hid };
 }
@@ -268,18 +268,88 @@ export function planOsSwap(input: TransformInput): TransformPlan {
   };
 }
 
-/** The alpha remap only rewrites keys on the chosen layers; combos and forks
- *  match by action, so they follow the moved letters automatically. */
-export function planAlphaRemap(
-  input: TransformInput,
-  layout: AlphaLayout,
-  targetLayers: number[],
-): TransformPlan {
-  return {
-    keys: planKeys(input.layers, input.cols, alphaSpec(layout), targetLayers),
-    combos: [],
-    morse: [],
-    forks: [],
-    macroBytes: null,
+/** How one layer travels across a layout switch. */
+export type LayerMigration =
+  | "positional" // the layer is tied to physical positions; leave it alone
+  | "alphas" // substitute letter keycodes in place (alpha and autoshift layers)
+  | "mnemonic"; // move whole bindings so they stay on the same letter
+
+/** The keycode a position "means" for layout purposes: the letter it types,
+ *  looking through tap-holds and modifier wrappers. */
+export function primaryHid(keyAction: KeyAction): HidKeyCode | null {
+  const fromAction = (action: Action): HidKeyCode | null => {
+    if (typeof action === "string") return null;
+    if ("Key" in action && typeof action.Key === "object" && "Hid" in action.Key) {
+      return action.Key.Hid;
+    }
+    if ("KeyWithModifier" in action) return action.KeyWithModifier[0];
+    if ("OneShotKey" in action) return action.OneShotKey;
+    return null;
   };
+  if (typeof keyAction === "string") return null;
+  if ("Single" in keyAction) return fromAction(keyAction.Single);
+  if ("Tap" in keyAction) return fromAction(keyAction.Tap);
+  if ("TapHold" in keyAction) return fromAction(keyAction.TapHold[0]);
+  if ("LayerModTap" in keyAction) return keyAction.LayerModTap[2];
+  return null;
+}
+
+/** Switch the keymap from one alpha layout to another, migrating each layer
+ *  in its chosen way. "Alphas" layers get the keycode substitution;
+ *  "mnemonic" layers get their bindings moved along the permutation the
+ *  substitution induces on the alpha reference layer — a shortcut bound
+ *  where C sits today ends up where C sits afterwards. The reference is the
+ *  first layer marked "alphas" (that's where the letters live), falling
+ *  back to the default layer. Combos and forks match by action, so they
+ *  follow the letters without rewriting. */
+export function planLayoutSwitch(
+  input: TransformInput,
+  from: AlphaLayout,
+  to: AlphaLayout,
+  migrations: LayerMigration[],
+  defaultLayer: number,
+): TransformPlan {
+  const spec = layoutSpec(from, to);
+  const alphaLayer = migrations.findIndex((migration) => migration === "alphas");
+  const base = input.layers[alphaLayer >= 0 ? alphaLayer : defaultLayer] ?? [];
+
+  // Where each letter of the switch's domain currently sits on the base layer.
+  const positionOf = new Map<HidKeyCode, number>();
+  base.forEach((keyAction, offset) => {
+    const hid = primaryHid(keyAction);
+    if (hid && spec.hid[hid] !== undefined && !positionOf.has(hid)) {
+      positionOf.set(hid, offset);
+    }
+  });
+
+  const keys: KeyEdit[] = [];
+  input.layers.forEach((cells, layer) => {
+    const migration = migrations[layer] ?? "positional";
+    if (migration === "positional") return;
+    if (migration === "alphas") {
+      keys.push(...planKeys([cells], input.cols, spec, null).map((edit) => ({ ...edit, layer })));
+      return;
+    }
+    // Mnemonic: the new binding at a position is the old binding of the
+    // letter that will live there. Positions outside the switch's domain —
+    // thumbs, F-row, letters the base layer doesn't carry — stay put.
+    cells.forEach((keyAction, offset) => {
+      const baseHid = primaryHid(base[offset] ?? "No");
+      const incoming = baseHid !== null ? spec.hid[baseHid] : undefined;
+      if (incoming === undefined) return;
+      const source = positionOf.get(incoming);
+      if (source === undefined) return;
+      const after = cells[source];
+      if (!same(keyAction, after)) {
+        keys.push({
+          layer,
+          row: Math.floor(offset / input.cols),
+          col: offset % input.cols,
+          after,
+        });
+      }
+    });
+  });
+
+  return { keys, combos: [], morse: [], forks: [], macroBytes: null };
 }

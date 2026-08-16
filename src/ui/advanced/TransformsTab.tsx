@@ -7,17 +7,25 @@ import { useWorkbench } from "../state";
 import { Button, Chip, Panel, SectionLabel } from "../kit";
 import { CenterScroll } from "./bits";
 import {
-  planAlphaRemap,
+  planLayoutSwitch,
   planOsSwap,
   planSize,
   type AlphaLayout,
+  type LayerMigration,
   type TransformPlan,
 } from "./transforms";
 
 const LAYOUTS: Array<{ id: AlphaLayout; label: string }> = [
+  { id: "qwerty", label: "QWERTY" },
   { id: "colemak", label: "Colemak" },
   { id: "colemak-dh", label: "Colemak-DH" },
   { id: "dvorak", label: "Dvorak" },
+];
+
+const MIGRATIONS: Array<{ id: LayerMigration; label: string; hint: string }> = [
+  { id: "positional", label: "Positional", hint: "leave the layer untouched" },
+  { id: "alphas", label: "Alphas", hint: "substitute the letter keycodes in place" },
+  { id: "mnemonic", label: "Mnemonic", hint: "move bindings so they stay on the same letter" },
 ];
 
 type RunState =
@@ -29,8 +37,11 @@ type RunState =
 export function TransformsTab({ nav }: { nav: ReactNode }) {
   const { bundle, state, dispatch, io, history } = useWorkbench();
   const [run, setRun] = useState<RunState>({ phase: "idle" });
-  const [layout, setLayout] = useState<AlphaLayout>("colemak");
-  const [targetLayers, setTargetLayers] = useState<number[]>([state.defaultLayer]);
+  const [from, setFrom] = useState<AlphaLayout>("qwerty");
+  const [to, setTo] = useState<AlphaLayout>("colemak");
+  const [migrationOverrides, setMigrationOverrides] = useState<
+    Record<number, LayerMigration>
+  >({});
 
   const input = useMemo(
     () => ({
@@ -52,9 +63,18 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
   );
 
   const osPlan = useMemo(() => planOsSwap(input), [input]);
-  const alphaPlan = useMemo(
-    () => planAlphaRemap(input, layout, targetLayers),
-    [input, layout, targetLayers],
+  const migrations = useMemo(
+    () =>
+      state.layers.map(
+        (_, layer) =>
+          migrationOverrides[layer] ??
+          (layer === state.defaultLayer ? "alphas" : "positional"),
+      ),
+    [state.layers, migrationOverrides, state.defaultLayer],
+  );
+  const layoutPlan = useMemo(
+    () => planLayoutSwitch(input, from, to, migrations, state.defaultLayer),
+    [input, from, to, migrations, state.defaultLayer],
   );
 
   const busy = run.phase === "running";
@@ -91,12 +111,6 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
 
   const layerName = (layer: number): string =>
     state.layerMetadata?.[layer]?.name || `Layer ${layer}`;
-  const toggleLayer = (layer: number) =>
-    setTargetLayers((current) =>
-      current.includes(layer)
-        ? current.filter((l) => l !== layer)
-        : [...current, layer].sort((a, b) => a - b),
-    );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -125,51 +139,83 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
         </Panel>
 
         <Panel className="p-5">
-          <SectionLabel>Alpha layout</SectionLabel>
+          <SectionLabel>Switch alpha layout</SectionLabel>
           <p className="mt-1.5 text-[12px] leading-relaxed text-faint">
-            Remaps QWERTY alphas (and, for Dvorak, punctuation) to another layout on the
-            layers you pick. Tap-hold and layer-tap keys keep their holds while the tap
-            letter moves. Leave positional layers — gaming WASD — unchecked. Combos match
-            by action, so they follow the letters automatically.
+            Converts between alpha layouts in either direction — tell it what the keymap
+            is now and what it should become. Each layer migrates its own way:{" "}
+            <span className="text-mute">alphas</span> substitutes the letter keycodes in
+            place (tap-holds keep their holds while the tap letter changes),{" "}
+            <span className="text-mute">mnemonic</span> moves whole bindings so they stay
+            on the same letter (a shortcut on C follows C to its new position), and{" "}
+            <span className="text-mute">positional</span> leaves the layer untouched —
+            right for gaming WASD and symbol layers. Combos match by action, so they
+            follow the letters automatically.
           </p>
-          <div className="mt-3 flex items-center gap-1.5">
-            {LAYOUTS.map((entry) => (
-              <Button
-                key={entry.id}
-                variant={entry.id === layout ? "primary" : "outline"}
-                onClick={() => setLayout(entry.id)}
-                disabled={busy}
-              >
-                {entry.label}
-              </Button>
-            ))}
-          </div>
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
-            {state.layers.map((_, layer) => (
-              <label
-                key={layer}
-                className="flex cursor-pointer items-center gap-1.5 text-[12.5px] text-mute"
-              >
-                <input
-                  type="checkbox"
-                  checked={targetLayers.includes(layer)}
-                  onChange={() => toggleLayer(layer)}
+          {(["from", "to"] as const).map((which) => (
+            <div key={which} className="mt-3 flex items-center gap-1.5">
+              <span className="w-10 text-[11.5px] uppercase tracking-wide text-faint">
+                {which}
+              </span>
+              {LAYOUTS.map((entry) => (
+                <Button
+                  key={entry.id}
+                  variant={
+                    entry.id === (which === "from" ? from : to) ? "primary" : "outline"
+                  }
+                  onClick={() => (which === "from" ? setFrom(entry.id) : setTo(entry.id))}
                   disabled={busy}
-                />
-                {layerName(layer)}
-              </label>
+                >
+                  {entry.label}
+                </Button>
+              ))}
+            </div>
+          ))}
+          <div className="mt-4 flex flex-col gap-1.5">
+            {state.layers.map((_, layer) => (
+              <div key={layer} className="flex items-center gap-2">
+                <span className="w-40 truncate text-[12.5px] text-mute">
+                  {layerName(layer)}
+                  {layer === state.defaultLayer && (
+                    <span className="text-faint"> · default</span>
+                  )}
+                </span>
+                <div className="flex items-center gap-1">
+                  {MIGRATIONS.map((entry) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      title={entry.hint}
+                      disabled={busy}
+                      onClick={() =>
+                        setMigrationOverrides((current) => ({
+                          ...current,
+                          [layer]: entry.id,
+                        }))
+                      }
+                      className={
+                        migrations[layer] === entry.id
+                          ? "cursor-pointer rounded-md bg-accent/15 px-2 py-0.5 text-[11.5px] font-medium text-accent"
+                          : "cursor-pointer rounded-md px-2 py-0.5 text-[11.5px] text-faint hover:text-mute"
+                      }
+                    >
+                      {entry.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
           <div className="mt-4 flex items-center gap-2 border-t border-line-soft pt-4">
             <Button
               variant="primary"
-              disabled={busy || planSize(alphaPlan) === 0}
-              onClick={() => execute(alphaPlan)}
+              disabled={busy || from === to || planSize(layoutPlan) === 0}
+              onClick={() => execute(layoutPlan)}
             >
-              Apply {LAYOUTS.find((entry) => entry.id === layout)?.label}
+              Switch {LAYOUTS.find((entry) => entry.id === from)?.label} →{" "}
+              {LAYOUTS.find((entry) => entry.id === to)?.label}
             </Button>
-            <Chip tone={planSize(alphaPlan) === 0 ? "neutral" : "accent"}>
-              {planSize(alphaPlan)} {planSize(alphaPlan) === 1 ? "key" : "keys"}
+            <Chip tone={planSize(layoutPlan) === 0 ? "neutral" : "accent"}>
+              {planSize(layoutPlan)} {planSize(layoutPlan) === 1 ? "key" : "keys"}
             </Chip>
           </div>
         </Panel>
