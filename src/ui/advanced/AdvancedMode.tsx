@@ -1,5 +1,6 @@
-// Advanced mode: combos, morse, macros, forks, and global behavior — each a
-// sub-tab, each gated on what the connected firmware actually supports.
+// Advanced mode: combos, morse, macros, forks, global behavior, keymap-wide
+// transforms, and usage analysis — each a sub-tab, the editors gated on what
+// the connected firmware actually supports.
 
 import { useMemo, useState } from "react";
 import { useWorkbench } from "../state";
@@ -9,8 +10,10 @@ import { MorseTab } from "./MorseTab";
 import { MacrosTab } from "./MacrosTab";
 import { ForksTab } from "./ForksTab";
 import { BehaviorTab } from "./BehaviorTab";
+import { TransformsTab } from "./TransformsTab";
+import { UsageTab } from "./UsageTab";
 
-type AdvTab = "combos" | "morse" | "macros" | "forks" | "behavior";
+type AdvTab = "combos" | "morse" | "macros" | "forks" | "behavior" | "transforms" | "usage";
 
 export function AdvancedMode() {
   const { bundle } = useWorkbench();
@@ -23,6 +26,8 @@ export function AdvancedMode() {
     if (caps.macro_space_size > 0) out.push({ id: "macros", label: "Macros" });
     if (caps.max_forks > 0) out.push({ id: "forks", label: "Forks" });
     out.push({ id: "behavior", label: "Behavior" });
+    out.push({ id: "transforms", label: "Transforms" });
+    out.push({ id: "usage", label: "Usage" });
     return out;
   }, [caps.max_combos, caps.max_morse, caps.macro_space_size, caps.max_forks]);
 
@@ -61,5 +66,9 @@ export function AdvancedMode() {
       return <ForksTab nav={nav} />;
     case "behavior":
       return <BehaviorTab nav={nav} />;
+    case "transforms":
+      return <TransformsTab nav={nav} />;
+    case "usage":
+      return <UsageTab nav={nav} />;
   }
 }
