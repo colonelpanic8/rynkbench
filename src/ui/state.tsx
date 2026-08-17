@@ -40,6 +40,7 @@ import type {
   BuildInfo,
   ProtocolVersion,
   PointingConfig,
+  PointingCapabilities,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import type { LayerMetadata, RynkSession } from "../session/types";
 import type { KeyboardModel } from "../model/keyboard";
@@ -56,6 +57,7 @@ import {
   type LayerRewriteSnapshot,
   type LayerStructureOperation,
 } from "../layers/management";
+import { normalizePointingConfig, pointingConfigsEqual } from "./pointing";
 
 export type Mode =
   | "keymap"
@@ -100,6 +102,8 @@ export interface ConnectedBundle {
   layerMetadata: LayerMetadata[] | null;
   /** null when a complete runtime pointing-reference read was unavailable. */
   pointingConfig: PointingConfig | null;
+  /** Optional pointing modes understood by this firmware revision. */
+  pointingCapabilities: PointingCapabilities | null;
   currentLayer: number;
   defaultLayer: number;
   activeLayers: number[];
@@ -199,6 +203,9 @@ export interface WorkbenchState {
   layers: KeyAction[][];
   layerMetadata: LayerMetadata[] | null;
   pointingConfig: PointingConfig | null;
+  pointingDraft: PointingConfig | null;
+  pointingBusy: boolean;
+  pointingError: string | null;
   /** `${layer}:${encoderId}` → loaded encoder action. */
   encoders: Record<string, EncoderAction>;
   battery: BatteryStatus;
@@ -380,7 +387,14 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     layerStateComplete: bundle.layerStateComplete,
     layers: bundle.layers,
     layerMetadata: bundle.layerMetadata,
-    pointingConfig: bundle.pointingConfig,
+    pointingConfig: bundle.pointingConfig
+      ? normalizePointingConfig(bundle.pointingConfig)
+      : null,
+    pointingDraft: bundle.pointingConfig
+      ? normalizePointingConfig(bundle.pointingConfig)
+      : null,
+    pointingBusy: false,
+    pointingError: null,
     encoders: {},
     battery: bundle.battery,
     peripheralBattery: bundle.peripheralBattery,
@@ -538,6 +552,12 @@ export type WorkbenchAction =
   | { type: "lightingSelect"; leds: number[]; mode?: "replace" | "add" | "remove" }
   | { type: "lightingStateSet"; state: LightingState }
   | { type: "wakeLayersSet"; outputMode: LightingOutputModeState }
+  | { type: "pointingDraftSet"; config: PointingConfig }
+  | { type: "pointingDraftReset" }
+  | { type: "pointingWriteStart" }
+  | { type: "pointingWriteOk"; config: PointingConfig }
+  | { type: "pointingWriteErr"; message: string }
+  | { type: "pointingReloaded"; config: PointingConfig }
   | { type: "slotWriteStart"; kind: SlotKind; index: number; value: ComboDefinition | Morse | Fork }
   | { type: "slotWriteOk"; kind: SlotKind; index: number }
   | {
@@ -804,6 +824,7 @@ export function makeWorkbenchReducer(cols: number) {
       }
       case "layerOperationApplied": {
         const rewrite = act.rewrite;
+        const pointing = rewrite.pointing ? normalizePointingConfig(rewrite.pointing) : null;
         const movedUiLayer = rewrite.order.findIndex((source) => source === state.uiLayer);
         const uiLayer =
           movedUiLayer >= 0
@@ -813,7 +834,10 @@ export function makeWorkbenchReducer(cols: number) {
           ...state,
           layers: rewrite.layers,
           layerMetadata: rewrite.metadata,
-          pointingConfig: rewrite.pointing,
+          pointingConfig: pointing,
+          pointingDraft: pointing ? structuredClone(pointing) : null,
+          pointingBusy: false,
+          pointingError: null,
           defaultLayer: rewrite.defaultLayer,
           activeLayers: rewrite.activeLayers,
           currentLayer: Math.max(rewrite.defaultLayer, ...rewrite.activeLayers),
@@ -997,6 +1021,42 @@ export function makeWorkbenchReducer(cols: number) {
           lightingBusy: false,
           lightingError: null,
         };
+      case "pointingDraftSet":
+        return {
+          ...state,
+          pointingDraft: normalizePointingConfig(act.config),
+          pointingError: null,
+        };
+      case "pointingDraftReset":
+        return {
+          ...state,
+          pointingDraft: state.pointingConfig ? structuredClone(state.pointingConfig) : null,
+          pointingError: null,
+        };
+      case "pointingWriteStart":
+        return { ...state, pointingBusy: true, pointingError: null };
+      case "pointingWriteOk": {
+        const config = normalizePointingConfig(act.config);
+        return {
+          ...state,
+          pointingConfig: config,
+          pointingDraft: structuredClone(config),
+          pointingBusy: false,
+          pointingError: null,
+        };
+      }
+      case "pointingWriteErr":
+        return { ...state, pointingBusy: false, pointingError: act.message };
+      case "pointingReloaded": {
+        const config = normalizePointingConfig(act.config);
+        return {
+          ...state,
+          pointingConfig: config,
+          pointingDraft: structuredClone(config),
+          pointingBusy: false,
+          pointingError: null,
+        };
+      }
       case "extensionStateSet":
         return {
           ...state,
@@ -1306,10 +1366,15 @@ export function stagedEditCount(state: WorkbenchState): number {
   return Object.keys(state.stagedKeys).length + Object.keys(state.stagedEncoders).length;
 }
 
+export function pointingDraftDirty(state: WorkbenchState): boolean {
+  return !pointingConfigsEqual(state.pointingConfig, state.pointingDraft);
+}
+
 export function hasPendingConfigurationWrite(state: WorkbenchState): boolean {
   return (
     state.keyEditHistorySuspended ||
     state.lightingBusy ||
+    state.pointingBusy ||
     state.batchBusy ||
     Object.values(state.pending).some((item) => item.status === "pending")
   );
@@ -1406,6 +1471,8 @@ export interface WorkbenchIo {
   deleteMorseProfile(index: number): void;
   setMorseHoldTriggerPositions(positions: MorseHoldTriggerPosition[]): void;
   setAutoMouseLayers(configs: AutoMouseLayerConfig[]): void;
+  applyPointingConfig(): Promise<IoWriteResult>;
+  reloadPointingConfig(): Promise<IoWriteResult>;
   disconnect(): void;
   rebootToBootloader(): Promise<void>;
 }
@@ -1616,6 +1683,9 @@ export function makeIo(
     }
     if (stagedEditCount(before) > 0) {
       return rejectLayerOperation("apply or discard staged batch edits before editing layers");
+    }
+    if (pointingDraftDirty(before)) {
+      return rejectLayerOperation("apply or discard staged pointing edits before editing layers");
     }
     if (Object.keys(before.layerDrafts).length > 0) {
       return rejectLayerOperation("apply or discard staged layer lighting before editing layers");
@@ -2180,6 +2250,48 @@ export function makeIo(
         () => dispatch({ type: "autoMouseWriteOk" }),
         (err) => dispatch({ type: "autoMouseWriteErr", prev, message: errorMessage(err) }),
       );
+    },
+    async applyPointingConfig() {
+      const state = getState();
+      if (state.pointingBusy) return { ok: false, message: "a pointing write is already running" };
+      if (!state.pointingConfig || !state.pointingDraft) {
+        return { ok: false, message: "this keyboard has no runtime pointing configuration" };
+      }
+      if (!pointingDraftDirty(state)) return { ok: true };
+
+      dispatch({ type: "pointingWriteStart" });
+      try {
+        const request = normalizePointingConfig({
+          ...state.pointingDraft,
+          revision: state.pointingConfig.revision,
+        });
+        const accepted = await session.pointing.set(request);
+        const readback = await session.pointing.get();
+        if (accepted.revision !== readback.revision || !pointingConfigsEqual(accepted, readback)) {
+          throw new Error("pointing configuration read-back did not match the accepted write");
+        }
+        dispatch({ type: "pointingWriteOk", config: readback });
+        return { ok: true };
+      } catch (error) {
+        const message = errorMessage(error);
+        dispatch({ type: "pointingWriteErr", message });
+        return { ok: false, message };
+      }
+    },
+    async reloadPointingConfig() {
+      if (getState().pointingBusy) {
+        return { ok: false, message: "a pointing write is already running" };
+      }
+      dispatch({ type: "pointingWriteStart" });
+      try {
+        const config = await session.pointing.get();
+        dispatch({ type: "pointingReloaded", config });
+        return { ok: true };
+      } catch (error) {
+        const message = errorMessage(error);
+        dispatch({ type: "pointingWriteErr", message });
+        return { ok: false, message };
+      }
     },
     disconnect() {
       onDisconnect();

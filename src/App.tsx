@@ -22,6 +22,7 @@ import type {
   LightingSceneStatus,
   LightingState,
   ModifierCombination,
+  PointingCapabilities,
   PointingConfig,
 } from "./vendor/rynk-wasm/rynk_wasm";
 import type {
@@ -266,6 +267,14 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     session.pointing.get(),
     null,
   );
+  const pointingCapabilities =
+    pointingConfig === null
+      ? null
+      : await optionalRead<PointingCapabilities>(
+          "pointing capabilities",
+          session.pointing.capabilities(),
+          { mode_flags: 0 },
+        );
 
   const [layerState, battery, connection, peripheralBattery] = await Promise.all([
     session.keymap.layerState(),
@@ -341,6 +350,7 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     layers,
     layerMetadata,
     pointingConfig,
+    pointingCapabilities,
     currentLayer,
     defaultLayer,
     activeLayers,

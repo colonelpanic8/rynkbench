@@ -12,6 +12,7 @@ import type {
   LightingSceneCell,
   LightingState,
   ModifierCombination,
+  PointingConfig,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import type { RynkSession } from "../session/types";
 import { initialKeyEditHistory } from "./history";
@@ -22,6 +23,7 @@ import {
   conditionalTablesEqual,
   makeIo,
   makeWorkbenchReducer,
+  pointingDraftDirty,
   stagedBetween,
   stagedEditCount,
   type WorkbenchAction,
@@ -53,6 +55,9 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     layers: [[], []],
     layerMetadata: null,
     pointingConfig: null,
+    pointingDraft: null,
+    pointingBusy: false,
+    pointingError: null,
     encoders: {},
     battery: "Unavailable",
     peripheralBattery: "Unavailable",
@@ -1022,6 +1027,85 @@ describe("modifier-state snapshots", () => {
   });
 });
 
+describe("pointing configuration state", () => {
+  const pointing = (revision: number, multiplier = 1): PointingConfig => ({
+    revision,
+    device_count: 1,
+    devices: [
+      {
+        device_id: 0,
+        mode: {
+          Cursor: { multiplier_x: multiplier, multiplier_y: 1, invert_x: false, invert_y: false },
+        },
+      },
+    ],
+    override_count: 0,
+    overrides: [],
+  });
+
+  it("stages and discards a pointing document without touching the applied copy", () => {
+    const applied = pointing(4);
+    const staged = pointing(4, 3);
+    let state = baseState({ pointingConfig: applied, pointingDraft: applied });
+    state = reducer(state, { type: "pointingDraftSet", config: staged });
+    expect(pointingDraftDirty(state)).toBe(true);
+    expect(state.pointingConfig?.devices[0].mode).toEqual(pointing(4).devices[0].mode);
+
+    state = reducer(state, { type: "pointingDraftReset" });
+    expect(pointingDraftDirty(state)).toBe(false);
+    expect(state.pointingError).toBeNull();
+  });
+
+  it("writes the current revision, verifies readback, and adopts the bumped revision", async () => {
+    let state = baseState({ pointingConfig: pointing(7), pointingDraft: pointing(7, 5) });
+    const accepted = pointing(8, 5);
+    const set = vi.fn(async (_config: PointingConfig) => accepted);
+    const get = vi.fn(async () => accepted);
+    const session = { pointing: { set, get } } as unknown as RynkSession;
+    const dispatch = (action: WorkbenchAction) => {
+      state = reducer(state, action);
+    };
+    const io = makeIo(session, () => state, dispatch, 2, () => {});
+
+    await expect(io.applyPointingConfig()).resolves.toEqual({ ok: true });
+    expect(set).toHaveBeenCalledOnce();
+    expect(set.mock.calls[0][0]).toMatchObject({ revision: 7, device_count: 1 });
+    expect(set.mock.calls[0][0].devices).toHaveLength(4);
+    expect(get).toHaveBeenCalledOnce();
+    expect(state.pointingConfig?.revision).toBe(8);
+    expect(pointingDraftDirty(state)).toBe(false);
+    expect(state.pointingBusy).toBe(false);
+  });
+
+  it("keeps staged edits after a revision failure and can reload the keyboard copy", async () => {
+    let state = baseState({ pointingConfig: pointing(2), pointingDraft: pointing(2, 9) });
+    const get = vi.fn(async () => pointing(3, 4));
+    const session = {
+      pointing: {
+        set: vi.fn(async () => {
+          throw new Error("pointing configuration revision changed");
+        }),
+        get,
+      },
+    } as unknown as RynkSession;
+    const dispatch = (action: WorkbenchAction) => {
+      state = reducer(state, action);
+    };
+    const io = makeIo(session, () => state, dispatch, 2, () => {});
+
+    await expect(io.applyPointingConfig()).resolves.toEqual({
+      ok: false,
+      message: "pointing configuration revision changed",
+    });
+    expect(pointingDraftDirty(state)).toBe(true);
+    expect(state.pointingError).toContain("revision changed");
+
+    await expect(io.reloadPointingConfig()).resolves.toEqual({ ok: true });
+    expect(state.pointingConfig?.revision).toBe(3);
+    expect(pointingDraftDirty(state)).toBe(false);
+  });
+});
+
 describe("layer management state", () => {
   it("keeps the selected logical layer selected after a reorder", () => {
     const state = baseState({
@@ -1058,6 +1142,67 @@ describe("layer management state", () => {
     });
 
     expect(next.uiLayer).toBe(0);
+  });
+
+  it("keeps the applied pointing state and draft synchronized after a layer rewrite", () => {
+    const rewrittenPointing: PointingConfig = {
+      revision: 6,
+      device_count: 1,
+      devices: [
+        {
+          device_id: 3,
+          mode: {
+            Cursor: { multiplier_x: 1, multiplier_y: 1, invert_x: false, invert_y: false },
+          },
+        },
+      ],
+      override_count: 1,
+      overrides: [
+        {
+          layer: 0,
+          device_id: 3,
+          mode: {
+            Press: {
+              cursor: { multiplier_x: 1, multiplier_y: 1, invert_x: false, invert_y: false },
+              holds: 1,
+            },
+          },
+        },
+      ],
+    };
+    const state = baseState({
+      pointingConfig: rewrittenPointing,
+      pointingDraft: { ...rewrittenPointing, revision: 5 },
+    });
+    const next = reducer(state, {
+      type: "layerOperationApplied",
+      rewrite: {
+        order: [0, 1],
+        metadata: [
+          { occupied: true, name: "Base" },
+          { occupied: true, name: "Layer 1" },
+        ],
+        layers: state.layers,
+        encoders: [[], []],
+        defaultLayer: 0,
+        activeLayers: [0],
+        combos: [],
+        morse: [],
+        forks: [],
+        behaviorOptions: null,
+        autoMouseLayers: [],
+        scenes: [],
+        runtimeConditionalScenes: [],
+        compiledScenes: [],
+        compiledConditionalScenes: [],
+        wakeLayers: 0,
+        pointing: rewrittenPointing,
+      },
+    });
+
+    expect(next.pointingConfig?.devices).toHaveLength(4);
+    expect(next.pointingDraft).toEqual(next.pointingConfig);
+    expect(pointingDraftDirty(next)).toBe(false);
   });
 });
 

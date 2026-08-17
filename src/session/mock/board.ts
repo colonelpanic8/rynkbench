@@ -54,6 +54,7 @@ import type {
   MorseProfile,
   MorseProfileEntry,
   MouseButtons,
+  PointingCapabilities,
   PointingConfig,
   ProtocolVersion,
   SplitCentralLatencyPolicy,
@@ -885,6 +886,10 @@ class MockSession implements RynkSession {
   };
 
   readonly pointing: PointingOps = {
+    capabilities: () =>
+      latency(
+        (): PointingCapabilities => ({ mode_flags: this.pointingConfig === null ? 0 : 1 }),
+      ),
     get: () =>
       latency(() => {
         if (this.pointingConfig === null) {

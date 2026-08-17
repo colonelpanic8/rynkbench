@@ -66,6 +66,7 @@ import type {
   MorseProfileState,
   PeripheralStatus,
   PointingConfig,
+  PointingCapabilities,
   ProtocolVersion,
   SplitCentralLatencyPolicy,
   SplitCentralLatencyState,
@@ -254,6 +255,7 @@ export interface BehaviorOps {
 }
 
 export interface PointingOps {
+  capabilities(): Promise<PointingCapabilities>;
   get(): Promise<PointingConfig>;
   set(config: PointingConfig): Promise<PointingConfig>;
 }

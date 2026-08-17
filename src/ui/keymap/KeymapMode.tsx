@@ -15,11 +15,13 @@ import {
   keyPendingId,
   lightingBaseFor,
   lightingDraftFor,
+  pointingDraftDirty,
   stagedBetween,
   useWorkbench,
 } from "../state";
 import { ActionEditor } from "./ActionEditor";
 import { LayerLighting } from "./LayerLighting";
+import { LayerPointing } from "./LayerPointing";
 import { effectAnim, effectColor } from "../lighting/decor";
 import {
   keyClipboardShortcut,
@@ -60,6 +62,7 @@ function LayerTabs() {
     state.pointingConfig !== null &&
     state.behaviorOptions !== null &&
     (state.lightingState === null || state.lightingOutputMode !== null);
+  const pointingStaged = pointingDraftDirty(state);
 
   return (
     <div className="flex items-center gap-3 px-1">
@@ -139,8 +142,8 @@ function LayerTabs() {
           <Button
             variant="ghost"
             className="px-2 text-[12px]"
-            title="Move layer left"
-            disabled={state.layerBusy || state.uiLayer === 0}
+            title={pointingStaged ? "Apply or discard staged pointing edits first" : "Move layer left"}
+            disabled={state.layerBusy || pointingStaged || state.uiLayer === 0}
             onClick={() => void io.moveLayer(state.uiLayer, state.uiLayer - 1)}
           >
             ←
@@ -148,8 +151,10 @@ function LayerTabs() {
           <Button
             variant="ghost"
             className="px-2 text-[12px]"
-            title="Move layer right"
-            disabled={state.layerBusy || state.uiLayer === occupiedLayers.length - 1}
+            title={pointingStaged ? "Apply or discard staged pointing edits first" : "Move layer right"}
+            disabled={
+              state.layerBusy || pointingStaged || state.uiLayer === occupiedLayers.length - 1
+            }
             onClick={() => void io.moveLayer(state.uiLayer, state.uiLayer + 1)}
           >
             →
@@ -157,8 +162,8 @@ function LayerTabs() {
           <Button
             variant="ghost"
             className="px-2 text-[12px]"
-            title="Duplicate layer"
-            disabled={state.layerBusy || occupiedLayers.length >= numLayers}
+            title={pointingStaged ? "Apply or discard staged pointing edits first" : "Duplicate layer"}
+            disabled={state.layerBusy || pointingStaged || occupiedLayers.length >= numLayers}
             onClick={() => void io.duplicateLayer(state.uiLayer)}
           >
             <PlusIcon size={12} /> Duplicate
@@ -166,8 +171,8 @@ function LayerTabs() {
           <Button
             variant="ghost"
             className="px-2 text-[12px] text-danger"
-            title="Delete and compact this layer"
-            disabled={state.layerBusy || occupiedLayers.length <= 1}
+            title={pointingStaged ? "Apply or discard staged pointing edits first" : "Delete and compact this layer"}
+            disabled={state.layerBusy || pointingStaged || occupiedLayers.length <= 1}
             onClick={() => {
               if (window.confirm(`Delete ${selectedName}? Layer references will be rewritten first.`)) {
                 void io.deleteLayer(state.uiLayer);
@@ -810,17 +815,20 @@ export function KeymapInspector() {
 
   if (!state.selection) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-        <div className="flex size-12 items-center justify-center rounded-xl border border-line bg-raised text-faint">
-          <span className="font-mono text-[16px]">⌨</span>
+      <div className="flex flex-col gap-4">
+        <div className="flex min-h-52 flex-col items-center justify-center gap-3 px-6 text-center">
+          <div className="flex size-12 items-center justify-center rounded-xl border border-line bg-raised text-faint">
+            <span className="font-mono text-[16px]">⌨</span>
+          </div>
+          <div className="text-[13.5px] font-medium text-mute">
+            Select a key to edit its binding
+          </div>
+          <div className="text-[12px] leading-relaxed text-faint">
+            Click or focus a key and press Enter to select it. Switch layers with
+            the tabs above the board.
+          </div>
         </div>
-        <div className="text-[13.5px] font-medium text-mute">
-          Select a key to edit its binding
-        </div>
-        <div className="text-[12px] leading-relaxed text-faint">
-          Click or focus a key and press Enter to select it. Switch layers with
-          the tabs above the board.
-        </div>
+        <LayerPointing />
       </div>
     );
   }
@@ -842,6 +850,7 @@ export function KeymapInspector() {
       ) : (
         <EncoderInspector id={state.selection.id} />
       )}
+      <LayerPointing />
     </div>
   );
 }

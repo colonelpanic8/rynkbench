@@ -140,10 +140,60 @@ export const ortho60Board: BoardSpec = {
   layerNames: ["Base", "Navigation", "Symbols", "Media"],
   pointingConfig: {
     revision: 1,
-    device_count: 0,
-    devices: [],
-    override_count: 0,
-    overrides: [],
+    device_count: 2,
+    devices: [
+      {
+        device_id: 0,
+        mode: {
+          Scroll: {
+            multiplier_x: 1,
+            divisor_x: 8,
+            multiplier_y: 1,
+            divisor_y: 8,
+            invert_x: false,
+            invert_y: false,
+          },
+        },
+      },
+      {
+        device_id: 1,
+        mode: {
+          Cursor: { multiplier_x: 1, multiplier_y: 1, invert_x: false, invert_y: false },
+        },
+      },
+    ],
+    override_count: 2,
+    overrides: [
+      {
+        layer: 1,
+        device_id: 0,
+        mode: {
+          Keypad: {
+            disable_x: true,
+            disable_y: false,
+            invert_x: false,
+            invert_y: false,
+            threshold_x: 120,
+            threshold_y: 30,
+            keycode_up: "KbVolumeUp",
+            keycode_down: "KbVolumeDown",
+            keycode_left: "MediaPrevTrack",
+            keycode_right: "MediaNextTrack",
+            keycode_tap: "MediaPlayPause",
+          },
+        },
+      },
+      {
+        layer: 2,
+        device_id: 1,
+        mode: {
+          Press: {
+            cursor: { multiplier_x: 1, multiplier_y: 1, invert_x: false, invert_y: false },
+            holds: 1,
+          },
+        },
+      },
+    ],
   },
   defaultEncoders,
   battery: "Unavailable",

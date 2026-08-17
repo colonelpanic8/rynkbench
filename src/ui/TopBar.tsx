@@ -11,7 +11,7 @@ import {
 import type { ConfigFormat, ExtensionCatalog } from "../config/document";
 import { exportDocument, importDocument } from "../config/transfer";
 import type { BatteryStatus } from "../vendor/rynk-wasm/rynk_wasm";
-import { stagedEditCount, useWorkbench } from "./state";
+import { pointingDraftDirty, stagedEditCount, useWorkbench } from "./state";
 import { Chip, Button } from "./kit";
 import { errorReport, TransferReportPanel } from "./TransferReport";
 import type { TransferReport } from "./TransferReport";
@@ -78,6 +78,7 @@ export function TopBar() {
   const [report, setReport] = useState<TransferReport | null>(null);
   const split = bundle.caps.is_split;
   const stagedCount = stagedEditCount(state);
+  const pointingStaged = pointingDraftDirty(state);
   const activeLabel = [...new Set([state.defaultLayer, ...state.activeLayers])]
     .sort((a, b) => a - b)
     .join(" | ");
@@ -96,12 +97,12 @@ export function TopBar() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (stagedCount > 0) {
-      // An import writes device differences directly; staged batch edits
-      // would go stale underneath it.
+    if (stagedCount > 0 || pointingStaged) {
+      // An import writes device differences directly; staged edits would go
+      // stale underneath it.
       setReport({
         outcome: "error",
-        headline: "Apply or discard staged batch edits before importing a layout.",
+        headline: "Apply or discard staged configuration edits before importing a layout.",
       });
       return;
     }

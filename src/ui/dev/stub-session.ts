@@ -745,6 +745,9 @@ class StubSession implements RynkSession {
   };
 
   pointing = {
+    capabilities: async (): Promise<never> => {
+      throw new Error("this firmware has no runtime pointing capabilities");
+    },
     get: async (): Promise<never> => {
       throw new Error("this firmware has no runtime pointing configuration");
     },

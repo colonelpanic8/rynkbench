@@ -675,6 +675,7 @@ export class LinkSession implements RynkSession {
     };
 
     this.pointing = {
+      capabilities: () => this.run(() => client.get_pointing_capabilities()),
       get: () => this.run(() => client.get_pointing_config()),
       set: (config: PointingConfig) => this.run(() => client.set_pointing_config(config)),
     };
