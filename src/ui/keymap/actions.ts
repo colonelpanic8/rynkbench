@@ -10,3 +10,16 @@ export function pickedHidAction(code: HidKeyCode, mods: ModifierCombination): Ac
     ? { KeyWithModifier: [code, mods] }
     : { Key: { Hid: code } };
 }
+
+/** Union of user-selected modifiers and a character pick's required ones. */
+export function mergeModifiers(
+  base: ModifierCombination,
+  required?: ModifierCombination,
+): ModifierCombination {
+  if (!required) return base;
+  const merged = { ...base };
+  for (const key of Object.keys(merged) as Array<keyof ModifierCombination>) {
+    merged[key] = merged[key] || required[key];
+  }
+  return merged;
+}

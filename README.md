@@ -8,6 +8,13 @@ keymap and per-key lighting live — no install, nothing leaves your machine.
   RMK's action set, rendered on the board's real geometry. Successful direct
   key assignments can be undone and redone from the top bar or with the usual
   Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, and Ctrl+Y shortcuts.
+- **Locale & character mapping** — pick your OS keyboard layout (US, UK,
+  German QWERTZ, French AZERTY, Spanish, Swedish/Finnish) in the top bar.
+  Keycaps, pickers, and the live view then show the characters keys actually
+  type; pure Shift/AltGr combos render as the character they produce; and
+  typing a character into the key search (`ö`, `@`, `é`) finds the keystroke
+  that types it, automatically binding any Shift/AltGr it needs. The choice is
+  a browser-local display preference — nothing on the keyboard changes.
 - **Lighting** — a paint-on-the-board overlay plus on-device *layer scenes*:
   lighting that lives on the keyboard, composites natively as layers activate,
   and survives disconnect and reboot.

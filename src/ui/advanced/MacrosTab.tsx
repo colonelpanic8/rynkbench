@@ -100,6 +100,7 @@ function AddStep({ onAdd }: { onAdd: (step: MacroStep) => void }) {
       {(kind === "tap" || kind === "press" || kind === "release") && (
         <KeycodeBrowser
           compact
+          modifierPicks={false}
           query={query}
           onQuery={setQuery}
           onPick={(code) => onAdd({ kind, code })}

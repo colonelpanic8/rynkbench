@@ -1,6 +1,6 @@
 // The workbench: top bar, mode rail, canvas center, contextual inspector.
 
-import { useEffect, useMemo, useReducer, useRef } from "react";
+import { useEffect, useMemo, useReducer, useRef, useSyncExternalStore } from "react";
 import type { ConnectedBundle, Mode } from "./state";
 import {
   WorkbenchContext,
@@ -20,6 +20,7 @@ import { ProfilesMode } from "./ProfilesMode";
 import { DeviceMode } from "./device/DeviceMode";
 import { InspectorShell, cx } from "./kit";
 import { historyShortcut, keyEditHistoryLabel } from "./history";
+import { getLocaleId, subscribeLocale } from "./locale";
 import {
   CombinatorIcon,
   DeviceIcon,
@@ -104,6 +105,10 @@ export function Workbench({
     [bundle.caps.num_cols],
   );
   const [state, dispatch] = useReducer(reducer, bundle, initialWorkbenchState);
+
+  // Key labels everywhere derive from the active OS locale; re-render the
+  // whole workbench when the TopBar selector changes it.
+  useSyncExternalStore(subscribeLocale, getLocaleId);
 
   // Effects is its own view rather than a lighting panel, but it only exists
   // on firmware that ships the effect extension.

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { ModifierCombination } from "../vendor/rynk-wasm/rynk_wasm";
 import {
   actionLabel,
@@ -7,6 +7,7 @@ import {
   keyActionDescription,
   modifierSymbols,
 } from "./labels";
+import { DEFAULT_LOCALE_ID, setLocaleId } from "./locale";
 import { DEFAULT_TAP_HOLD_PROFILE } from "./morse";
 
 function mods(fields: Partial<ModifierCombination>): ModifierCombination {
@@ -42,6 +43,33 @@ describe("tap-hold descriptions", () => {
     expect(keyActionDescription({ TapHold: [tap, hold, 0] })).toBe(
       "Tap A / hold L1 · timing profile 0",
     );
+  });
+});
+
+describe("locale-aware labels", () => {
+  afterEach(() => setLocaleId(DEFAULT_LOCALE_ID));
+
+  it("renders character-forming modifier combos as the character they type", () => {
+    expect(actionLabel({ KeyWithModifier: ["Kc2", mods({ left_shift: true })] })).toBe("@");
+    // Shift+letter types the same character as the keycap shows — keep the
+    // explicit modifier so the binding stays distinguishable from plain A.
+    expect(actionLabel({ KeyWithModifier: ["A", mods({ left_shift: true })] })).toBe("L⇧A");
+    // Ctrl combos are shortcuts, not characters.
+    expect(
+      actionLabel({ KeyWithModifier: ["Kc2", mods({ left_shift: true, left_ctrl: true })] }),
+    ).toBe("L⌃L⇧2");
+  });
+
+  it("relabels keycaps under a non-US locale", () => {
+    setLocaleId("de");
+    expect(hidLabel("Y")).toBe("Z");
+    expect(hidLabel("Semicolon")).toBe("Ö");
+    expect(hidLabel("Minus")).toBe("ß");
+    expect(actionLabel({ KeyWithModifier: ["Kc2", mods({ left_shift: true })] })).toBe('"');
+    expect(actionLabel({ KeyWithModifier: ["Q", mods({ right_alt: true })] })).toBe("@");
+    setLocaleId("fr");
+    expect(hidLabel("Q")).toBe("A");
+    expect(hidLabel("Kc2")).toBe("é");
   });
 });
 

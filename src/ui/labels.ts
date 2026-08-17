@@ -1,4 +1,5 @@
-// KeyAction → display label derivation. Pure functions, no React.
+// KeyAction → display label derivation. Pure functions, no React. Labels for
+// character-producing keys follow the active OS locale (see locale.ts).
 
 import type {
   Action,
@@ -7,6 +8,7 @@ import type {
   KeyCode,
   ModifierCombination,
 } from "../vendor/rynk-wasm/rynk_wasm";
+import { activeLocale, characterFor, keycapCharacter } from "./locale";
 import { DEFAULT_TAP_HOLD_PROFILE } from "./morse";
 
 /** Compact keycap symbols for HID codes that deserve better than their name. */
@@ -106,10 +108,28 @@ const HID_SYMBOLS: Partial<Record<HidKeyCode, string>> = {
 };
 
 export function hidLabel(code: HidKeyCode): string {
+  const cap = keycapCharacter(activeLocale(), code);
+  if (cap !== null) return cap;
   const sym = HID_SYMBOLS[code];
   if (sym) return sym;
-  // Letters and F-keys already read well; otherwise fall back to the name.
+  // F-keys and friends already read well; otherwise fall back to the name.
   return code;
+}
+
+/** The character a modified keystroke types under the active locale, when the
+ *  modifiers are purely character-forming (Shift/AltGr) and the result differs
+ *  from the bare keycap — e.g. ⇧2 → "@" on US, AltGr+Q → "@" on German. */
+export function characterWithModifiers(
+  code: HidKeyCode,
+  mods: ModifierCombination,
+): string | null {
+  if (mods.left_ctrl || mods.right_ctrl || mods.left_alt || mods.left_gui || mods.right_gui)
+    return null;
+  const shift = mods.left_shift || mods.right_shift;
+  const altgr = mods.right_alt;
+  if (!shift && !altgr) return null;
+  const character = characterFor(activeLocale(), code, shift, altgr);
+  return character !== null && character !== hidLabel(code) ? character : null;
 }
 
 /** A longer human name for pickers and tooltips. */
@@ -220,7 +240,7 @@ export function actionLabel(action: Action): string {
   if ("Modifier" in action) return modifierSymbols(action.Modifier) || "Mod";
   if ("KeyWithModifier" in action) {
     const [key, mods] = action.KeyWithModifier;
-    return modifierSymbols(mods) + hidLabel(key);
+    return characterWithModifiers(key, mods) ?? modifierSymbols(mods) + hidLabel(key);
   }
   if ("LayerOn" in action) return `L${action.LayerOn}`;
   if ("LayerOnWithModifier" in action) {
@@ -290,7 +310,10 @@ export function actionDescription(action: Action): string {
   if ("Modifier" in action) return `Modifier · ${modifierSymbols(action.Modifier)}`;
   if ("KeyWithModifier" in action) {
     const [key, mods] = action.KeyWithModifier;
-    return `Key · ${modifierSymbols(mods)}${hidLabel(key)}`;
+    const character = characterWithModifiers(key, mods);
+    return `Key · ${modifierSymbols(mods)}${hidLabel(key)}${
+      character !== null ? ` — types ${character}` : ""
+    }`;
   }
   if ("LayerOn" in action) return `Momentary layer ${action.LayerOn}`;
   if ("LayerToggle" in action) return `Toggle layer ${action.LayerToggle}`;

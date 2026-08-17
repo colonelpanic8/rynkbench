@@ -1,6 +1,6 @@
 // Workbench top bar: identity, live status, disconnect.
 
-import { useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import type { ChangeEvent } from "react";
 import {
   FORMAT_EXTENSION,
@@ -17,6 +17,28 @@ import { errorReport, TransferReportPanel } from "./TransferReport";
 import type { TransferReport } from "./TransferReport";
 import { BatteryGlyph, PowerIcon, RedoIcon, UndoIcon, Wordmark } from "./icons";
 import { KIND_LABEL } from "./session-labels";
+import { LOCALES, getLocaleId, setLocaleId, subscribeLocale } from "./locale";
+
+/** OS keyboard-layout picker: what characters HID codes are displayed and
+ *  searched as. A browser-local display preference, never written anywhere. */
+function LocaleSelect() {
+  const localeId = useSyncExternalStore(subscribeLocale, getLocaleId);
+  return (
+    <select
+      value={localeId}
+      onChange={(event) => setLocaleId(event.target.value)}
+      title="OS keyboard layout used to display and pick characters"
+      aria-label="OS keyboard layout"
+      className="max-w-40 cursor-pointer rounded-md border border-line bg-raised px-2 py-1.5 text-[12px] text-mute hover:border-line-strong"
+    >
+      {LOCALES.map((locale) => (
+        <option key={locale.id} value={locale.id}>
+          {locale.name}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 const BOARD_LABEL = { glove80: "Glove80", go60: "Go60" } as const;
 
@@ -250,6 +272,10 @@ export function TopBar() {
       </div>
 
       {!offline && <BatteryReadout battery={state.battery} split={split} />}
+
+      <div className="h-6 w-px bg-line-soft" />
+
+      <LocaleSelect />
 
       <div className="h-6 w-px bg-line-soft" />
 

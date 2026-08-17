@@ -1,7 +1,7 @@
 // The binding editor shown in the inspector for a selected key or encoder
 // direction. Category tabs → pick → commit(action).
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import type {
   Action,
@@ -12,13 +12,14 @@ import type {
   ModifierCombination,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import { searchKeycodes } from "../hid";
+import { getLocaleId, subscribeLocale } from "../locale";
 import { EMPTY_MODS, actionLabel, anyModifier, hidName, modifierSymbols } from "../labels";
 import { decodeMacros, macroPreview } from "../macros";
 import { DEFAULT_TAP_HOLD_PROFILE, morsePatternGlyph } from "../morse";
 import { useWorkbench } from "../state";
 import { morseProfileSummary } from "../morse-profile";
 import { Button, SectionLabel, TextInput, cx } from "../kit";
-import { pickedHidAction } from "./actions";
+import { mergeModifiers, pickedHidAction } from "./actions";
 
 type Tab =
   | "keys"
@@ -116,17 +117,29 @@ export function KeycodeBrowser({
   onQuery,
   onPick,
   compact,
+  modifierPicks = true,
 }: {
   query: string;
   onQuery: (q: string) => void;
-  onPick: (code: HidKeyCode) => void;
+  onPick: (code: HidKeyCode, mods?: ModifierCombination) => void;
   compact?: boolean;
+  /** Whether picks may carry required Shift/AltGr modifiers (character
+   *  matches). Off for single-keycode contexts like macro steps. */
+  modifierPicks?: boolean;
 }) {
-  const groups = useMemo(() => searchKeycodes(query), [query]);
+  // Subscribing keeps the catalog current when the layout selection changes;
+  // searchKeycodes caches per locale, so recomputing every render is cheap.
+  useSyncExternalStore(subscribeLocale, getLocaleId);
+  const found = searchKeycodes(query);
+  const groups = modifierPicks
+    ? found
+    : found
+        .map((g) => ({ ...g, entries: g.entries.filter((e) => !e.mods) }))
+        .filter((g) => g.entries.length > 0);
   return (
     <div className="flex min-h-0 flex-col gap-3">
       <TextInput
-        placeholder="Search keycodes…"
+        placeholder="Search keycodes or type a character…"
         value={query}
         onChange={(e) => onQuery(e.target.value)}
       />
@@ -146,7 +159,13 @@ export function KeycodeBrowser({
             <SectionLabel>{g.name}</SectionLabel>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {g.entries.map((e) => (
-                <Keycap key={e.code} title={hidName(e.code)} onClick={() => onPick(e.code)}>
+                <Keycap
+                  key={`${e.code}${e.mods ? "+mods" : ""}`}
+                  title={
+                    e.mods ? `${modifierSymbols(e.mods)} + ${hidName(e.code)}` : hidName(e.code)
+                  }
+                  onClick={() => onPick(e.code, e.mods)}
+                >
                   {e.label}
                 </Keycap>
               ))}
@@ -252,7 +271,9 @@ export function SlotPicker({
             compact
             query={query}
             onQuery={setQuery}
-            onPick={(code) => onPick(pickedHidAction(code, mods))}
+            onPick={(code, required) =>
+              onPick(pickedHidAction(code, mergeModifiers(mods, required)))
+            }
           />
         </div>
       )}
@@ -602,7 +623,9 @@ export function ActionEditor({
           <KeycodeBrowser
             query={query}
             onQuery={setQuery}
-            onPick={(code) => onCommit({ Single: pickedHidAction(code, keyMods) })}
+            onPick={(code, required) =>
+              onCommit({ Single: pickedHidAction(code, mergeModifiers(keyMods, required)) })
+            }
           />
         </div>
       )}

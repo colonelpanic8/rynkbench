@@ -5,58 +5,7 @@ import type {
   ModifierCombination,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import { actionLabel, keyActionGlyph, modifierSymbols, type KeyGlyph } from "../labels";
-
-const UNSHIFTED: Partial<Record<HidKeyCode, string>> = {
-  Kc1: "1",
-  Kc2: "2",
-  Kc3: "3",
-  Kc4: "4",
-  Kc5: "5",
-  Kc6: "6",
-  Kc7: "7",
-  Kc8: "8",
-  Kc9: "9",
-  Kc0: "0",
-  Minus: "-",
-  Equal: "=",
-  LeftBracket: "[",
-  RightBracket: "]",
-  Backslash: "\\",
-  NonusHash: "#",
-  Semicolon: ";",
-  Quote: "'",
-  Grave: "`",
-  Comma: ",",
-  Dot: ".",
-  Slash: "/",
-  NonusBackslash: "\\",
-};
-
-const SHIFTED: Partial<Record<HidKeyCode, string>> = {
-  Kc1: "!",
-  Kc2: "@",
-  Kc3: "#",
-  Kc4: "$",
-  Kc5: "%",
-  Kc6: "^",
-  Kc7: "&",
-  Kc8: "*",
-  Kc9: "(",
-  Kc0: ")",
-  Minus: "_",
-  Equal: "+",
-  LeftBracket: "{",
-  RightBracket: "}",
-  Backslash: "|",
-  NonusHash: "~",
-  Semicolon: ":",
-  Quote: '"',
-  Grave: "~",
-  Comma: "<",
-  Dot: ">",
-  Slash: "?",
-  NonusBackslash: "|",
-};
+import { activeLocale, characterFor } from "../locale";
 
 function shifted(mods: ModifierCombination): boolean {
   return mods.left_shift || mods.right_shift;
@@ -67,9 +16,8 @@ export function reportedShiftState(mods: ModifierCombination | null): boolean | 
   return mods === null ? null : shifted(mods);
 }
 
-function printableCharacter(code: HidKeyCode, shift: boolean): string | null {
-  if (/^[A-Z]$/.test(code)) return shift ? code : code.toLowerCase();
-  return (shift ? SHIFTED[code] : UNSHIFTED[code]) ?? null;
+function printableCharacter(code: HidKeyCode, shift: boolean, altgr = false): string | null {
+  return characterFor(activeLocale(), code, shift, altgr);
 }
 
 function printableActionLabel(action: Action, shift: boolean): string | null {
@@ -79,14 +27,15 @@ function printableActionLabel(action: Action, shift: boolean): string | null {
   }
   if ("KeyWithModifier" in action) {
     const [code, mods] = action.KeyWithModifier;
-    const character = printableCharacter(code, shift || shifted(mods));
+    const character = printableCharacter(code, shift || shifted(mods), mods.right_alt);
     if (character === null) return null;
-    const nonShiftModifiers = modifierSymbols({
+    const nonCharacterModifiers = modifierSymbols({
       ...mods,
       left_shift: false,
       right_shift: false,
+      right_alt: false,
     });
-    return nonShiftModifiers + character;
+    return nonCharacterModifiers + character;
   }
   return null;
 }

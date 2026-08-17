@@ -6,6 +6,7 @@ import {
   pressedMatrixIndices,
   reportedShiftState,
 } from "./characters";
+import { DEFAULT_LOCALE_ID, setLocaleId } from "../locale";
 
 const key = (code: "A" | "Kc1" | "Slash" | "Enter" | "LShift"): KeyAction => ({
   Single: { Key: { Hid: code } },
@@ -40,6 +41,18 @@ describe("live character glyphs", () => {
 
   it("leaves non-character key symbols unchanged", () => {
     expect(liveKeyActionGlyph(key("Enter"), true).text).toBe("↵");
+  });
+
+  it("follows the active OS locale", () => {
+    setLocaleId("de");
+    try {
+      const y: KeyAction = { Single: { Key: { Hid: "Y" } } };
+      expect(liveKeyActionGlyph(y, false).text).toBe("z");
+      expect(liveKeyActionGlyph(key("Kc1"), true).text).toBe("!");
+      expect(liveKeyActionGlyph(key("Slash"), true).text).toBe("_");
+    } finally {
+      setLocaleId(DEFAULT_LOCALE_ID);
+    }
   });
 });
 

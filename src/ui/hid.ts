@@ -1,7 +1,16 @@
-// Curated HID keycode catalog for the picker. Grouped, searchable.
+// Curated HID keycode catalog for the picker. Grouped, searchable, and
+// locale-aware: labels and search text follow the active OS locale, and a
+// single-character query resolves to the keystroke that types it.
 
-import type { HidKeyCode } from "../vendor/rynk-wasm/rynk_wasm";
-import { hidLabel } from "./labels";
+import type { HidKeyCode, ModifierCombination } from "../vendor/rynk-wasm/rynk_wasm";
+import { hidLabel, modifierSymbols } from "./labels";
+import {
+  activeLocale,
+  characterFor,
+  keystrokeForCharacter,
+  keystrokeModifiers,
+  type KeyboardLocale,
+} from "./locale";
 
 export interface KeycodeEntry {
   code: HidKeyCode;
@@ -9,6 +18,8 @@ export interface KeycodeEntry {
   label: string;
   /** Search haystack (lowercase). */
   search: string;
+  /** Modifiers this entry requires to type its character (Shift/AltGr). */
+  mods?: ModifierCombination;
 }
 
 export interface KeycodeGroup {
@@ -16,11 +27,19 @@ export interface KeycodeGroup {
   entries: KeycodeEntry[];
 }
 
-function entry(code: HidKeyCode, extra = ""): KeycodeEntry {
+function entry(locale: KeyboardLocale, code: HidKeyCode, extra = ""): KeycodeEntry {
+  const characters = [
+    characterFor(locale, code, false),
+    characterFor(locale, code, true),
+    characterFor(locale, code, false, true),
+    characterFor(locale, code, true, true),
+  ]
+    .filter((c): c is string => c !== null)
+    .join(" ");
   return {
     code,
     label: hidLabel(code),
-    search: `${code} ${hidLabel(code)} ${extra}`.toLowerCase(),
+    search: `${code} ${hidLabel(code)} ${characters} ${extra}`.toLowerCase(),
   };
 }
 
@@ -38,136 +57,174 @@ const FKEYS: HidKeyCode[] = [
   "F13", "F14", "F15", "F16", "F17", "F18", "F19", "F20", "F21", "F22", "F23", "F24",
 ];
 
-export const KEYCODE_GROUPS: KeycodeGroup[] = [
-  {
-    name: "Letters",
-    entries: LETTERS.map((c) => entry(c, "letter")),
-  },
-  {
-    name: "Digits",
-    entries: DIGITS.map((c, i) => entry(c, `digit number ${(i + 1) % 10}`)),
-  },
-  {
-    name: "Editing",
+function buildGroups(locale: KeyboardLocale): KeycodeGroup[] {
+  const e = (code: HidKeyCode, extra = "") => entry(locale, code, extra);
+  return [
+    {
+      name: "Letters",
+      entries: LETTERS.map((c) => e(c, "letter")),
+    },
+    {
+      name: "Digits",
+      entries: DIGITS.map((c, i) => e(c, `digit number ${(i + 1) % 10}`)),
+    },
+    {
+      name: "Editing",
+      entries: [
+        e("Enter", "return newline"),
+        e("Escape", "esc"),
+        e("Backspace", "bksp delete back"),
+        e("Tab", "tabulator"),
+        e("Space", "spacebar"),
+        e("Delete", "del forward"),
+        e("Insert", "ins"),
+        e("CapsLock", "caps lock"),
+      ],
+    },
+    {
+      name: "Navigation",
+      entries: [
+        e("Left", "arrow"),
+        e("Down", "arrow"),
+        e("Up", "arrow"),
+        e("Right", "arrow"),
+        e("Home", "line start"),
+        e("End", "line end"),
+        e("PageUp", "pgup"),
+        e("PageDown", "pgdn"),
+      ],
+    },
+    {
+      name: "Punctuation",
+      entries: [
+        e("Minus", "dash hyphen underscore"),
+        e("Equal", "equals plus"),
+        e("LeftBracket", "bracket brace"),
+        e("RightBracket", "bracket brace"),
+        e("Backslash", "pipe"),
+        e("Semicolon", "colon"),
+        e("Quote", "apostrophe double"),
+        e("Grave", "backtick tilde"),
+        e("Comma", "less angle"),
+        e("Dot", "period greater angle"),
+        e("Slash", "question forward"),
+        e("NonusBackslash", "iso nonus"),
+        e("NonusHash", "iso nonus hash"),
+      ],
+    },
+    {
+      name: "Function keys",
+      entries: FKEYS.map((c) => e(c, "function")),
+    },
+    {
+      name: "Keypad",
+      entries: [
+        e("NumLock", "numlock keypad"),
+        e("KpSlash", "keypad divide"),
+        e("KpAsterisk", "keypad multiply star"),
+        e("KpMinus", "keypad subtract"),
+        e("KpPlus", "keypad add"),
+        e("KpEnter", "keypad enter"),
+        e("Kp1", "keypad"),
+        e("Kp2", "keypad"),
+        e("Kp3", "keypad"),
+        e("Kp4", "keypad"),
+        e("Kp5", "keypad"),
+        e("Kp6", "keypad"),
+        e("Kp7", "keypad"),
+        e("Kp8", "keypad"),
+        e("Kp9", "keypad"),
+        e("Kp0", "keypad"),
+        e("KpDot", "keypad decimal"),
+        e("KpEqual", "keypad equals"),
+      ],
+    },
+    {
+      name: "Media",
+      entries: [
+        e("MediaPlayPause", "play pause music"),
+        e("MediaNextTrack", "next track skip"),
+        e("MediaPrevTrack", "previous track"),
+        e("MediaStop", "stop music"),
+        e("AudioMute", "mute volume"),
+        e("AudioVolUp", "volume up louder"),
+        e("AudioVolDown", "volume down quieter"),
+        e("BrightnessUp", "brightness screen"),
+        e("BrightnessDown", "brightness screen"),
+        e("MediaEject", "eject"),
+      ],
+    },
+    {
+      name: "System",
+      entries: [
+        e("PrintScreen", "screenshot sysrq"),
+        e("ScrollLock", "scroll lock"),
+        e("Pause", "break"),
+        e("Application", "menu context"),
+        e("SystemPower", "power off"),
+        e("SystemSleep", "sleep suspend"),
+        e("SystemWake", "wake"),
+        e("MissionControl", "mac expose"),
+        e("Launchpad", "mac launcher"),
+      ],
+    },
+    {
+      name: "Modifier keys",
+      entries: [
+        e("LCtrl", "left control"),
+        e("LShift", "left shift"),
+        e("LAlt", "left alt option"),
+        e("LGui", "left gui super cmd win meta"),
+        e("RCtrl", "right control"),
+        e("RShift", "right shift"),
+        e("RAlt", "right alt option altgr"),
+        e("RGui", "right gui super cmd win meta"),
+      ],
+    },
+  ];
+}
+
+let cachedGroups: { localeId: string; groups: KeycodeGroup[] } | null = null;
+
+export function keycodeGroups(): KeycodeGroup[] {
+  const locale = activeLocale();
+  if (cachedGroups?.localeId !== locale.id) {
+    cachedGroups = { localeId: locale.id, groups: buildGroups(locale) };
+  }
+  return cachedGroups.groups;
+}
+
+/** An exact-character match for a one-character query: the keystroke that
+ *  types it under the active locale, with any Shift/AltGr it needs. */
+function characterMatch(query: string): KeycodeGroup | null {
+  const character = query.trim();
+  if ([...character].length !== 1) return null;
+  const locale = activeLocale();
+  const stroke = keystrokeForCharacter(locale, character);
+  if (!stroke) return null;
+  const mods = keystrokeModifiers(stroke);
+  const needsMods = stroke.shift || stroke.altgr;
+  return {
+    name: `Types “${character}” (${locale.name})`,
     entries: [
-      entry("Enter", "return newline"),
-      entry("Escape", "esc"),
-      entry("Backspace", "bksp delete back"),
-      entry("Tab", "tabulator"),
-      entry("Space", "spacebar"),
-      entry("Delete", "del forward"),
-      entry("Insert", "ins"),
-      entry("CapsLock", "caps lock"),
+      {
+        code: stroke.code,
+        label: needsMods ? `${modifierSymbols(mods)}${hidLabel(stroke.code)}` : hidLabel(stroke.code),
+        search: "",
+        mods: needsMods ? mods : undefined,
+      },
     ],
-  },
-  {
-    name: "Navigation",
-    entries: [
-      entry("Left", "arrow"),
-      entry("Down", "arrow"),
-      entry("Up", "arrow"),
-      entry("Right", "arrow"),
-      entry("Home", "line start"),
-      entry("End", "line end"),
-      entry("PageUp", "pgup"),
-      entry("PageDown", "pgdn"),
-    ],
-  },
-  {
-    name: "Punctuation",
-    entries: [
-      entry("Minus", "dash hyphen underscore"),
-      entry("Equal", "equals plus"),
-      entry("LeftBracket", "bracket brace"),
-      entry("RightBracket", "bracket brace"),
-      entry("Backslash", "pipe"),
-      entry("Semicolon", "colon"),
-      entry("Quote", "apostrophe double"),
-      entry("Grave", "backtick tilde"),
-      entry("Comma", "less angle"),
-      entry("Dot", "period greater angle"),
-      entry("Slash", "question forward"),
-      entry("NonusBackslash", "iso nonus"),
-      entry("NonusHash", "iso nonus hash"),
-    ],
-  },
-  {
-    name: "Function keys",
-    entries: FKEYS.map((c) => entry(c, "function")),
-  },
-  {
-    name: "Keypad",
-    entries: [
-      entry("NumLock", "numlock keypad"),
-      entry("KpSlash", "keypad divide"),
-      entry("KpAsterisk", "keypad multiply star"),
-      entry("KpMinus", "keypad subtract"),
-      entry("KpPlus", "keypad add"),
-      entry("KpEnter", "keypad enter"),
-      entry("Kp1", "keypad"),
-      entry("Kp2", "keypad"),
-      entry("Kp3", "keypad"),
-      entry("Kp4", "keypad"),
-      entry("Kp5", "keypad"),
-      entry("Kp6", "keypad"),
-      entry("Kp7", "keypad"),
-      entry("Kp8", "keypad"),
-      entry("Kp9", "keypad"),
-      entry("Kp0", "keypad"),
-      entry("KpDot", "keypad decimal"),
-      entry("KpEqual", "keypad equals"),
-    ],
-  },
-  {
-    name: "Media",
-    entries: [
-      entry("MediaPlayPause", "play pause music"),
-      entry("MediaNextTrack", "next track skip"),
-      entry("MediaPrevTrack", "previous track"),
-      entry("MediaStop", "stop music"),
-      entry("AudioMute", "mute volume"),
-      entry("AudioVolUp", "volume up louder"),
-      entry("AudioVolDown", "volume down quieter"),
-      entry("BrightnessUp", "brightness screen"),
-      entry("BrightnessDown", "brightness screen"),
-      entry("MediaEject", "eject"),
-    ],
-  },
-  {
-    name: "System",
-    entries: [
-      entry("PrintScreen", "screenshot sysrq"),
-      entry("ScrollLock", "scroll lock"),
-      entry("Pause", "break"),
-      entry("Application", "menu context"),
-      entry("SystemPower", "power off"),
-      entry("SystemSleep", "sleep suspend"),
-      entry("SystemWake", "wake"),
-      entry("MissionControl", "mac expose"),
-      entry("Launchpad", "mac launcher"),
-    ],
-  },
-  {
-    name: "Modifier keys",
-    entries: [
-      entry("LCtrl", "left control"),
-      entry("LShift", "left shift"),
-      entry("LAlt", "left alt option"),
-      entry("LGui", "left gui super cmd win meta"),
-      entry("RCtrl", "right control"),
-      entry("RShift", "right shift"),
-      entry("RAlt", "right alt option altgr"),
-      entry("RGui", "right gui super cmd win meta"),
-    ],
-  },
-];
+  };
+}
 
 export function searchKeycodes(query: string): KeycodeGroup[] {
   const q = query.trim().toLowerCase();
-  if (!q) return KEYCODE_GROUPS;
-  const terms = q.split(/\s+/);
+  if (!q) return keycodeGroups();
   const out: KeycodeGroup[] = [];
-  for (const group of KEYCODE_GROUPS) {
+  const exact = characterMatch(query);
+  if (exact) out.push(exact);
+  const terms = q.split(/\s+/);
+  for (const group of keycodeGroups()) {
     const entries = group.entries.filter((e) =>
       terms.every((t) => e.search.includes(t)),
     );
