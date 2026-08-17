@@ -440,6 +440,8 @@ export function KeymapCenter() {
     const action = layer?.[key.row * cols + key.col];
     const pending =
       state.pending[keyPendingId(state.uiLayer, key.row, key.col)];
+    const stagedBinding =
+      state.stagedKeys[keyPendingId(state.uiLayer, key.row, key.col)] !== undefined;
     const sceneCell =
       sceneDraft && key.ledId !== undefined ? sceneDraft[key.ledId] : undefined;
     const glyph = action !== undefined ? keyActionGlyph(action) : { text: "" };
@@ -477,7 +479,9 @@ export function KeymapCenter() {
       error: pending?.status === "error",
       fill: sceneCell ? effectColor(sceneCell.effect) : undefined,
       fillAnim: sceneCell ? effectAnim(sceneCell.effect) : undefined,
-      staged: key.ledId !== undefined && (sceneStaged?.has(key.ledId) ?? false),
+      staged:
+        stagedBinding ||
+        (key.ledId !== undefined && (sceneStaged?.has(key.ledId) ?? false)),
     };
   };
 
@@ -533,6 +537,9 @@ export function KeymapCenter() {
             selected:
               state.selection?.type === "encoder" &&
               state.selection.id === enc.id,
+            staged:
+              state.stagedEncoders[encoderPendingId(state.uiLayer, enc.id)] !==
+              undefined,
             pending:
               state.pending[encoderPendingId(state.uiLayer, enc.id)]?.status ===
               "pending",
@@ -611,6 +618,7 @@ function KeyInspector({ row, col }: { row: number; col: number }) {
   const cols = bundle.caps.num_cols;
   const action = state.layers[state.uiLayer]?.[row * cols + col] ?? "No";
   const pending = state.pending[keyPendingId(state.uiLayer, row, col)];
+  const staged = state.stagedKeys[keyPendingId(state.uiLayer, row, col)];
   const key = bundle.model.keys.find((candidate) => candidate.row === row && candidate.col === col);
   const addressable = key ?? { row, col };
 
@@ -637,6 +645,11 @@ function KeyInspector({ row, col }: { row: number; col: number }) {
             {pending?.status === "pending" && (
               <div className="text-[11.5px] text-accent">
                 Writing to device…
+              </div>
+            )}
+            {staged && (
+              <div className="text-[11.5px] text-accent">
+                Staged — written when the batch is applied
               </div>
             )}
           </div>
@@ -697,6 +710,7 @@ function EncoderInspector({ id }: { id: number }) {
   const layer = state.uiLayer;
   const encoder = state.encoders[`${layer}:${id}`];
   const pending = state.pending[encoderPendingId(layer, id)];
+  const staged = state.stagedEncoders[encoderPendingId(layer, id)];
   const [slot, setSlot] = useState<"cw" | "ccw">("cw");
 
   useEffect(() => {
@@ -757,6 +771,11 @@ function EncoderInspector({ id }: { id: number }) {
         {pending?.status === "pending" && (
           <div className="mt-1 text-[11.5px] text-accent">
             Writing to device…
+          </div>
+        )}
+        {staged && (
+          <div className="mt-1 text-[11.5px] text-accent">
+            Staged — written when the batch is applied
           </div>
         )}
         {pending?.status === "error" && (

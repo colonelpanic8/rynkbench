@@ -156,6 +156,25 @@ export interface PendingInfo {
   attempted?: KeyAction;
 }
 
+/** One batch-mode key edit held locally: `before` is the on-device action
+ *  from when the key was first staged, so a discard can restore it. */
+export interface StagedKeyEdit {
+  layer: number;
+  row: number;
+  col: number;
+  before: KeyAction;
+  action: KeyAction;
+}
+
+/** One batch-mode encoder edit. `before` is undefined when the encoder had
+ *  not been read before staging; a discard then just forgets the local value. */
+export interface StagedEncoderEdit {
+  layer: number;
+  id: number;
+  before: EncoderAction | undefined;
+  action: EncoderAction;
+}
+
 /** Slot-table kinds sharing the optimistic-write plumbing. */
 export type SlotKind = "combos" | "morse" | "forks";
 
@@ -230,6 +249,16 @@ export interface WorkbenchState {
   keyEditHistory: KeyEditHistory;
   /** Bulk configuration transactions suspend history traversal. */
   keyEditHistorySuspended: boolean;
+  /** Batch mode: key and encoder writes are staged locally and written to the
+   *  keyboard together on apply, instead of one write per edit. */
+  batchMode: boolean;
+  /** keyPendingId → staged key edit. */
+  stagedKeys: Record<string, StagedKeyEdit>;
+  /** encoderPendingId → staged encoder edit. */
+  stagedEncoders: Record<string, StagedEncoderEdit>;
+  /** A batch apply is writing staged edits to the device. */
+  batchBusy: boolean;
+  batchError: string | null;
   layerBusy: boolean;
   layerError: string | null;
   lightingBusy: boolean;
@@ -377,6 +406,11 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     pending: {},
     keyEditHistory: initialKeyEditHistory(),
     keyEditHistorySuspended: false,
+    batchMode: false,
+    stagedKeys: {},
+    stagedEncoders: {},
+    batchBusy: false,
+    batchError: null,
     layerBusy: false,
     layerError: null,
     lightingBusy: false,
@@ -432,6 +466,14 @@ export type WorkbenchAction =
   | { type: "keyHistoryClear" }
   | { type: "keyHistorySuspend"; suspended: boolean }
   | { type: "keyHistoryErrorDismiss" }
+  | { type: "batchMode"; enabled: boolean }
+  | { type: "keyStage"; layer: number; row: number; col: number; action: KeyAction }
+  | { type: "keyStageApplied"; layer: number; row: number; col: number }
+  | { type: "encoderStage"; layer: number; id: number; action: EncoderAction }
+  | { type: "encoderStageApplied"; layer: number; id: number }
+  | { type: "batchDiscard" }
+  | { type: "batchApplyStart" }
+  | { type: "batchApplyDone"; error: string | null }
   | { type: "encoderLoaded"; layer: number; id: number; action: EncoderAction }
   | { type: "encoderWriteStart"; layer: number; id: number; action: EncoderAction }
   | { type: "encoderWriteOk"; layer: number; id: number }
@@ -643,6 +685,83 @@ export function makeWorkbenchReducer(cols: number) {
             type: "dismissError",
           }),
         };
+      case "batchMode": {
+        // Leaving batch mode requires the staged set to be empty; edits must
+        // be applied or discarded, never silently promoted or dropped.
+        if (!act.enabled && stagedEditCount(state) > 0) return state;
+        return { ...state, batchMode: act.enabled, batchError: null };
+      }
+      case "keyStage": {
+        const id = keyPendingId(act.layer, act.row, act.col);
+        const before =
+          state.stagedKeys[id]?.before ?? state.layers[act.layer][act.row * cols + act.col];
+        const layers = setLayerKey(state.layers, cols, act.layer, act.row, act.col, act.action);
+        if (JSON.stringify(before) === JSON.stringify(act.action)) {
+          // Edited back to what the device holds: nothing left to apply.
+          const { [id]: _gone, ...stagedKeys } = state.stagedKeys;
+          return { ...state, layers, stagedKeys };
+        }
+        return {
+          ...state,
+          layers,
+          stagedKeys: {
+            ...state.stagedKeys,
+            [id]: { layer: act.layer, row: act.row, col: act.col, before, action: act.action },
+          },
+        };
+      }
+      case "keyStageApplied": {
+        const id = keyPendingId(act.layer, act.row, act.col);
+        const { [id]: _done, ...stagedKeys } = state.stagedKeys;
+        return { ...state, stagedKeys };
+      }
+      case "encoderStage": {
+        const id = encoderPendingId(act.layer, act.id);
+        const key = `${act.layer}:${act.id}`;
+        const before = id in state.stagedEncoders ? state.stagedEncoders[id].before : state.encoders[key];
+        const encoders = { ...state.encoders, [key]: act.action };
+        if (JSON.stringify(before) === JSON.stringify(act.action)) {
+          const { [id]: _gone, ...stagedEncoders } = state.stagedEncoders;
+          return { ...state, encoders, stagedEncoders };
+        }
+        return {
+          ...state,
+          encoders,
+          stagedEncoders: {
+            ...state.stagedEncoders,
+            [id]: { layer: act.layer, id: act.id, before, action: act.action },
+          },
+        };
+      }
+      case "encoderStageApplied": {
+        const id = encoderPendingId(act.layer, act.id);
+        const { [id]: _done, ...stagedEncoders } = state.stagedEncoders;
+        return { ...state, stagedEncoders };
+      }
+      case "batchDiscard": {
+        let layers = state.layers;
+        for (const edit of Object.values(state.stagedKeys)) {
+          layers = setLayerKey(layers, cols, edit.layer, edit.row, edit.col, edit.before);
+        }
+        const encoders = { ...state.encoders };
+        for (const edit of Object.values(state.stagedEncoders)) {
+          const key = `${edit.layer}:${edit.id}`;
+          if (edit.before === undefined) delete encoders[key];
+          else encoders[key] = edit.before;
+        }
+        return {
+          ...state,
+          layers,
+          encoders,
+          stagedKeys: {},
+          stagedEncoders: {},
+          batchError: null,
+        };
+      }
+      case "batchApplyStart":
+        return { ...state, batchBusy: true, batchError: null };
+      case "batchApplyDone":
+        return { ...state, batchBusy: false, batchError: act.error };
       case "encoderLoaded":
         return {
           ...state,
@@ -713,6 +832,8 @@ export function makeWorkbenchReducer(cols: number) {
           encoders: {},
           layerDrafts: {},
           pending: {},
+          stagedKeys: {},
+          stagedEncoders: {},
           layerBusy: false,
           layerError: null,
         };
@@ -1180,10 +1301,16 @@ export function activeLightingBase(state: WorkbenchState): Record<number, Lighti
   return lightingBaseFor(state, state.lightingTarget);
 }
 
+/** How many key and encoder edits batch mode is holding, unapplied. */
+export function stagedEditCount(state: WorkbenchState): number {
+  return Object.keys(state.stagedKeys).length + Object.keys(state.stagedEncoders).length;
+}
+
 export function hasPendingConfigurationWrite(state: WorkbenchState): boolean {
   return (
     state.keyEditHistorySuspended ||
     state.lightingBusy ||
+    state.batchBusy ||
     Object.values(state.pending).some((item) => item.status === "pending")
   );
 }
@@ -1193,6 +1320,9 @@ export function canTravelKeyEditHistory(
   direction: "undo" | "redo",
 ): boolean {
   if (state.keyEditHistory.operation || hasPendingConfigurationWrite(state)) return false;
+  // Staged batch edits sit between the history's device state and the boards':
+  // traveling would write under them and stale their restore points.
+  if (stagedEditCount(state) > 0) return false;
   return direction === "undo"
     ? state.keyEditHistory.past.length > 0
     : state.keyEditHistory.future.length > 0;
@@ -1229,6 +1359,9 @@ export interface WorkbenchIo {
   ): Promise<IoWriteResult>;
   undoKeyEdit(): Promise<IoWriteResult>;
   redoKeyEdit(): Promise<IoWriteResult>;
+  /** Write every staged batch edit to the keyboard in one pass. Writes that
+   *  fail stay staged, so apply can simply be retried. */
+  applyBatch(): Promise<IoWriteResult>;
   moveKey(
     layer: number,
     source: { row: number; col: number },
@@ -1481,6 +1614,9 @@ export function makeIo(
     ) {
       return rejectLayerOperation("wait for pending device writes before editing layers");
     }
+    if (stagedEditCount(before) > 0) {
+      return rejectLayerOperation("apply or discard staged batch edits before editing layers");
+    }
     if (Object.keys(before.layerDrafts).length > 0) {
       return rejectLayerOperation("apply or discard staged layer lighting before editing layers");
     }
@@ -1539,6 +1675,15 @@ export function makeIo(
   ): Promise<IoWriteResult> => {
     if (keyHistoryWritePending) {
       return Promise.resolve({ ok: false, message: "Undo or redo is in progress" });
+    }
+    const staging = getState();
+    if (staging.batchMode) {
+      if (staging.batchBusy) {
+        return Promise.resolve({ ok: false, message: "Batch apply is in progress" });
+      }
+      dispatch({ type: "keyStage", layer, row, col, action });
+      if (options?.history === "invalidate") dispatch({ type: "keyHistoryClear" });
+      return Promise.resolve({ ok: true });
     }
     const prev = getState().layers[layer][row * cols + col];
     const sequence = ++keyEditSequence;
@@ -1640,6 +1785,42 @@ export function makeIo(
     redoKeyEdit() {
       return travelKeyHistory("redo");
     },
+    async applyBatch() {
+      const start = getState();
+      if (start.batchBusy) return { ok: false, message: "a batch apply is already running" };
+      const keys = Object.values(start.stagedKeys);
+      const encoders = Object.values(start.stagedEncoders);
+      if (keys.length === 0 && encoders.length === 0) return { ok: true };
+      dispatch({ type: "batchApplyStart" });
+      const failures: string[] = [];
+      for (const edit of keys) {
+        try {
+          await session.keymap.setKey(edit.layer, edit.row, edit.col, edit.action);
+          dispatch({ type: "keyStageApplied", layer: edit.layer, row: edit.row, col: edit.col });
+        } catch (error) {
+          failures.push(
+            `layer ${edit.layer} r${edit.row} c${edit.col}: ${errorMessage(error)}`,
+          );
+        }
+      }
+      for (const edit of encoders) {
+        try {
+          await session.keymap.setEncoder(edit.id, edit.layer, edit.action);
+          dispatch({ type: "encoderStageApplied", layer: edit.layer, id: edit.id });
+        } catch (error) {
+          failures.push(`layer ${edit.layer} encoder ${edit.id}: ${errorMessage(error)}`);
+        }
+      }
+      // A batch apply is a bulk write outside per-key history, like an import.
+      if (keys.length > failures.length) dispatch({ type: "keyHistoryClear" });
+      const message =
+        failures.length > 0
+          ? `${failures.length} of ${keys.length + encoders.length} staged write(s) failed ` +
+            `and remain staged: ${failures.join("; ")}`
+          : null;
+      dispatch({ type: "batchApplyDone", error: message });
+      return message ? { ok: false, message } : { ok: true };
+    },
     async moveKey(layer, source, destination) {
       if (source.row === destination.row && source.col === destination.col) return { ok: true };
       const state = getState();
@@ -1682,7 +1863,12 @@ export function makeIo(
       );
     },
     setEncoder(layer, id, action) {
-      const prev = getState().encoders[`${layer}:${id}`];
+      const state = getState();
+      if (state.batchMode) {
+        if (!state.batchBusy) dispatch({ type: "encoderStage", layer, id, action });
+        return;
+      }
+      const prev = state.encoders[`${layer}:${id}`];
       dispatch({ type: "encoderWriteStart", layer, id, action });
       session.keymap.setEncoder(id, layer, action).then(
         () => dispatch({ type: "encoderWriteOk", layer, id }),

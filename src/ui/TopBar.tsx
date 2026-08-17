@@ -11,7 +11,7 @@ import {
 import type { ConfigFormat, ExtensionCatalog } from "../config/document";
 import { exportDocument, importDocument } from "../config/transfer";
 import type { BatteryStatus } from "../vendor/rynk-wasm/rynk_wasm";
-import { useWorkbench } from "./state";
+import { stagedEditCount, useWorkbench } from "./state";
 import { Chip, Button } from "./kit";
 import { errorReport, TransferReportPanel } from "./TransferReport";
 import type { TransferReport } from "./TransferReport";
@@ -77,6 +77,7 @@ export function TopBar() {
   const [transfer, setTransfer] = useState<"importing" | "exporting" | null>(null);
   const [report, setReport] = useState<TransferReport | null>(null);
   const split = bundle.caps.is_split;
+  const stagedCount = stagedEditCount(state);
   const activeLabel = [...new Set([state.defaultLayer, ...state.activeLayers])]
     .sort((a, b) => a - b)
     .join(" | ");
@@ -95,6 +96,15 @@ export function TopBar() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    if (stagedCount > 0) {
+      // An import writes device differences directly; staged batch edits
+      // would go stale underneath it.
+      setReport({
+        outcome: "error",
+        headline: "Apply or discard staged batch edits before importing a layout.",
+      });
+      return;
+    }
     // Imports are bulk, cross-feature writes outside direct-key history.
     dispatch({ type: "keyHistorySuspend", suspended: true });
     history.clear();
@@ -240,6 +250,64 @@ export function TopBar() {
           Redo key
         </Button>
       </div>
+
+      {!offline && (
+        <>
+          <div className="h-6 w-px bg-line-soft" />
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="ghost"
+              className={state.batchMode ? "text-accent" : undefined}
+              disabled={state.batchBusy || (state.batchMode && stagedCount > 0)}
+              onClick={() =>
+                dispatch({ type: "batchMode", enabled: !state.batchMode })
+              }
+              title={
+                state.batchMode
+                  ? stagedCount > 0
+                    ? "Apply or discard the staged edits to leave batch mode"
+                    : "Batch mode is on: key and encoder edits are staged locally until you apply them"
+                  : "Stage key and encoder edits locally and write them to the keyboard all at once"
+              }
+            >
+              Batch{state.batchMode ? ": on" : ""}
+            </Button>
+            {state.batchMode && (
+              <>
+                <Chip tone="accent" className="tnum">
+                  {stagedCount} staged
+                </Chip>
+                <Button
+                  variant="primary"
+                  className="py-1"
+                  disabled={state.batchBusy || stagedCount === 0}
+                  onClick={() => void io.applyBatch()}
+                  title="Write every staged edit to the keyboard"
+                >
+                  {state.batchBusy ? "Applying…" : "Apply all"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={state.batchBusy || stagedCount === 0}
+                  onClick={() => dispatch({ type: "batchDiscard" })}
+                  title="Drop every staged edit and restore what the keyboard holds"
+                >
+                  Discard
+                </Button>
+              </>
+            )}
+            {state.batchError && (
+              <span
+                className="max-w-48 truncate text-[11.5px] text-danger"
+                role="alert"
+                title={state.batchError}
+              >
+                {state.batchError}
+              </span>
+            )}
+          </div>
+        </>
+      )}
 
       {history.phase !== "idle" && (
         <span className="text-[11.5px] text-accent" role="status">

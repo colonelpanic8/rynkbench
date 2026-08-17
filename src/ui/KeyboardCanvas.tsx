@@ -52,6 +52,7 @@ export interface KeyDecor {
 
 export interface EncoderDecor {
   selected?: boolean;
+  staged?: boolean;
   pending?: boolean;
   error?: boolean;
   label?: string;
@@ -629,8 +630,15 @@ function EncoderShape({
         cy={enc.y}
         r={0.42}
         fill="var(--color-cap)"
-        stroke="var(--color-cap-edge)"
-        strokeWidth={0.028}
+        stroke={
+          decor.error
+            ? "var(--color-danger)"
+            : decor.staged
+              ? "var(--color-accent-deep)"
+              : "var(--color-cap-edge)"
+        }
+        strokeWidth={decor.staged || decor.error ? 0.05 : 0.028}
+        strokeDasharray={decor.staged && !decor.error ? "0.1 0.07" : undefined}
       />
       {ticks.map((t) => (
         <line
