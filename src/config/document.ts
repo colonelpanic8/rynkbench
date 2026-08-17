@@ -21,6 +21,7 @@ import type {
   RuntimeSnapshot,
 } from "../vendor/moergo-config-wasm/moergo_config_wasm";
 import type { RynkSession } from "../session/types";
+import { normalizePointingConfig } from "../ui/pointing";
 import type { WorkbenchState } from "../ui/state";
 
 export type { ConfigFormat, ExtensionCatalog, ImportNote, ParsedConfig, RuntimeSnapshot };
@@ -67,6 +68,11 @@ export async function loadCatalog(
  *  describes. A device without them still exports a keymap, which is the whole
  *  of a MoErgo document anyway. */
 export function snapshotFromState(state: WorkbenchState): RuntimeSnapshot {
+  const layerSize = state.layers[0]?.length;
+  const rows = layerSize === 84 ? 6 : layerSize === 70 ? 5 : 0;
+  if (rows === 0 || state.layers.some((layer) => layer.length !== layerSize)) {
+    throw new Error(`Cannot export unsupported or inconsistent matrix size ${layerSize ?? 0}.`);
+  }
   const lightingState = state.lightingState;
   const wakeMask = state.lightingOutputMode?.wake_layers ?? state.lightingControls?.wake_layers ?? 0;
   const lighting =
@@ -92,12 +98,15 @@ export function snapshotFromState(state: WorkbenchState): RuntimeSnapshot {
           conditional_scenes: state.runtimeConditionalScenes,
         };
   return {
+    rows,
+    cols: 14,
     default_layer: state.defaultLayer,
     layers: state.layers,
     // Firmware without the metadata endpoints reads as `undefined`, which
     // leaves an export taking its layer labels from the file being replaced.
     layer_names: state.layerMetadata ?? undefined,
     lighting,
+    pointing: state.pointingConfig ? normalizePointingConfig(state.pointingConfig) : undefined,
     // Live state always describes all three, so an export never renders a file
     // that would read as "leave them alone" when it meant to record them.
     behaviors: {

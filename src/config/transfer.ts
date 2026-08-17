@@ -13,6 +13,7 @@ import type { RynkSession } from "../session/types";
 import type { ConnectedBundle, WorkbenchAction, WorkbenchState } from "../ui/state";
 import { errorMessage } from "../ui/state";
 import type { ComboDefinition, Fork, Morse } from "../vendor/rynk-wasm/rynk_wasm";
+import { normalizePointingConfig, pointingConfigsEqual } from "../ui/pointing";
 import {
   parseDocument,
   renderDocument,
@@ -72,6 +73,7 @@ export async function importDocument(args: ImportArgs): Promise<ImportResult> {
   // slot as soon as the key is written, so writing the keymap first would leave
   // those cells pointing at whatever the previous layout left behind.
   const behaviors = await writeBehaviors(snapshot, session, bundle, state, dispatch);
+  const pointing = await writePointing(snapshot, session, state, dispatch);
   const changedKeys = await writeChangedKeys(snapshot, session, bundle, state, dispatch);
   const names = await writeLayerNames(snapshot, session, state, dispatch);
   const lighting = await writeLighting(snapshot, session, state, dispatch);
@@ -82,9 +84,58 @@ export async function importDocument(args: ImportArgs): Promise<ImportResult> {
     converted: converted.converted,
     changedKeys,
     notes: [...parseNotes, ...converted.notes],
-    applied: [...behaviors.applied, ...names.applied, ...lighting.applied],
-    skipped: [...behaviors.skipped, ...names.skipped, ...lighting.skipped],
+    applied: [
+      ...behaviors.applied,
+      ...pointing.applied,
+      ...names.applied,
+      ...lighting.applied,
+    ],
+    skipped: [
+      ...behaviors.skipped,
+      ...pointing.skipped,
+      ...names.skipped,
+      ...lighting.skipped,
+    ],
   };
+}
+
+async function writePointing(
+  snapshot: RuntimeSnapshot,
+  session: RynkSession,
+  state: WorkbenchState,
+  dispatch: Dispatch<WorkbenchAction>,
+): Promise<{ applied: string[]; skipped: string[] }> {
+  const desired = snapshot.pointing;
+  if (desired === undefined) return { applied: [], skipped: [] };
+  if (state.pointingConfig === null) {
+    return {
+      applied: [],
+      skipped: ["pointing configuration (unsupported by this keyboard)"],
+    };
+  }
+
+  const request = normalizePointingConfig({
+    ...structuredClone(desired),
+    revision: state.pointingConfig.revision,
+  });
+  if (pointingConfigsEqual(request, state.pointingConfig)) {
+    return { applied: [], skipped: [] };
+  }
+
+  dispatch({ type: "pointingWriteStart" });
+  try {
+    const accepted = await session.pointing.set(request);
+    const readback = await session.pointing.get();
+    if (accepted.revision !== readback.revision || !pointingConfigsEqual(accepted, readback)) {
+      throw new Error("pointing configuration read-back did not match the accepted write");
+    }
+    dispatch({ type: "pointingWriteOk", config: readback });
+    return { applied: ["pointing configuration"], skipped: [] };
+  } catch (error) {
+    const message = errorMessage(error);
+    dispatch({ type: "pointingWriteErr", message });
+    throw new Error(`Writing pointing configuration: ${message}`);
+  }
 }
 
 /** Write the tables a keymap cell addresses by index.

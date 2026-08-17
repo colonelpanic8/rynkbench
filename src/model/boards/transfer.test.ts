@@ -18,6 +18,8 @@ const solid: LightingEffect = { Solid: { color: { r: 1, g: 2, b: 3 } } };
 function snapshot(layers: KeyAction[][]): RuntimeSnapshot {
   return {
     bluetooth_name: undefined,
+    rows: layers[0].length === 70 ? 5 : 6,
+    cols: 14,
     default_layer: 0,
     layers,
     lighting: undefined,

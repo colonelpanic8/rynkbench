@@ -5,6 +5,7 @@ import { importDocument } from "./transfer";
 import type { ExtensionCatalog } from "./document";
 import type { RynkSession, LayerMetadata } from "../session/types";
 import type { ConnectedBundle, WorkbenchAction, WorkbenchState } from "../ui/state";
+import type { PointingConfig } from "../vendor/rynk-wasm/rynk_wasm";
 
 beforeAll(() => {
   initSync({
@@ -24,6 +25,33 @@ const moergoDocument = (names: string[]) =>
     layer_names: names,
     layers: names.map(() => Array.from({ length: 80 }, () => ({ value: "&trans" }))),
   });
+
+const pointingDocument = `rows = 5
+default_layer = 0
+
+[[layer]]
+id = "base"
+name = "Base"
+keys = """
+_______ _______ _______ _______ _______ _______ _______ _______ _______ _______ _______ _______ _______ _______
+_______ _______ _______ _______ _______ _______ _______ _______ _______ _______ _______ _______ _______ _______
+_______ _______ _______ _______ _______ _______ _______ _______ _______ _______ _______ _______ _______ _______
+_______ _______ _______ _______ _______ _______ -- -- _______ _______ _______ _______ _______ _______
+-- -- _______ _______ _______ -- -- -- -- _______ _______ _______ -- --
+"""
+
+[pointing]
+
+[[pointing.device]]
+device_id = 2
+mode = "cursor"
+
+[[pointing.override]]
+layer = 0
+device_id = 2
+mode = "press"
+holds = 1
+`;
 
 interface Recorded {
   metadataWrites: [number, LayerMetadata][];
@@ -128,5 +156,104 @@ describe("importDocument layer names", () => {
     expect(result.skipped).toEqual([
       "layer names (this keyboard does not store layer metadata)",
     ]);
+  });
+});
+
+describe("importDocument pointing configuration", () => {
+  function pointingHarness(supported: boolean) {
+    const actions: WorkbenchAction[] = [];
+    const writes: PointingConfig[] = [];
+    let accepted: PointingConfig | null = null;
+    const current: PointingConfig | null = supported
+      ? {
+          revision: 5,
+          device_count: 0,
+          devices: [],
+          override_count: 0,
+          overrides: [],
+        }
+      : null;
+    const session = {
+      keymap: {
+        setKey: async () => {},
+        setDefaultLayer: async () => {},
+        setLayerMetadata: async () => {},
+      },
+      pointing: {
+        set: async (config: PointingConfig) => {
+          writes.push(structuredClone(config));
+          accepted = { ...structuredClone(config), revision: config.revision + 1 };
+          return structuredClone(accepted);
+        },
+        get: async () => structuredClone(accepted!),
+      },
+    } as unknown as RynkSession;
+    const bundle = {
+      info: { product_name: "MoErgo Go60" },
+      caps: {
+        num_rows: 5,
+        num_cols: 14,
+        num_layers: CAPACITY,
+        macro_space_size: 512,
+        max_morse: 32,
+        max_combos: 32,
+        max_forks: 32,
+      },
+    } as unknown as ConnectedBundle;
+    const state = {
+      defaultLayer: 0,
+      layers: Array.from({ length: CAPACITY }, () =>
+        Array.from({ length: 5 * 14 }, () => "Transparent"),
+      ),
+      layerMetadata: null,
+      pointingConfig: current,
+      pointingDraft: current,
+      behavior: null,
+      behaviorOptions: null,
+      morseProfileCapacity: 0,
+      morseProfiles: [],
+      morseHoldTriggerPositionCapacity: null,
+      morseHoldTriggerPositions: [],
+      autoMouseLayerCapacity: 0,
+      autoMouseLayers: [],
+      macroBytes: new Uint8Array(),
+      morse: [],
+      combos: [],
+      forks: [],
+      lightingState: null,
+    } as unknown as WorkbenchState;
+    return {
+      actions,
+      writes,
+      session,
+      bundle,
+      state,
+      dispatch: (action: WorkbenchAction) => actions.push(action),
+    };
+  }
+
+  it("writes a complete fixed-capacity config at the live revision and adopts readback", async () => {
+    const h = pointingHarness(true);
+    const result = await importDocument({ ...h, text: pointingDocument, catalog: CATALOG });
+
+    expect(h.writes).toHaveLength(1);
+    expect(h.writes[0]).toMatchObject({ revision: 5, device_count: 1, override_count: 1 });
+    expect(h.writes[0].devices).toHaveLength(4);
+    expect(h.writes[0].overrides).toHaveLength(16);
+    expect(h.actions).toContainEqual(
+      expect.objectContaining({
+        type: "pointingWriteOk",
+        config: expect.objectContaining({ revision: 6 }),
+      }),
+    );
+    expect(result.applied).toContain("pointing configuration");
+  });
+
+  it("reports pointing data when the target firmware does not support it", async () => {
+    const h = pointingHarness(false);
+    const result = await importDocument({ ...h, text: pointingDocument, catalog: CATALOG });
+
+    expect(h.writes).toEqual([]);
+    expect(result.skipped).toContain("pointing configuration (unsupported by this keyboard)");
   });
 });

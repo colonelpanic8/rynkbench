@@ -30,6 +30,8 @@ describe("offline Glove80 workspace", () => {
 
   it("seeds document state and exposes it through an offline session", async () => {
     const snapshot: RuntimeSnapshot = {
+      rows: 6,
+      cols: 14,
       default_layer: 1,
       layers: [layer(), layer()],
       lighting: {
@@ -105,6 +107,8 @@ describe("offline Glove80 workspace", () => {
 
   it("labels layers from the document rather than the board's stock names", async () => {
     const named: RuntimeSnapshot = {
+      rows: 6,
+      cols: 14,
       default_layer: 0,
       layers: [layer(), layer()],
       layer_names: [

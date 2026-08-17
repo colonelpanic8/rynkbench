@@ -96,6 +96,36 @@ KC_A KC_B KC_C KC_D KC_E KC_F -- -- KC_I KC_J KC_K KC_L KC_M KC_N
 """
 `;
 
+const POINTING_GO60 = `${MINIMAL_GO60}
+[pointing]
+
+[[pointing.device]]
+device_id = 0
+mode = "scroll"
+
+[[pointing.device]]
+device_id = 1
+mode = "cursor"
+
+[[pointing.override]]
+layer = 0
+device_id = 0
+mode = "keypad"
+threshold_x = 60
+threshold_y = 30
+keycode_up = 0x80
+keycode_down = 0x81
+keycode_left = 0xAC
+keycode_right = 0xAB
+keycode_tap = 0xAE
+
+[[pointing.override]]
+layer = 0
+device_id = 1
+mode = "press"
+holds = 3
+`;
+
 describe("detectFormat", () => {
   it("tells the two document formats apart by their first character", () => {
     expect(detectFormat(MINIMAL)).toBe("toml");
@@ -118,8 +148,30 @@ describe("parseDocument", () => {
   it("preserves a Go60 TOML's declared 5x14 matrix for transfer", () => {
     const { format, snapshot } = parseDocument(MINIMAL_GO60, CATALOG);
     expect(format).toBe("toml");
+    expect(snapshot).toMatchObject({ rows: 5, cols: 14 });
     expect(snapshot.layers).toHaveLength(1);
     expect(snapshot.layers[0]).toHaveLength(70);
+  });
+
+  it("round-trips Go60 pointing devices and layer overrides", () => {
+    const parsed = parseDocument(POINTING_GO60, CATALOG);
+    const pointing = parsed.snapshot.pointing!;
+    expect(pointing.device_count).toBe(2);
+    expect(
+      pointing.devices.slice(0, pointing.device_count).map((entry) => entry.device_id),
+    ).toEqual([0, 1]);
+    expect(pointing.override_count).toBe(2);
+    expect(pointing.overrides.slice(0, pointing.override_count).map((entry) => entry.mode)).toEqual([
+      expect.objectContaining({
+        Keypad: expect.objectContaining({ keycode_tap: "MediaPlayPause" }),
+      }),
+      expect.objectContaining({ Press: expect.objectContaining({ holds: 3 }) }),
+    ]);
+
+    const rendered = renderDocument(parsed.snapshot, CATALOG, "toml", POINTING_GO60);
+    expect(rendered).toContain('mode = "keypad"');
+    expect(rendered).toContain('mode = "press"');
+    expect(parseDocument(rendered, CATALOG).snapshot.pointing).toEqual(pointing);
   });
 
   it("opens and exactly round-trips the semantic TailorKey configuration", () => {
@@ -472,11 +524,34 @@ describe("snapshotFromState", () => {
       forks: liveForks,
       macroBytes: new Uint8Array(),
       layerMetadata: [{ occupied: true, name: "Renamed" }],
+      pointingConfig: {
+        revision: 9,
+        device_count: 1,
+        devices: [
+          {
+            device_id: 0,
+            mode: {
+              Cursor: {
+                multiplier_x: 1,
+                multiplier_y: 1,
+                invert_x: false,
+                invert_y: false,
+              },
+            },
+          },
+        ],
+        override_count: 0,
+        overrides: [],
+      },
     } as unknown as WorkbenchState;
 
     const snapshot = snapshotFromState(state);
     expect(snapshot.behaviors?.morses).toEqual(state.morse);
     expect(snapshot.layer_names).toEqual([{ occupied: true, name: "Renamed" }]);
+    expect(snapshot.pointing).toMatchObject({ revision: 9, device_count: 1, override_count: 0 });
+    expect(snapshot.pointing?.devices.slice(0, 1)).toEqual(state.pointingConfig?.devices);
+    expect(snapshot.pointing?.devices).toHaveLength(4);
+    expect(snapshot.pointing?.overrides).toHaveLength(16);
     const text = renderDocument(snapshot, CATALOG, "toml", MINIMAL);
     const again = parseDocument(text, CATALOG);
     expect(again.snapshot.layers).toEqual(parsed.snapshot.layers);
