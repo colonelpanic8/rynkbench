@@ -60,6 +60,7 @@ function keyboardModel(board: BoardTransferModel): KeyboardModel {
       };
     }),
     encoders: [],
+    pointingDevices: [],
     zones: [],
     topologyRevision: 1,
   };

@@ -74,7 +74,8 @@ export type LightingTarget = "overlay" | number;
 
 export type Selection =
   | { type: "key"; row: number; col: number }
-  | { type: "encoder"; id: number };
+  | { type: "encoder"; id: number }
+  | { type: "pointing"; id: number };
 
 /** Everything loaded during the connect flow, before the workbench mounts. */
 export interface ConnectedBundle {

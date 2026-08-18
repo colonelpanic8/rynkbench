@@ -17,7 +17,7 @@ import type {
   SVGProps,
 } from "react";
 import type { Encoder, Key, Rect } from "../vendor/rynk-wasm/rynk_wasm";
-import type { KeyboardModel, KeyView } from "../model/keyboard";
+import type { KeyboardModel, KeyView, PointingDeviceView } from "../model/keyboard";
 import type { KeyGlyph } from "./labels";
 import { keyHoverTitle } from "./key-address";
 import { cx } from "./kit";
@@ -58,10 +58,17 @@ export interface EncoderDecor {
   label?: string;
 }
 
+export interface PointingDeviceDecor {
+  selected?: boolean;
+  staged?: boolean;
+  mode?: string;
+}
+
 export interface KeyboardCanvasProps {
   model: KeyboardModel;
   decorFor: (key: KeyView) => KeyDecor;
   encoderDecorFor?: (enc: Encoder) => EncoderDecor;
+  pointingDeviceDecorFor?: (device: PointingDeviceView) => PointingDeviceDecor;
   onKeyPointerDown?: (key: KeyView, ev: ReactPointerEvent) => void;
   onKeyPointerEnter?: (key: KeyView, ev: ReactPointerEvent) => void;
   onKeyKeyboardActivate?: (key: KeyView, ev: ReactKeyboardEvent) => void;
@@ -74,6 +81,7 @@ export interface KeyboardCanvasProps {
   ) => void;
   keyDraggable?: (key: KeyView) => boolean;
   onEncoderPointerDown?: (enc: Encoder) => void;
+  onPointingDevicePointerDown?: (device: PointingDeviceView) => void;
   onBackgroundPointerDown?: () => void;
   interactive?: boolean;
   className?: string;
@@ -697,10 +705,108 @@ function EncoderShape({
   );
 }
 
+function PointingDeviceShape({
+  device,
+  decor,
+  interactive,
+  onPointerDown,
+}: {
+  device: PointingDeviceView;
+  decor: PointingDeviceDecor;
+  interactive: boolean;
+  onPointerDown?: (device: PointingDeviceView) => void;
+}) {
+  const activate = () => onPointerDown?.(device);
+  return (
+    <g
+      data-pointing-device-id={device.id}
+      className={`key-group${interactive ? "" : " key-static"}`}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-label={interactive ? `Edit ${device.label}` : device.label}
+      onPointerDown={interactive ? activate : undefined}
+      onKeyDown={
+        interactive
+          ? (event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              activate();
+            }
+          : undefined
+      }
+    >
+      <circle
+        cx={device.x}
+        cy={device.y + CAP_DROP}
+        r={device.radius}
+        fill="var(--color-cap-side)"
+      />
+      <circle
+        cx={device.x}
+        cy={device.y}
+        r={device.radius}
+        fill="var(--color-well)"
+        stroke={decor.selected || decor.staged ? "var(--color-accent)" : "var(--color-cap-edge)"}
+        strokeWidth={decor.selected || decor.staged ? 0.055 : 0.035}
+        strokeDasharray={decor.staged && !decor.selected ? "0.12 0.08" : undefined}
+      />
+      {[0.72, 0.46].map((scale) => (
+        <circle
+          key={scale}
+          cx={device.x}
+          cy={device.y}
+          r={device.radius * scale}
+          fill="none"
+          stroke="var(--color-line-soft)"
+          strokeWidth={0.025}
+          pointerEvents="none"
+        />
+      ))}
+      <text
+        x={device.x}
+        y={device.y - 0.14}
+        fontSize={0.17}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fill="var(--color-faint)"
+        fontFamily="var(--font-sans)"
+        fontWeight={600}
+        letterSpacing={0.025}
+        style={{ userSelect: "none", pointerEvents: "none" }}
+      >
+        {device.label.replace(" trackpad", "").toUpperCase()} PAD
+      </text>
+      <text
+        x={device.x}
+        y={device.y + 0.17}
+        fontSize={0.23}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fill={decor.selected ? "var(--color-accent)" : "var(--color-mute)"}
+        fontFamily="var(--font-mono)"
+        style={{ userSelect: "none", pointerEvents: "none" }}
+      >
+        {decor.mode ?? "Edit"}
+      </text>
+      {decor.selected && (
+        <circle
+          cx={device.x}
+          cy={device.y}
+          r={device.radius + 0.1}
+          fill="none"
+          stroke="var(--color-accent)"
+          strokeWidth={0.045}
+        />
+      )}
+    </g>
+  );
+}
+
 export function KeyboardCanvas({
   model,
   decorFor,
   encoderDecorFor,
+  pointingDeviceDecorFor,
   onKeyPointerDown,
   onKeyPointerEnter,
   onKeyKeyboardActivate,
@@ -709,6 +815,7 @@ export function KeyboardCanvas({
   onKeyDragChange,
   keyDraggable,
   onEncoderPointerDown,
+  onPointingDevicePointerDown,
   onBackgroundPointerDown,
   interactive = true,
   className,
@@ -848,6 +955,16 @@ export function KeyboardCanvas({
           decor={encoderDecorFor?.(enc) ?? {}}
           interactive={interactive}
           onPointerDown={onEncoderPointerDown}
+        />
+      ))}
+
+      {model.pointingDevices.map((device) => (
+        <PointingDeviceShape
+          key={device.id}
+          device={device}
+          decor={pointingDeviceDecorFor?.(device) ?? {}}
+          interactive={interactive && onPointingDevicePointerDown !== undefined}
+          onPointerDown={onPointingDevicePointerDown}
         />
       ))}
     </svg>

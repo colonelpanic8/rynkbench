@@ -17,7 +17,15 @@ export const GO60_MATRIX_POSITIONS: readonly MatrixPosition[] = [
 
 export const GO60_ADDRESSES = buildMoergoAddresses(GO60_MATRIX_POSITIONS);
 
+// Go60's 40 mm pads sit in the open inner corner of each half, directly above
+// the curved thumb fan. Device ids match the firmware's left/right assignment.
+export const GO60_POINTING_DEVICES = [
+  { id: 0, label: "Left trackpad", x: 6.8, y: 3.6, radius: 1.05 },
+  { id: 1, label: "Right trackpad", x: 10.2, y: 3.6, radius: 1.05 },
+] as const;
+
 export const go60Enrichment: BoardEnrichment = {
   displayName: "Go60",
   addresses: GO60_ADDRESSES,
+  pointingDevices: [...GO60_POINTING_DEVICES],
 };

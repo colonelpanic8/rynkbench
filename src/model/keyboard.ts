@@ -27,6 +27,15 @@ export interface KeyView {
   label?: string;
 }
 
+/** Optional pointing-device geometry supplied by known-board enrichment. */
+export interface PointingDeviceView {
+  id: number;
+  label: string;
+  x: number;
+  y: number;
+  radius: number;
+}
+
 export interface KeyboardModel {
   name: string;
   variantIndex: number;
@@ -34,6 +43,7 @@ export interface KeyboardModel {
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
   keys: KeyView[];
   encoders: Variant["encoders"];
+  pointingDevices: PointingDeviceView[];
   zones: LightingTopology["zones"];
   topologyRevision: number;
 }
@@ -44,6 +54,7 @@ export interface BoardEnrichment {
   labels?: Record<string, string>;
   /** Support-friendly physical addresses, keyed by matrix "row,col". */
   addresses?: Record<string, string>;
+  pointingDevices?: PointingDeviceView[];
 }
 
 // Wire semantics (rmk-config layout.rs walk()): rect.x/y is the key's final
@@ -121,7 +132,14 @@ export function buildKeyboardModel(
       maxY = Math.max(maxY, y);
     }
   }
-  if (keys.length === 0) {
+  const pointingDevices = options?.enrichment?.pointingDevices ?? [];
+  for (const device of pointingDevices) {
+    minX = Math.min(minX, device.x - device.radius);
+    minY = Math.min(minY, device.y - device.radius);
+    maxX = Math.max(maxX, device.x + device.radius);
+    maxY = Math.max(maxY, device.y + device.radius);
+  }
+  if (keys.length === 0 && pointingDevices.length === 0) {
     minX = minY = 0;
     maxX = maxY = 1;
   }
@@ -132,6 +150,7 @@ export function buildKeyboardModel(
     bounds: { minX, minY, maxX, maxY },
     keys,
     encoders: variant.encoders,
+    pointingDevices,
     zones: topology.zones,
     topologyRevision: topology.revision,
   };

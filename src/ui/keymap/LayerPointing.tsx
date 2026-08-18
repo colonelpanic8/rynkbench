@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CaretConfig,
   CursorConfig,
@@ -255,9 +255,10 @@ function PointingModeEditor({ value, allowKeypad, onChange }: { value: PointingM
   );
 }
 
-export function LayerPointing() {
+export function LayerPointing({ selectedDeviceId }: { selectedDeviceId?: number }) {
   const { bundle, state, dispatch, io } = useWorkbench();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(selectedDeviceId !== undefined);
+  const selectedCardRef = useRef<HTMLDivElement>(null);
   const [newDeviceId, setNewDeviceId] = useState("0");
   const [overrideDeviceId, setOverrideDeviceId] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
@@ -273,6 +274,24 @@ export function LayerPointing() {
   const availableDevices = devices.filter(
     (device) => !overrides.some((entry) => entry.device_id === device.device_id),
   );
+  const selectedHasOverride =
+    selectedDeviceId !== undefined &&
+    overrides.some((entry) => entry.device_id === selectedDeviceId);
+  const deviceLabel = (deviceId: number) =>
+    bundle.model.pointingDevices.find((device) => device.id === deviceId)?.label ??
+    `Device ${deviceId}`;
+
+  useEffect(() => {
+    if (selectedDeviceId === undefined) return;
+    if (!open) {
+      setOpen(true);
+      return;
+    }
+    const frame = requestAnimationFrame(() =>
+      selectedCardRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [open, selectedDeviceId, state.uiLayer]);
 
   useEffect(() => {
     if (!availableDevices.some((device) => String(device.device_id) === overrideDeviceId)) {
@@ -332,9 +351,18 @@ export function LayerPointing() {
             <div className="flex flex-col gap-2">
               {devices.length === 0 && <div className="rounded-lg border border-dashed border-line px-3 py-3 text-center text-[11.5px] text-faint">No pointing devices configured.</div>}
               {devices.map((device) => (
-                <div key={device.device_id} className="rounded-lg border border-line bg-raised p-2.5">
+                <div
+                  key={device.device_id}
+                  ref={selectedDeviceId === device.device_id && !selectedHasOverride ? selectedCardRef : undefined}
+                  className={cx(
+                    "rounded-lg border bg-raised p-2.5",
+                    selectedDeviceId === device.device_id && !selectedHasOverride
+                      ? "border-accent"
+                      : "border-line",
+                  )}
+                >
                   <div className="mb-2 flex items-center justify-between">
-                    <span className="text-[12px] font-medium text-ink">Device {device.device_id}</span>
+                    <span className="text-[12px] font-medium text-ink">{deviceLabel(device.device_id)}</span>
                     <button
                       type="button"
                       title={`Remove device ${device.device_id} and all of its overrides`}
@@ -368,9 +396,18 @@ export function LayerPointing() {
             <div className="flex flex-col gap-2">
               {overrides.length === 0 && <div className="rounded-lg border border-dashed border-line px-3 py-3 text-center text-[11.5px] text-faint">This layer uses every device's base mode.</div>}
               {overrides.map((entry) => (
-                <div key={entry.device_id} className="rounded-lg border border-accent-deep/30 bg-accent-dim/10 p-2.5">
+                <div
+                  key={entry.device_id}
+                  ref={selectedDeviceId === entry.device_id ? selectedCardRef : undefined}
+                  className={cx(
+                    "rounded-lg border bg-accent-dim/10 p-2.5",
+                    selectedDeviceId === entry.device_id
+                      ? "border-accent"
+                      : "border-accent-deep/30",
+                  )}
+                >
                   <div className="mb-2 flex items-center justify-between">
-                    <span className="text-[12px] font-medium text-ink">Device {entry.device_id}</span>
+                    <span className="text-[12px] font-medium text-ink">{deviceLabel(entry.device_id)}</span>
                     <button type="button" title="Remove this layer override" className="cursor-pointer text-faint hover:text-danger" onClick={() => edit(() => removePointingOverride(draft, state.uiLayer, entry.device_id))}>
                       <TrashIcon size={12} />
                     </button>
@@ -387,7 +424,7 @@ export function LayerPointing() {
                 disabled={availableDevices.length === 0}
                 className="min-w-0 flex-1 rounded-lg border border-line bg-well px-2 py-1.5 text-[12px] text-ink disabled:opacity-40"
               >
-                {availableDevices.map((device) => <option key={device.device_id} value={device.device_id}>Device {device.device_id} · {pointingModeKind(device.mode)}</option>)}
+                {availableDevices.map((device) => <option key={device.device_id} value={device.device_id}>{deviceLabel(device.device_id)} · {pointingModeKind(device.mode)}</option>)}
               </select>
               <Button variant="outline" className="py-1" disabled={overrideDeviceId === "" || draft.override_count >= POINTING_OVERRIDE_CAPACITY} onClick={() => edit(() => setPointingOverride(draft, state.uiLayer, Number(overrideDeviceId)))}>
                 <PlusIcon size={11} /> Override

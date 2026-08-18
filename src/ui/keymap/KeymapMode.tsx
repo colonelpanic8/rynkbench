@@ -24,6 +24,11 @@ import { LayerLighting } from "./LayerLighting";
 import { LayerPointing } from "./LayerPointing";
 import { effectAnim, effectColor } from "../lighting/decor";
 import {
+  activePointingDevices,
+  activePointingOverrides,
+  pointingModeKind,
+} from "../pointing";
+import {
   keyClipboardShortcut,
   parseKeyActionClipboard,
   serializeKeyAction,
@@ -225,6 +230,16 @@ export function KeymapCenter() {
   const latestStateRef = useRef(state);
   const localClipboardRef = useRef<KeyAction | null>(null);
   latestStateRef.current = state;
+  const pointingDevices = state.pointingDraft
+    ? activePointingDevices(state.pointingDraft)
+    : [];
+  const pointingOverrides = state.pointingDraft
+    ? activePointingOverrides(state.pointingDraft)
+    : [];
+  const pointingModeFor = (deviceId: number) =>
+    pointingOverrides.find(
+      (entry) => entry.layer === state.uiLayer && entry.device_id === deviceId,
+    )?.mode ?? pointingDevices.find((entry) => entry.device_id === deviceId)?.mode;
 
   useEffect(() => {
     if (
@@ -552,6 +567,16 @@ export function KeymapCenter() {
               state.pending[encoderPendingId(state.uiLayer, enc.id)]?.status ===
               "error",
           })}
+          pointingDeviceDecorFor={(device) => {
+            const mode = pointingModeFor(device.id);
+            return {
+              selected:
+                state.selection?.type === "pointing" &&
+                state.selection.id === device.id,
+              staged: pointingDraftDirty(state),
+              mode: mode ? pointingModeKind(mode) : "Set up",
+            };
+          }}
           onKeyPointerDown={(key, event) => {
             const action = layer?.[key.row * cols + key.col];
             if (
@@ -607,6 +632,15 @@ export function KeymapCenter() {
               type: "select",
               selection: { type: "encoder", id: enc.id },
             })
+          }
+          onPointingDevicePointerDown={
+            state.pointingDraft
+              ? (device) =>
+                  dispatch({
+                    type: "select",
+                    selection: { type: "pointing", id: device.id },
+                  })
+              : undefined
           }
           onBackgroundPointerDown={() => {
             setKeyboardMove(null);
@@ -821,11 +855,11 @@ export function KeymapInspector() {
             <span className="font-mono text-[16px]">⌨</span>
           </div>
           <div className="text-[13.5px] font-medium text-mute">
-            Select a key to edit its binding
+            Select a key or trackpad to edit it
           </div>
           <div className="text-[12px] leading-relaxed text-faint">
-            Click or focus a key and press Enter to select it. Switch layers with
-            the tabs above the board.
+            Click or focus a key or trackpad and press Enter to select it. Switch
+            layers with the tabs above the board.
           </div>
         </div>
         <LayerPointing />
@@ -847,10 +881,12 @@ export function KeymapInspector() {
       </div>
       {state.selection.type === "key" ? (
         <KeyInspector row={state.selection.row} col={state.selection.col} />
-      ) : (
+      ) : state.selection.type === "encoder" ? (
         <EncoderInspector id={state.selection.id} />
+      ) : (
+        <LayerPointing selectedDeviceId={state.selection.id} />
       )}
-      <LayerPointing />
+      {state.selection.type !== "pointing" && <LayerPointing />}
     </div>
   );
 }

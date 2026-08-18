@@ -24,6 +24,10 @@ describe("enrichmentFor", () => {
     expect(enrichment?.displayName).toBe("Go60");
     expect(enrichment?.labels?.["1,1"]).toBe("Q");
     expect(enrichment?.addresses?.["2,8"]).toBe("RH-C1R3");
+    expect(enrichment?.pointingDevices).toEqual([
+      expect.objectContaining({ id: 0, label: "Left trackpad" }),
+      expect.objectContaining({ id: 1, label: "Right trackpad" }),
+    ]);
   });
 
   it("leaves an unknown MoErgo board behind the shared USB identity unenriched", () => {
