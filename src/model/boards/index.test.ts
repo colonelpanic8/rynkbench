@@ -28,6 +28,9 @@ describe("enrichmentFor", () => {
       expect.objectContaining({ id: 0, label: "Left trackpad" }),
       expect.objectContaining({ id: 1, label: "Right trackpad" }),
     ]);
+    const [left, right] = enrichment!.pointingDevices!;
+    expect(left.x - left.radius).toBeGreaterThan(6);
+    expect(right.x + right.radius).toBeLessThan(11);
   });
 
   it("leaves an unknown MoErgo board behind the shared USB identity unenriched", () => {

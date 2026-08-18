@@ -81,7 +81,7 @@ export interface KeyboardCanvasProps {
   ) => void;
   keyDraggable?: (key: KeyView) => boolean;
   onEncoderPointerDown?: (enc: Encoder) => void;
-  onPointingDevicePointerDown?: (device: PointingDeviceView) => void;
+  onPointingDeviceActivate?: (device: PointingDeviceView) => void;
   onBackgroundPointerDown?: () => void;
   interactive?: boolean;
   className?: string;
@@ -709,14 +709,14 @@ function PointingDeviceShape({
   device,
   decor,
   interactive,
-  onPointerDown,
+  onActivate,
 }: {
   device: PointingDeviceView;
   decor: PointingDeviceDecor;
   interactive: boolean;
-  onPointerDown?: (device: PointingDeviceView) => void;
+  onActivate?: (device: PointingDeviceView) => void;
 }) {
-  const activate = () => onPointerDown?.(device);
+  const activate = () => onActivate?.(device);
   return (
     <g
       data-pointing-device-id={device.id}
@@ -724,7 +724,7 @@ function PointingDeviceShape({
       role={interactive ? "button" : undefined}
       tabIndex={interactive ? 0 : undefined}
       aria-label={interactive ? `Edit ${device.label}` : device.label}
-      onPointerDown={interactive ? activate : undefined}
+      onClick={interactive ? activate : undefined}
       onKeyDown={
         interactive
           ? (event) => {
@@ -765,7 +765,7 @@ function PointingDeviceShape({
       <text
         x={device.x}
         y={device.y - 0.14}
-        fontSize={0.17}
+        fontSize={0.145}
         textAnchor="middle"
         dominantBaseline="central"
         fill="var(--color-faint)"
@@ -774,20 +774,22 @@ function PointingDeviceShape({
         letterSpacing={0.025}
         style={{ userSelect: "none", pointerEvents: "none" }}
       >
-        {device.label.replace(" trackpad", "").toUpperCase()} PAD
+        {device.label.toUpperCase()}
       </text>
-      <text
-        x={device.x}
-        y={device.y + 0.17}
-        fontSize={0.23}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fill={decor.selected ? "var(--color-accent)" : "var(--color-mute)"}
-        fontFamily="var(--font-mono)"
-        style={{ userSelect: "none", pointerEvents: "none" }}
-      >
-        {decor.mode ?? "Edit"}
-      </text>
+      {decor.mode && (
+        <text
+          x={device.x}
+          y={device.y + 0.17}
+          fontSize={0.23}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill={decor.selected ? "var(--color-accent)" : "var(--color-mute)"}
+          fontFamily="var(--font-mono)"
+          style={{ userSelect: "none", pointerEvents: "none" }}
+        >
+          {decor.mode}
+        </text>
+      )}
       {decor.selected && (
         <circle
           cx={device.x}
@@ -815,7 +817,7 @@ export function KeyboardCanvas({
   onKeyDragChange,
   keyDraggable,
   onEncoderPointerDown,
-  onPointingDevicePointerDown,
+  onPointingDeviceActivate,
   onBackgroundPointerDown,
   interactive = true,
   className,
@@ -963,8 +965,8 @@ export function KeyboardCanvas({
           key={device.id}
           device={device}
           decor={pointingDeviceDecorFor?.(device) ?? {}}
-          interactive={interactive && onPointingDevicePointerDown !== undefined}
-          onPointerDown={onPointingDevicePointerDown}
+          interactive={interactive && onPointingDeviceActivate !== undefined}
+          onActivate={onPointingDeviceActivate}
         />
       ))}
     </svg>

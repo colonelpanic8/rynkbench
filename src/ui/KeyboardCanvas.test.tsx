@@ -23,14 +23,23 @@ describe("KeyboardCanvas pointing devices", () => {
         model={model}
         decorFor={() => ({})}
         pointingDeviceDecorFor={() => ({ mode: "Scroll", selected: true })}
-        onPointingDevicePointerDown={() => {}}
+        onPointingDeviceActivate={() => {}}
       />,
     );
 
     expect(markup).toContain('data-pointing-device-id="0"');
     expect(markup).toContain('role="button"');
     expect(markup).toContain('aria-label="Edit Left trackpad"');
-    expect(markup).toContain("LEFT PAD");
+    expect(markup).toContain("LEFT TRACKPAD");
     expect(markup).toContain("Scroll");
+  });
+
+  it("does not advertise editing without an activation handler", () => {
+    const markup = renderToStaticMarkup(
+      <KeyboardCanvas model={model} decorFor={() => ({})} />,
+    );
+
+    expect(markup).not.toContain('role="button"');
+    expect(markup).not.toContain(">Edit<");
   });
 });

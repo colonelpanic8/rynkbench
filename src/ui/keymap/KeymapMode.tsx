@@ -574,7 +574,7 @@ export function KeymapCenter() {
                 state.selection?.type === "pointing" &&
                 state.selection.id === device.id,
               staged: pointingDraftDirty(state),
-              mode: mode ? pointingModeKind(mode) : "Set up",
+              mode: mode ? pointingModeKind(mode) : "Unavailable",
             };
           }}
           onKeyPointerDown={(key, event) => {
@@ -633,14 +633,11 @@ export function KeymapCenter() {
               selection: { type: "encoder", id: enc.id },
             })
           }
-          onPointingDevicePointerDown={
-            state.pointingDraft
-              ? (device) =>
-                  dispatch({
-                    type: "select",
-                    selection: { type: "pointing", id: device.id },
-                  })
-              : undefined
+          onPointingDeviceActivate={(device) =>
+            dispatch({
+              type: "select",
+              selection: { type: "pointing", id: device.id },
+            })
           }
           onBackgroundPointerDown={() => {
             setKeyboardMove(null);
@@ -844,6 +841,30 @@ function EncoderInspector({ id }: { id: number }) {
   );
 }
 
+function PointingInspector({ id }: { id: number }) {
+  const { bundle, state } = useWorkbench();
+  const label =
+    bundle.model.pointingDevices.find((device) => device.id === id)?.label ??
+    `Pointing device ${id}`;
+  const layerName = state.layerMetadata?.[state.uiLayer]?.name ?? `Layer ${state.uiLayer}`;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <SectionLabel>{label}</SectionLabel>
+        <span className="text-[11px] text-faint">{layerName}</span>
+      </div>
+      {state.pointingDraft ? (
+        <LayerPointing selectedDeviceId={id} />
+      ) : (
+        <div className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2.5 text-[12px] leading-relaxed text-warn">
+          This firmware does not expose runtime pointing configuration, so this trackpad cannot be edited here.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function KeymapInspector() {
   const { state, dispatch } = useWorkbench();
 
@@ -884,7 +905,7 @@ export function KeymapInspector() {
       ) : state.selection.type === "encoder" ? (
         <EncoderInspector id={state.selection.id} />
       ) : (
-        <LayerPointing selectedDeviceId={state.selection.id} />
+        <PointingInspector id={state.selection.id} />
       )}
       {state.selection.type !== "pointing" && <LayerPointing />}
     </div>
