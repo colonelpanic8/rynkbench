@@ -33,6 +33,7 @@ import type {
   SessionTarget,
 } from "./session/types";
 import { RECONNECT_DELAYS_MS, retryReconnect } from "./session/reconnect";
+import { isUnsupportedError } from "./session/unsupported";
 import type { ConnectAttempt } from "./ui/ConnectScreen";
 import { ConnectScreen } from "./ui/ConnectScreen";
 import { SpinnerIcon } from "./ui/icons";
@@ -86,10 +87,7 @@ const EMPTY_TOPOLOGY: LightingTopology = {
 
 async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
   const incompleteReads: string[] = [];
-  const unsupported = (error: unknown): boolean => {
-    const message = error instanceof Error ? error.message : String(error);
-    return /UnknownCmd|Unimplemented|Unsupported|does not support/i.test(message);
-  };
+  const unsupported = isUnsupportedError;
   const requiredRead = async <T,>(label: string, read: Promise<T>, fallback: T): Promise<T> => {
     try {
       return await read;
@@ -262,11 +260,19 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
   } catch (error) {
     if (!unsupported(error)) incompleteReads.push(`layer metadata: ${errorMessage(error)}`);
   }
-  const pointingConfig = await optionalRead<PointingConfig | null>(
-    "pointing configuration",
-    session.pointing.get(),
-    null,
-  );
+  // A failed pointing read is not proof that the firmware lacks the feature.
+  // Keep the reason, so the trackpad inspector can offer a re-read instead of
+  // telling the user their firmware cannot do something it can.
+  let pointingConfig: PointingConfig | null = null;
+  let pointingReadError: string | null = null;
+  try {
+    pointingConfig = await session.pointing.get();
+  } catch (error) {
+    if (!unsupported(error)) {
+      pointingReadError = errorMessage(error);
+      incompleteReads.push(`pointing configuration: ${pointingReadError}`);
+    }
+  }
   const pointingCapabilities =
     pointingConfig === null
       ? null
@@ -350,6 +356,7 @@ async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
     layers,
     layerMetadata,
     pointingConfig,
+    pointingReadError,
     pointingCapabilities,
     currentLayer,
     defaultLayer,

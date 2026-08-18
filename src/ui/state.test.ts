@@ -1104,6 +1104,26 @@ describe("pointing configuration state", () => {
     expect(state.pointingConfig?.revision).toBe(3);
     expect(pointingDraftDirty(state)).toBe(false);
   });
+
+  it("recovers a config the connect-time read failed to fetch", async () => {
+    let state = baseState({
+      pointingConfig: null,
+      pointingDraft: null,
+      pointingError: "io error: Other",
+    });
+    const session = {
+      pointing: { get: vi.fn(async () => pointing(4)) },
+    } as unknown as RynkSession;
+    const dispatch = (action: WorkbenchAction) => {
+      state = reducer(state, action);
+    };
+    const io = makeIo(session, () => state, dispatch, 2, () => {});
+
+    await expect(io.reloadPointingConfig()).resolves.toEqual({ ok: true });
+    expect(state.pointingConfig?.revision).toBe(4);
+    expect(state.pointingDraft).not.toBeNull();
+    expect(state.pointingError).toBeNull();
+  });
 });
 
 describe("layer management state", () => {

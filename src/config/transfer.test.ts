@@ -163,7 +163,6 @@ describe("importDocument pointing configuration", () => {
   function pointingHarness(supported: boolean) {
     const actions: WorkbenchAction[] = [];
     const writes: PointingConfig[] = [];
-    let accepted: PointingConfig | null = null;
     const current: PointingConfig | null = supported
       ? {
           revision: 5,
@@ -173,6 +172,7 @@ describe("importDocument pointing configuration", () => {
           overrides: [],
         }
       : null;
+    let accepted: PointingConfig | null = current;
     const session = {
       keymap: {
         setKey: async () => {},
@@ -185,7 +185,10 @@ describe("importDocument pointing configuration", () => {
           accepted = { ...structuredClone(config), revision: config.revision + 1 };
           return structuredClone(accepted);
         },
-        get: async () => structuredClone(accepted!),
+        get: async () => {
+          if (!supported) throw new Error("UnknownCmd");
+          return structuredClone(accepted!);
+        },
       },
     } as unknown as RynkSession;
     const bundle = {
@@ -255,5 +258,15 @@ describe("importDocument pointing configuration", () => {
 
     expect(h.writes).toEqual([]);
     expect(result.skipped).toContain("pointing configuration (unsupported by this keyboard)");
+  });
+
+  it("re-reads before skipping, so a failed connect-time read does not block the import", async () => {
+    const h = pointingHarness(true);
+    const state = { ...h.state, pointingConfig: null, pointingDraft: null } as WorkbenchState;
+    const result = await importDocument({ ...h, state, text: pointingDocument, catalog: CATALOG });
+
+    expect(h.writes).toHaveLength(1);
+    expect(h.writes[0]).toMatchObject({ revision: 5 });
+    expect(result.applied).toContain("pointing configuration");
   });
 });

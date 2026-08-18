@@ -34,7 +34,7 @@ import {
   serializeKeyAction,
 } from "./keyManipulation";
 import { Button, SectionLabel, TextInput, cx } from "../kit";
-import { StarIcon, WarningIcon, CloseIcon, PlusIcon, TrashIcon } from "../icons";
+import { StarIcon, WarningIcon, CloseIcon, PlusIcon, TrashIcon, SpinnerIcon } from "../icons";
 
 function LayerTabs() {
   const { bundle, state, dispatch, io } = useWorkbench();
@@ -842,7 +842,7 @@ function EncoderInspector({ id }: { id: number }) {
 }
 
 function PointingInspector({ id }: { id: number }) {
-  const { bundle, state } = useWorkbench();
+  const { bundle, state, io } = useWorkbench();
   const label =
     bundle.model.pointingDevices.find((device) => device.id === id)?.label ??
     `Pointing device ${id}`;
@@ -856,6 +856,21 @@ function PointingInspector({ id }: { id: number }) {
       </div>
       {state.pointingDraft ? (
         <LayerPointing selectedDeviceId={id} />
+      ) : state.pointingError ? (
+        // The read failed; that is not the same as the firmware saying it has
+        // no pointing configuration, so offer the re-read rather than blaming
+        // the board for a limitation it may not have.
+        <div className="flex flex-col gap-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2.5 text-[12px] leading-relaxed text-warn">
+          <span>Could not read this keyboard's pointing configuration: {state.pointingError}</span>
+          <Button
+            variant="ghost"
+            className="self-start"
+            disabled={state.pointingBusy}
+            onClick={() => void io.reloadPointingConfig()}
+          >
+            {state.pointingBusy && <SpinnerIcon size={13} />} Retry read
+          </Button>
+        </div>
       ) : (
         <div className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2.5 text-[12px] leading-relaxed text-warn">
           This firmware does not expose runtime pointing configuration, so this trackpad cannot be edited here.

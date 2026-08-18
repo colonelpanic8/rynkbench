@@ -10,6 +10,7 @@ import type { Dispatch } from "react";
 import { boardForTarget, transferSnapshot } from "../model/boards/transfer";
 import type { MoErgoBoard } from "../model/boards/transfer";
 import type { RynkSession } from "../session/types";
+import { isUnsupportedError } from "../session/unsupported";
 import type { ConnectedBundle, WorkbenchAction, WorkbenchState } from "../ui/state";
 import { errorMessage } from "../ui/state";
 import type { ComboDefinition, Fork, Morse } from "../vendor/rynk-wasm/rynk_wasm";
@@ -107,18 +108,27 @@ async function writePointing(
 ): Promise<{ applied: string[]; skipped: string[] }> {
   const desired = snapshot.pointing;
   if (desired === undefined) return { applied: [], skipped: [] };
-  if (state.pointingConfig === null) {
-    return {
-      applied: [],
-      skipped: ["pointing configuration (unsupported by this keyboard)"],
-    };
+  // A null cache can mean the connect-time read failed, not that the board has
+  // no runtime pointing configuration. Ask the keyboard once more before
+  // refusing to import this part of the document.
+  let live = state.pointingConfig;
+  if (live === null) {
+    try {
+      live = await session.pointing.get();
+      dispatch({ type: "pointingReloaded", config: live });
+    } catch (error) {
+      const reason = isUnsupportedError(error)
+        ? "unsupported by this keyboard"
+        : errorMessage(error);
+      return { applied: [], skipped: [`pointing configuration (${reason})`] };
+    }
   }
 
   const request = normalizePointingConfig({
     ...structuredClone(desired),
-    revision: state.pointingConfig.revision,
+    revision: live.revision,
   });
-  if (pointingConfigsEqual(request, state.pointingConfig)) {
+  if (pointingConfigsEqual(request, live)) {
     return { applied: [], skipped: [] };
   }
 

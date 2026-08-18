@@ -103,6 +103,10 @@ export interface ConnectedBundle {
   layerMetadata: LayerMetadata[] | null;
   /** null when a complete runtime pointing-reference read was unavailable. */
   pointingConfig: PointingConfig | null;
+  /** Why the pointing read failed, when it failed for a reason other than the
+   *  firmware answering that it does not know the command. null means the read
+   *  succeeded, or the firmware genuinely has no runtime pointing support. */
+  pointingReadError?: string | null;
   /** Optional pointing modes understood by this firmware revision. */
   pointingCapabilities: PointingCapabilities | null;
   currentLayer: number;
@@ -395,7 +399,7 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
       ? normalizePointingConfig(bundle.pointingConfig)
       : null,
     pointingBusy: false,
-    pointingError: null,
+    pointingError: bundle.pointingReadError ?? null,
     encoders: {},
     battery: bundle.battery,
     peripheralBattery: bundle.peripheralBattery,
