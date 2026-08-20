@@ -17,6 +17,7 @@ import {
 } from "../icons";
 import {
   POINTING_DEVICE_CAPACITY,
+  POINTING_MODE_CURSOR_REMAP,
   POINTING_MODE_KEYPAD,
   POINTING_OVERRIDE_CAPACITY,
   activePointingDevices,
@@ -35,6 +36,10 @@ import { useWorkbench } from "../state";
 import { KeycodeBrowser } from "./ActionEditor";
 
 const BASE_MODE_KINDS: PointingModeKind[] = ["Cursor", "Scroll", "Sniper", "Caret", "Drag", "Press"];
+
+/** Wire names are what the protocol calls these; the picker has three narrow
+ *  columns, so only the compound one needs a shorter label. */
+const MODE_LABELS: Partial<Record<PointingModeKind, string>> = { CursorRemap: "Remap" };
 
 function bounded(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
@@ -176,9 +181,13 @@ function CaretFields({ value, onChange }: { value: CaretConfig; onChange: (value
   );
 }
 
-function PointingModeEditor({ value, allowKeypad, onChange }: { value: PointingMode; allowKeypad: boolean; onChange: (value: PointingMode) => void }) {
+function PointingModeEditor({ value, allowKeypad, allowCursorRemap, onChange }: { value: PointingMode; allowKeypad: boolean; allowCursorRemap: boolean; onChange: (value: PointingMode) => void }) {
   const kind = pointingModeKind(value);
-  const modeKinds = allowKeypad ? [...BASE_MODE_KINDS, "Keypad" as const] : BASE_MODE_KINDS;
+  const modeKinds: PointingModeKind[] = [
+    ...BASE_MODE_KINDS,
+    ...(allowKeypad ? (["Keypad"] as const) : []),
+    ...(allowCursorRemap ? (["CursorRemap"] as const) : []),
+  ];
   return (
     <div className="flex flex-col gap-2.5">
       <div className="grid grid-cols-3 gap-1 rounded-lg border border-line-soft bg-well p-0.5">
@@ -192,7 +201,7 @@ function PointingModeEditor({ value, allowKeypad, onChange }: { value: PointingM
               candidate === kind ? "bg-raised text-ink shadow-sm" : "text-faint hover:text-mute",
             )}
           >
-            {candidate}
+            {MODE_LABELS[candidate] ?? candidate}
           </button>
         ))}
       </div>
@@ -228,6 +237,12 @@ function PointingModeEditor({ value, allowKeypad, onChange }: { value: PointingM
         <div className="flex flex-col gap-2.5">
           <CursorFields value={value.Press.cursor} onChange={(cursor) => onChange({ Press: { ...value.Press, cursor } })} />
           <ButtonMask label="Held while touched" value={value.Press.holds} onChange={(holds) => onChange({ Press: { ...value.Press, holds } })} />
+        </div>
+      )}
+      {"CursorRemap" in value && (
+        <div className="flex flex-col gap-2.5">
+          <CursorFields value={value.CursorRemap.cursor} onChange={(cursor) => onChange({ CursorRemap: { ...value.CursorRemap, cursor } })} />
+          <ButtonMask label="Primary tap sends" value={value.CursorRemap.primary_button} onChange={(primary_button) => onChange({ CursorRemap: { ...value.CursorRemap, primary_button } })} />
         </div>
       )}
       {"Keypad" in value && (
@@ -302,10 +317,12 @@ export function LayerPointing({ selectedDeviceId }: { selectedDeviceId?: number 
   if (!draft || !applied) return null;
 
   const staged = !pointingConfigsEqual(applied, draft);
-  const keypadSupported =
-    ((bundle.pointingCapabilities?.mode_flags ?? 0) & POINTING_MODE_KEYPAD) !== 0 ||
-    devices.some((device) => pointingModeKind(device.mode) === "Keypad") ||
-    allOverrides.some((entry) => pointingModeKind(entry.mode) === "Keypad");
+  const modeSupported = (flag: number, kind: PointingModeKind) =>
+    ((bundle.pointingCapabilities?.mode_flags ?? 0) & flag) !== 0 ||
+    devices.some((device) => pointingModeKind(device.mode) === kind) ||
+    allOverrides.some((entry) => pointingModeKind(entry.mode) === kind);
+  const keypadSupported = modeSupported(POINTING_MODE_KEYPAD, "Keypad");
+  const cursorRemapSupported = modeSupported(POINTING_MODE_CURSOR_REMAP, "CursorRemap");
   const layerName = state.layerMetadata?.[state.uiLayer]?.name ?? `Layer ${state.uiLayer}`;
   const edit = (change: () => PointingConfig): boolean => {
     try {
@@ -376,7 +393,7 @@ export function LayerPointing({ selectedDeviceId }: { selectedDeviceId?: number 
                       <TrashIcon size={12} />
                     </button>
                   </div>
-                  <PointingModeEditor value={device.mode} allowKeypad={keypadSupported} onChange={(mode) => edit(() => updatePointingDeviceMode(draft, device.device_id, mode))} />
+                  <PointingModeEditor value={device.mode} allowKeypad={keypadSupported} allowCursorRemap={cursorRemapSupported} onChange={(mode) => edit(() => updatePointingDeviceMode(draft, device.device_id, mode))} />
                 </div>
               ))}
             </div>
@@ -412,7 +429,7 @@ export function LayerPointing({ selectedDeviceId }: { selectedDeviceId?: number 
                       <TrashIcon size={12} />
                     </button>
                   </div>
-                  <PointingModeEditor value={entry.mode} allowKeypad={keypadSupported} onChange={(mode) => edit(() => setPointingOverride(draft, state.uiLayer, entry.device_id, mode))} />
+                  <PointingModeEditor value={entry.mode} allowKeypad={keypadSupported} allowCursorRemap={cursorRemapSupported} onChange={(mode) => edit(() => setPointingOverride(draft, state.uiLayer, entry.device_id, mode))} />
                 </div>
               ))}
             </div>

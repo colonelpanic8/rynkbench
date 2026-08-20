@@ -27,12 +27,29 @@ const empty = (): PointingConfig => ({
 
 describe("pointing configuration helpers", () => {
   it("constructs every protocol mode with its firmware default", () => {
-    const kinds = ["Cursor", "Scroll", "Sniper", "Caret", "Drag", "Press", "Keypad"] as const;
+    const kinds = [
+      "Cursor",
+      "Scroll",
+      "Sniper",
+      "Caret",
+      "Drag",
+      "Press",
+      "Keypad",
+      "CursorRemap",
+    ] as const;
     expect(kinds.map((kind) => pointingModeKind(defaultPointingMode(kind)))).toEqual(kinds);
     expect(defaultPointingMode("Press")).toEqual({
       Press: {
         cursor: { multiplier_x: 1, multiplier_y: 1, invert_x: false, invert_y: false },
         holds: 1,
+      },
+    });
+    // Appended after Keypad on the wire, so a client that stops at Keypad
+    // cannot decode a device using it — the bug this coverage guards.
+    expect(defaultPointingMode("CursorRemap")).toEqual({
+      CursorRemap: {
+        cursor: { multiplier_x: 1, multiplier_y: 1, invert_x: false, invert_y: false },
+        primary_button: 1,
       },
     });
   });

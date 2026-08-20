@@ -10,8 +10,17 @@ import type {
 export const POINTING_DEVICE_CAPACITY = 4;
 export const POINTING_OVERRIDE_CAPACITY = 16;
 export const POINTING_MODE_KEYPAD = 1 << 0;
+export const POINTING_MODE_CURSOR_REMAP = 1 << 1;
 
-export type PointingModeKind = "Cursor" | "Scroll" | "Sniper" | "Caret" | "Drag" | "Press" | "Keypad";
+export type PointingModeKind =
+  | "Cursor"
+  | "Scroll"
+  | "Sniper"
+  | "Caret"
+  | "Drag"
+  | "Press"
+  | "Keypad"
+  | "CursorRemap";
 
 const CURSOR_DEFAULT: CursorConfig = {
   multiplier_x: 1,
@@ -71,6 +80,8 @@ export function defaultPointingMode(kind: PointingModeKind): PointingMode {
           keycode_tap: "No",
         },
       };
+    case "CursorRemap":
+      return { CursorRemap: { cursor: structuredClone(CURSOR_DEFAULT), primary_button: 1 } };
   }
 }
 
@@ -81,6 +92,7 @@ export function pointingModeKind(mode: PointingMode): PointingModeKind {
   if ("Caret" in mode) return "Caret";
   if ("Drag" in mode) return "Drag";
   if ("Press" in mode) return "Press";
+  if ("CursorRemap" in mode) return "CursorRemap";
   return "Keypad";
 }
 
