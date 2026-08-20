@@ -498,6 +498,8 @@ describe("snapshotFromState", () => {
         oneshot_timeout_ms: 1000,
         tap_interval_ms: 200,
         tap_capslock_interval_ms: 350,
+        morse_default_profile: LIVE_MORSE[0].profile,
+        morse_prior_idle_time_ms: 120,
       },
       behaviorOptions: {
         tri_layer: undefined,

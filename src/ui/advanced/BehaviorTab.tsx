@@ -9,8 +9,14 @@ import { WarningIcon } from "../icons";
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
+/** The millisecond knobs this card edits. `BehaviorConfig` also carries the
+ *  default morse profile, which is a struct and belongs to the morse editor. */
+type TimingKey = {
+  [K in keyof BehaviorConfig]: BehaviorConfig[K] extends number ? K : never;
+}[keyof BehaviorConfig];
+
 const FIELDS: Array<{
-  key: keyof BehaviorConfig;
+  key: TimingKey;
   label: string;
   hint: string;
   min: number;
@@ -42,6 +48,13 @@ const FIELDS: Array<{
     label: "Caps Lock tap interval",
     hint: "Same window, but for Caps Lock (often set longer)",
     min: 50,
+    max: 1000,
+  },
+  {
+    key: "morse_prior_idle_time_ms",
+    label: "Flow-tap window",
+    hint: "A morse key pressed this soon after the previous key is forced to its tap action",
+    min: 0,
     max: 1000,
   },
 ];

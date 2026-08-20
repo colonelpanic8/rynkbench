@@ -957,12 +957,16 @@ describe("behavior", () => {
         oneshot_timeout_ms: 1000,
         tap_interval_ms: 200,
         tap_capslock_interval_ms: 350,
+        morse_default_profile: emptyMorseProfile(),
+        morse_prior_idle_time_ms: 0,
       });
       const next = {
         combo_timeout_ms: 75,
         oneshot_timeout_ms: 1500,
         tap_interval_ms: 190,
         tap_capslock_interval_ms: 400,
+        morse_default_profile: { ...emptyMorseProfile(), hold_timeout_ms: 210 },
+        morse_prior_idle_time_ms: 120,
       };
       await session.behavior.set(next);
       expect(await session.behavior.get()).toEqual(next);

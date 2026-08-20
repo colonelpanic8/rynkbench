@@ -343,6 +343,8 @@ class StubSession implements RynkSession {
     oneshot_timeout_ms: 1000,
     tap_interval_ms: 200,
     tap_capslock_interval_ms: 350,
+    morse_default_profile: emptyMorseProfile(),
+    morse_prior_idle_time_ms: 0,
   };
   private behaviorOptions: BehaviorOptions = {
     tri_layer: undefined,

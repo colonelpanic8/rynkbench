@@ -12,7 +12,14 @@ import type {
   KeyAction,
   LightingZone,
 } from "../../vendor/rynk-wasm/rynk_wasm";
-import { buildTopology, hid, layerOn, type BoardSpec, type SimLed } from "./board";
+import {
+  buildTopology,
+  emptyMorseProfile,
+  hid,
+  layerOn,
+  type BoardSpec,
+  type SimLed,
+} from "./board";
 
 const ROWS = 5;
 const COLS = 12;
@@ -204,6 +211,8 @@ export const ortho60Board: BoardSpec = {
     oneshot_timeout_ms: 1000,
     tap_interval_ms: 200,
     tap_capslock_interval_ms: 350,
+    morse_default_profile: emptyMorseProfile(),
+    morse_prior_idle_time_ms: 0,
   },
   // Num lock is on, as a plain desk board would report after boot.
   ledIndicator: { num_lock: true, caps_lock: false, scroll_lock: false, compose: false, kana: false },

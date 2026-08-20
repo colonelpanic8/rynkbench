@@ -61,6 +61,9 @@
 
           postPatch = ''
             cp ${./nix/rynk-wasm-Cargo.lock} rynk/Cargo.lock
+            # Store copies are read-only; leaving it so turns "this lock is
+            # stale for the pinned rmk" into an unreadable permission error.
+            chmod u+w rynk/Cargo.lock
           '';
 
           buildPhase = ''
