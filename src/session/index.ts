@@ -4,6 +4,7 @@
 
 import { nativeProvider } from "./native";
 import { nativeBleProvider } from "./native-ble";
+import { webBluetoothProvider } from "./webbluetooth";
 import { webHidProvider } from "./webhid";
 import { webSerialProvider } from "./webserial";
 import type { SessionProvider } from "./types";
@@ -11,9 +12,11 @@ import type { SessionProvider } from "./types";
 export type { RynkSession, SessionKind, SessionProvider } from "./types";
 
 /** All providers, in display order. Availability is checked at render time.
- * Tauri exposes native HID and native BLE; Chromium exposes the two browser
- * transports: vendor WebHID for fork firmware and Web Serial for upstream RMK.
- * USB leads in both environments — it is faster and needs no prior pairing. */
+ * Tauri exposes native HID and native BLE; Chromium exposes the three browser
+ * transports: vendor WebHID for fork firmware, Web Serial for upstream RMK,
+ * and Web Bluetooth for fork firmware's Rynk GATT service (the only one that
+ * exists on Android). USB leads where it exists — it is faster and needs no
+ * prior pairing. */
 export function sessionProviders(): SessionProvider[] {
-  return [nativeProvider, nativeBleProvider, webHidProvider, webSerialProvider];
+  return [nativeProvider, nativeBleProvider, webHidProvider, webSerialProvider, webBluetoothProvider];
 }

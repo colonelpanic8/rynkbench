@@ -97,12 +97,17 @@ key inspector retain the raw matrix row and column for diagnostics.
   complete Magic-layer layout from `moergo-config`—two battery bars, three BLE
   profile keys, and the USB key—is available as a single preset.
 
-Web Serial and WebHID need a Chromium-based browser (Chrome or Edge); Firefox
-and Safari don't implement them. Use **Web Serial** for upstream RMK's USB CDC
-transport and **WebHID** for firmware exposing the vendor Rynk HID interface.
+Web Serial, WebHID, and Web Bluetooth need a Chromium-based browser (Chrome or
+Edge); Firefox and Safari don't implement them. Use **Web Serial** for upstream
+RMK's USB CDC transport, **WebHID** for firmware exposing the vendor Rynk HID
+interface, and **Web Bluetooth** for firmware exposing the Rynk BLE GATT
+service — the one transport that also works in Chrome for Android, where the
+two USB backends don't exist. The keyboard must be paired (bonded) with the
+connecting device: the firmware only answers Rynk traffic on an encrypted link.
 The page must be served from a secure context — `localhost` counts, so local dev
 works out of the box. Alternatively, the [Tauri desktop app](#desktop-app-tauri)
-bundles the same UI with a native HID transport, so no browser is needed at all.
+bundles the same UI with native HID and BLE transports, so no browser is needed
+at all.
 
 ## Quick start
 
