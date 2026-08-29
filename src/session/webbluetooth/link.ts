@@ -25,9 +25,30 @@ export const RYNK_OUTPUT_CHAR_UUID = "19802524-6f90-4346-93c2-63dbc509ab55";
 export const BLE_SAFE_WRITE = 20;
 
 export async function requestRynkBluetoothDevice(): Promise<BluetoothDevice> {
-  // Filtering on the Rynk service keeps the chooser to Rynk keyboards and
-  // doubles as the GATT access grant for that service.
-  return navigator.bluetooth.requestDevice({ filters: [{ services: [RYNK_SERVICE_UUID] }] });
+  // The chooser matches service filters against ADVERTISEMENT data, and the
+  // firmware's host advertisement carries only the 16-bit HID and Battery
+  // UUIDs (HID is blocklisted as a Web Bluetooth filter), never the 128-bit
+  // Rynk UUID — a Rynk service filter matches nothing, ever. Let the user
+  // pick by name instead; optionalServices is what grants GATT access to the
+  // service after connecting.
+  return navigator.bluetooth.requestDevice({
+    acceptAllDevices: true,
+    optionalServices: [RYNK_SERVICE_UUID],
+  });
+}
+
+/** Devices this origin already holds a permission grant for. A granted
+ * keyboard needs no chooser and no advertising — gatt.connect() reaches it
+ * even while it is busy being a keyboard, over that same connection. Empty
+ * on browsers without persistent Web Bluetooth permissions. */
+export async function grantedRynkDevices(): Promise<BluetoothDevice[]> {
+  const bluetooth = navigator.bluetooth;
+  if (!bluetooth.getDevices) return [];
+  try {
+    return await bluetooth.getDevices();
+  } catch {
+    return [];
+  }
 }
 
 export async function bluetoothByteLink(device: BluetoothDevice): Promise<RynkByteLink> {

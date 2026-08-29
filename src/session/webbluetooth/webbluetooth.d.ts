@@ -6,7 +6,9 @@ interface BluetoothLEScanFilter {
 }
 
 interface BluetoothRequestDeviceOptions {
-  filters: BluetoothLEScanFilter[];
+  filters?: BluetoothLEScanFilter[];
+  acceptAllDevices?: boolean;
+  optionalServices?: string[];
 }
 
 interface BluetoothRemoteGATTCharacteristic extends EventTarget {
@@ -39,6 +41,7 @@ interface BluetoothDevice extends EventTarget {
 
 interface Bluetooth extends EventTarget {
   requestDevice(options: BluetoothRequestDeviceOptions): Promise<BluetoothDevice>;
+  getDevices?(): Promise<BluetoothDevice[]>;
 }
 
 interface Navigator {

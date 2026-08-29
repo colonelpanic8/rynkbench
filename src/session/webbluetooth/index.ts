@@ -4,11 +4,15 @@
 
 import { connect } from "../../vendor/rynk-wasm/rynk_wasm";
 import { LinkSession, REQUEST_TIMEOUT_MS } from "../link-session";
-import type { SessionProvider } from "../types";
+import type { SessionProvider, SessionTarget } from "../types";
 import { initWasm } from "../wasm";
-import { bluetoothByteLink, requestRynkBluetoothDevice } from "./link";
+import { bluetoothByteLink, grantedRynkDevices, requestRynkBluetoothDevice } from "./link";
 
 let lastDevice: BluetoothDevice | null = null;
+
+/** Target id that means "open the browser chooser", offered alongside granted
+ * devices so a second keyboard stays reachable once one has been granted. */
+const CHOOSER_TARGET_ID = "webbluetooth:chooser";
 
 export const webBluetoothProvider: SessionProvider = {
   kind: "webbluetooth",
@@ -16,10 +20,34 @@ export const webBluetoothProvider: SessionProvider = {
   description:
     "Connect to a Rynk keyboard over Bluetooth LE. Requires Chrome or Edge — including on Android, where it is the only transport that works.",
   available: () => typeof navigator !== "undefined" && "bluetooth" in navigator,
-  async connect() {
-    // requestDevice must be the first await so the click's user activation is
-    // still available to the browser-owned chooser. The chooser is filtered to
-    // devices advertising or known to carry the Rynk GATT service.
+  async listTargets(): Promise<SessionTarget[]> {
+    // A granted keyboard connects without the chooser and without advertising
+    // — including while it is connected to this device as a keyboard, which a
+    // scan-based chooser can never see. No grants (or no getDevices support)
+    // falls through to the plain chooser flow.
+    const granted = await grantedRynkDevices();
+    if (!granted.length) return [];
+    return [
+      ...granted.map((device) => ({
+        id: device.id,
+        label: device.name?.trim() || "Rynk keyboard",
+        detail: "Previously connected",
+      })),
+      {
+        id: CHOOSER_TARGET_ID,
+        label: "Pair another keyboard…",
+        detail: "Opens the browser's device chooser",
+      },
+    ];
+  },
+  async connect(targetId) {
+    if (targetId !== undefined && targetId !== CHOOSER_TARGET_ID) {
+      const device = (await grantedRynkDevices()).find((candidate) => candidate.id === targetId);
+      if (!device) throw new Error("That keyboard's Bluetooth grant is gone — pair it again");
+      return rememberedSession(device);
+    }
+    // The awaits above are quick enough that the click's transient user
+    // activation still covers the browser-owned chooser here.
     return rememberedSession(await requestRynkBluetoothDevice());
   },
   async reconnect() {
@@ -69,7 +97,8 @@ async function handshake(link: Awaited<ReturnType<typeof bluetoothByteLink>>) {
             new Error(
               `No Rynk response over Bluetooth within ${REQUEST_TIMEOUT_MS}ms — ` +
                 "the keyboard only answers on an encrypted link, so make sure it is " +
-                "paired (bonded) with this device and try again",
+                "paired (bonded) with this device, on the Bluetooth profile for this " +
+                "device, and try again",
             ),
           );
         }, REQUEST_TIMEOUT_MS);

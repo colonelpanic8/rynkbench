@@ -75,13 +75,18 @@ function device(name?: string) {
   }) as unknown as BluetoothDevice & { gatt: { disconnect: typeof disconnect } };
 }
 
-function install(selected: BluetoothDevice) {
+function install(selected: BluetoothDevice, granted?: BluetoothDevice[]) {
   const requestDevice = vi.fn((options: BluetoothRequestDeviceOptions) => {
     order.push("chooser");
-    expect(options.filters).toEqual([{ services: [RYNK_SERVICE_UUID] }]);
+    // The firmware never advertises the Rynk service UUID, so the chooser must
+    // not filter on it; access to the service comes from optionalServices.
+    expect(options.acceptAllDevices).toBe(true);
+    expect(options.optionalServices).toEqual([RYNK_SERVICE_UUID]);
     return Promise.resolve(selected);
   });
-  (globalThis as { navigator?: unknown }).navigator = { bluetooth: { requestDevice } };
+  const bluetooth: Record<string, unknown> = { requestDevice };
+  if (granted) bluetooth.getDevices = vi.fn(() => Promise.resolve(granted));
+  (globalThis as { navigator?: unknown }).navigator = { bluetooth };
   return { requestDevice };
 }
 
@@ -130,6 +135,44 @@ describe("Web Bluetooth provider", () => {
 
     await expect(webBluetoothProvider.connect()).rejects.toThrow("protocol mismatch");
     expect(selected.gatt.disconnect).toHaveBeenCalled();
+  });
+
+  it("offers no targets without persistent-permission support", async () => {
+    install(device());
+
+    expect(await webBluetoothProvider.listTargets?.()).toEqual([]);
+  });
+
+  it("lists granted keyboards plus a chooser entry", async () => {
+    const granted = device("Glove80");
+    install(device(), [granted]);
+
+    const targets = await webBluetoothProvider.listTargets!();
+
+    expect(targets.map((target) => target.label)).toEqual(["Glove80", "Pair another keyboard…"]);
+  });
+
+  it("connects a granted keyboard without opening the chooser", async () => {
+    const granted = device("Glove80");
+    const { requestDevice } = install(device(), [granted]);
+
+    const targets = await webBluetoothProvider.listTargets!();
+    const session = (await webBluetoothProvider.connect(targets[0].id)) as unknown as {
+      client: { label: string };
+    };
+
+    expect(requestDevice).not.toHaveBeenCalled();
+    expect(session.client.label).toBe("Glove80 (Web Bluetooth)");
+  });
+
+  it("opens the chooser for the pair-another target", async () => {
+    const selected = device("Go60");
+    const { requestDevice } = install(selected, [device("Glove80")]);
+
+    const targets = await webBluetoothProvider.listTargets!();
+    await webBluetoothProvider.connect(targets.at(-1)!.id);
+
+    expect(requestDevice).toHaveBeenCalledOnce();
   });
 
   it("times out a device that never answers and points at pairing", async () => {
