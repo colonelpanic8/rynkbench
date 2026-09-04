@@ -27,7 +27,15 @@ import { describeEffect, effectRgb } from "./effect";
 import { EffectEditor } from "./EffectEditor";
 import { keyAddressWithLegend } from "../key-address";
 import { layerName } from "../layer-names";
-import { appendRule, moveRule, newRule, removeRule, replaceRule } from "./rules";
+import {
+  appendRule,
+  moveRule,
+  newRule,
+  removeRule,
+  replaceRule,
+  retargetLayer,
+  rulesOnLayer,
+} from "./rules";
 import type { Rule, Rules } from "./rules";
 
 const CHARGE_STATES: LightingChargeCondition[] = ["Any", "Charging", "Discharging", "Unknown"];
@@ -82,6 +90,8 @@ export function ConditionalRulesPanel() {
   const { bundle, state, dispatch, io } = useWorkbench();
   const status = bundle.runtimeConditionalStatus;
   const [selected, setSelected] = useState<number | null>(null);
+  const [moveFrom, setMoveFrom] = useState<number | null>(null);
+  const [moveTo, setMoveTo] = useState(0);
 
   const ledLabels = useMemo(() => {
     const labels = new Map<number, string>();
@@ -133,6 +143,20 @@ export function ConditionalRulesPanel() {
     if (full) return;
     setRules(appendRule(rules, newRule(ledOptions[0] ?? 0, DEFAULT_EFFECT)));
     setSelected(rules.length);
+  };
+
+  const layerCounts = new Map<number, number>();
+  for (const entry of rules) {
+    const layer = entry.cell.conditions.layer?.layer;
+    if (layer !== undefined) layerCounts.set(layer, (layerCounts.get(layer) ?? 0) + 1);
+  }
+  const sourceLayers = [...layerCounts.keys()].sort((a, b) => a - b);
+  const moveSource = moveFrom !== null && layerCounts.has(moveFrom) ? moveFrom : sourceLayers[0];
+  const moveCount = moveSource === undefined ? 0 : rulesOnLayer(rules, moveSource).length;
+
+  const moveLayerRules = () => {
+    if (moveSource === undefined) return;
+    setRules(retargetLayer(rules, moveSource, moveTo));
   };
 
   const drop = (index: number) => {
@@ -260,6 +284,54 @@ export function ConditionalRulesPanel() {
         <PlusIcon size={12} />
         Add rule
       </Button>
+
+      {moveSource !== undefined && (
+        <div className="mt-2 rounded-lg border border-line-soft bg-well p-2.5">
+          <div className="text-[12px] font-medium text-ink">Move rules between layers</div>
+          <p className="mt-1 text-[10.5px] leading-relaxed text-faint">
+            Re-points every rule conditioned on one layer at another, keeping order and the
+            active/inactive sense. Key bindings stay where they are.
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <label className="text-[11px] text-faint">
+              From
+              <select
+                value={moveSource}
+                onChange={(e) => setMoveFrom(Number(e.target.value))}
+                className="mt-1 w-full rounded-md border border-line bg-raised px-2 py-1.5 text-[12px] text-ink"
+              >
+                {sourceLayers.map((layer) => (
+                  <option key={layer} value={layer}>
+                    {nameOf(layer)} · {layerCounts.get(layer)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-[11px] text-faint">
+              To
+              <select
+                value={moveTo}
+                onChange={(e) => setMoveTo(Number(e.target.value))}
+                className="mt-1 w-full rounded-md border border-line bg-raised px-2 py-1.5 text-[12px] text-ink"
+              >
+                {Array.from({ length: bundle.caps.num_layers }, (_, n) => (
+                  <option key={n} value={n}>
+                    {nameOf(n)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <Button
+            variant="outline"
+            className="mt-2 w-full py-1"
+            disabled={moveTo === moveSource || moveCount === 0}
+            onClick={moveLayerRules}
+          >
+            Move {moveCount} rule{moveCount === 1 ? "" : "s"} to {nameOf(moveTo)}
+          </Button>
+        </div>
+      )}
 
       {rule && conditions && selected !== null && (
         <div className="mt-2.5 flex flex-col gap-2.5 rounded-lg border border-line bg-raised p-2.5">

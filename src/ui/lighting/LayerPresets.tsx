@@ -59,6 +59,7 @@ function LayerChips({
   onSel,
   hasContent,
   live,
+  labelFor,
   titleFor,
 }: {
   numLayers: number;
@@ -66,6 +67,7 @@ function LayerChips({
   onSel: (layer: number) => void;
   hasContent: (layer: number) => boolean;
   live: number;
+  labelFor: (layer: number) => string;
   titleFor: (layer: number) => string;
 }) {
   return (
@@ -77,13 +79,13 @@ function LayerChips({
           onClick={() => onSel(n)}
           title={titleFor(n)}
           className={cx(
-            "relative flex h-7 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-md border px-1.5 font-mono text-[11.5px] transition-colors duration-120",
+            "relative flex h-7 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-md border px-2 text-[11.5px] transition-colors duration-120",
             n === sel
               ? "border-accent bg-accent-dim/30 text-accent"
               : "border-line bg-raised text-mute hover:border-line-strong",
           )}
         >
-          L{n}
+          {labelFor(n)}
           {hasContent(n) && <span className="size-1 rounded-full bg-accent" />}
           {n === live && (
             <span className="absolute -top-0.5 right-0.5 size-1 rounded-full bg-ok" />
@@ -281,6 +283,7 @@ function LocalPresets() {
         onSel={setSel}
         hasContent={(n) => stored.presets[n] !== undefined}
         live={state.currentLayer}
+        labelFor={(n) => layerName(state.layerMetadata, n)}
         titleFor={(n) =>
           `${layerName(state.layerMetadata, n)} · physical layer ${n}${
             stored.presets[n] ? ` · ${stored.presets[n].name}` : " · no preset"
@@ -301,11 +304,11 @@ function LocalPresets() {
                   })
                 }
                 className="py-1"
-                placeholder={`Layer ${sel} preset`}
+                placeholder={`${layerName(state.layerMetadata, sel)} preset`}
               />
               <button
                 type="button"
-                title={`Remove the Layer ${sel} preset`}
+                title={`Remove the ${layerName(state.layerMetadata, sel)} preset`}
                 onClick={() => {
                   const presets = { ...stored.presets };
                   delete presets[sel];
@@ -362,19 +365,19 @@ function LocalPresets() {
             title={
               drawnCount === 0
                 ? "Paint some keys first, then save them as this layer's preset"
-                : `Save the current ${drawnCount}-key overlay as the Layer ${sel} preset`
+                : `Save the current ${drawnCount}-key overlay as the ${layerName(state.layerMetadata, sel)} preset`
             }
             onClick={() =>
               save({
                 ...stored,
                 presets: {
                   ...stored.presets,
-                  [sel]: { name: `Layer ${sel}`, cells: Object.values(state.draft) },
+                  [sel]: { name: layerName(state.layerMetadata, sel), cells: Object.values(state.draft) },
                 },
               })
             }
           >
-            Save current overlay as L{sel} preset
+            Save current overlay as {layerName(state.layerMetadata, sel)} preset
           </Button>
         )}
 
@@ -389,7 +392,7 @@ function LocalPresets() {
         </label>
         {stored.follow && applied !== null && (
           <div className="text-[11px] text-accent">
-            L{applied} preset applied · following the live layer
+            {layerName(state.layerMetadata, applied)} preset applied · following the live layer
           </div>
         )}
         <div className="text-[10.5px] leading-relaxed text-faint">

@@ -100,7 +100,9 @@ key inspector retain the raw matrix row and column for diagnostics.
   selected in; the panel lists the resulting 20%→100% keys before installing.
   On a Glove80, the complete Magic-layer layout from `moergo-config`—two
   battery bars, three BLE profile keys, and the USB key—is available as a
-  single preset that targets the chosen layer.
+  single preset that targets the chosen layer. Rules already installed on
+  another layer can be re-pointed in bulk with **Move rules between layers**
+  under the Conditional rules list; key bindings stay where they are.
 
 Web Serial, WebHID, and Web Bluetooth need a Chromium-based browser (Chrome or
 Edge); Firefox and Safari don't implement them. Use **Web Serial** for upstream
