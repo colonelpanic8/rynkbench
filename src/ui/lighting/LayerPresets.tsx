@@ -16,6 +16,7 @@ import type {
   LightingOverlayCell,
   LightingSceneStatus,
 } from "../../vendor/rynk-wasm/rynk_wasm";
+import { layerName } from "../layer-names";
 import { useWorkbench } from "../state";
 import { Button, SectionLabel, TextInput, cx } from "../kit";
 import { TrashIcon } from "../icons";
@@ -109,6 +110,7 @@ function DeviceScenes({ status }: { status: LightingSceneStatus }) {
   const targetLayer = state.lightingTarget === "overlay" ? null : state.lightingTarget;
   const wakeLayers = state.lightingOutputMode?.wake_layers ?? state.lightingControls.wake_layers;
   const targetIsMagic = targetLayer !== null && maskHasLayer(wakeLayers, targetLayer);
+  const targetName = targetLayer === null ? "" : layerName(state.layerMetadata, targetLayer);
 
   /** Layers with a local preset take that preset; the rest pass through. */
   const copyLocalPresets = () => {
@@ -178,20 +180,20 @@ function DeviceScenes({ status }: { status: LightingSceneStatus }) {
                   disabled={state.lightingBusy}
                   title={
                     targetIsMagic
-                      ? `Let Layer ${targetLayer} follow the normal lighting output policy`
-                      : `Keep Layer ${targetLayer}'s scene visible while normal lighting is off`
+                      ? `Let ${targetName} follow the normal lighting output policy`
+                      : `Keep the scene of ${targetName} visible while normal lighting is off`
                   }
                   onClick={() =>
                     io.setWakeLayers(setLayerInMask(wakeLayers, targetLayer, !targetIsMagic))
                   }
                 >
                   {targetIsMagic
-                    ? `L${targetLayer} is Magic · remove designation`
-                    : `Use L${targetLayer} as a Magic Layer`}
+                    ? `${targetName} is Magic · remove designation`
+                    : `Use ${targetName} as a Magic Layer`}
                 </Button>
                 <p className="mt-1.5 text-[10.5px] leading-relaxed text-faint">
-                  Paint and apply L{targetLayer}&apos;s scene above. The scene and Magic setting are
-                  stored on the keyboard and survive reboot.
+                  Paint and apply the scene of {targetName} above. The scene and Magic setting
+                  are stored on the keyboard and survive reboot.
                 </p>
               </>
             )}
@@ -280,7 +282,7 @@ function LocalPresets() {
         hasContent={(n) => stored.presets[n] !== undefined}
         live={state.currentLayer}
         titleFor={(n) =>
-          `Layer ${n}${
+          `${layerName(state.layerMetadata, n)} · physical layer ${n}${
             stored.presets[n] ? ` · ${stored.presets[n].name}` : " · no preset"
           }${n === state.currentLayer ? " · live" : ""}`
         }

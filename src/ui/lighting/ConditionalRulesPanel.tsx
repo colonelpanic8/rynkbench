@@ -26,6 +26,7 @@ import { describeRuleConditions, runtimeConditionalSupported } from "./firmwareR
 import { describeEffect, effectRgb } from "./effect";
 import { EffectEditor } from "./EffectEditor";
 import { keyAddressWithLegend } from "../key-address";
+import { layerName } from "../layer-names";
 import { appendRule, moveRule, newRule, removeRule, replaceRule } from "./rules";
 import type { Rule, Rules } from "./rules";
 
@@ -96,6 +97,7 @@ export function ConditionalRulesPanel() {
     () => [...ledLabels.keys()].sort((a, b) => a - b),
     [ledLabels],
   );
+  const nameOf = (layer: number) => layerName(state.layerMetadata, layer);
 
   // Battery conditions name a lighting node: the central half is node 0 and
   // each split peripheral follows. Nothing here invents nodes the device did
@@ -195,7 +197,7 @@ export function ConditionalRulesPanel() {
                   <button
                     type="button"
                     onClick={() => setSelected(open ? null : index)}
-                    title={`${ledName(cell.led_id)} · ${describeRuleConditions(entry)}`}
+                    title={`${ledName(cell.led_id)} · ${describeRuleConditions(entry, nameOf)}`}
                     className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
                   >
                     <span
@@ -207,7 +209,7 @@ export function ConditionalRulesPanel() {
                         {ledName(cell.led_id)}
                       </span>
                       <span className="block truncate text-[10.5px] text-faint">
-                        {describeRuleConditions(entry)} · {describeEffect(cell.effect)}
+                        {describeRuleConditions(entry, nameOf)} · {describeEffect(cell.effect)}
                       </span>
                     </span>
                   </button>
@@ -323,7 +325,7 @@ export function ConditionalRulesPanel() {
                 >
                   {Array.from({ length: bundle.caps.num_layers }, (_, n) => (
                     <option key={n} value={n}>
-                      L{n}
+                      {layerName(state.layerMetadata, n)}
                     </option>
                   ))}
                 </select>

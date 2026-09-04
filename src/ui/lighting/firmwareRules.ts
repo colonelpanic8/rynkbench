@@ -143,9 +143,12 @@ export function firmwarePreviewCells(
 
 /** Human summary of a runtime rule, including the predicates only the
  *  extended cell carries. */
-export function describeRuleConditions(rule: LightingExtendedConditionalSceneCell): string {
+export function describeRuleConditions(
+  rule: LightingExtendedConditionalSceneCell,
+  layerLabel?: (layer: number) => string,
+): string {
   const parts: string[] = [];
-  const base = describeConditions(rule.cell);
+  const base = describeConditions(rule.cell, layerLabel);
   if (base !== "always") parts.push(base);
   if (rule.effects !== undefined) {
     parts.push(rule.effects.enabled ? "effects on" : "effects off");
@@ -173,10 +176,13 @@ export function describeRuleConditions(rule: LightingExtendedConditionalSceneCel
   return parts.length > 0 ? parts.join(" + ") : "always";
 }
 
-export function describeConditions(cell: LightingConditionalSceneCell): string {
+export function describeConditions(
+  cell: LightingConditionalSceneCell,
+  layerLabel: (layer: number) => string = (layer) => `L${layer}`,
+): string {
   const parts: string[] = [];
   const { layer, battery, output_mode } = cell.conditions;
-  if (layer) parts.push(`L${layer.layer} ${layer.active ? "active" : "inactive"}`);
+  if (layer) parts.push(`${layerLabel(layer.layer)} ${layer.active ? "active" : "inactive"}`);
   if (battery) {
     let range = "level known";
     if (battery.min_level !== undefined && battery.max_level !== undefined) {

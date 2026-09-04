@@ -28,17 +28,74 @@ export interface StatusSetupWriter {
   applyRules(rules: StatusRule[]): Promise<StatusSetupResult>;
 }
 
-export const GLOVE80_BATTERY_BARS: BatteryBarPreset[] = [
-  { layer: 2, node: 0, leds: [39, 38, 37, 36, 35] },
-  { layer: 2, node: 1, leds: [79, 78, 77, 76, 75] },
+/** The layer MoErgo's stock Glove80 config keeps its Magic cluster on. */
+export const GLOVE80_MAGIC_LAYER = 2;
+
+export function glove80BatteryBars(layer = GLOVE80_MAGIC_LAYER): BatteryBarPreset[] {
+  return [
+    { layer, node: 0, leds: [39, 38, 37, 36, 35] },
+    { layer, node: 1, leds: [79, 78, 77, 76, 75] },
+  ];
+}
+
+export function glove80ConnectionKeys(layer = GLOVE80_MAGIC_LAYER): ConnectionKeyPreset[] {
+  return [
+    { layer, row: 3, col: 6, led: 3, kind: { type: "ble", slot: 0 } },
+    { layer, row: 4, col: 6, led: 4, kind: { type: "ble", slot: 1 } },
+    { layer, row: 5, col: 6, led: 5, kind: { type: "ble", slot: 2 } },
+    { layer, row: 0, col: 6, led: 0, kind: { type: "usb" } },
+  ];
+}
+
+/** Fill direction of a battery bar: the first key lights at 20%, the last at 100%. */
+export type BarOrder = "bottom-up" | "top-down" | "left-right" | "right-left" | "selection";
+
+export const BAR_ORDERS: Array<{ id: BarOrder; label: string }> = [
+  { id: "bottom-up", label: "Bottom to top" },
+  { id: "top-down", label: "Top to bottom" },
+  { id: "left-right", label: "Left to right" },
+  { id: "right-left", label: "Right to left" },
+  { id: "selection", label: "Selection order" },
 ];
 
-export const GLOVE80_CONNECTION_KEYS: ConnectionKeyPreset[] = [
-  { layer: 2, row: 3, col: 6, led: 3, kind: { type: "ble", slot: 0 } },
-  { layer: 2, row: 4, col: 6, led: 4, kind: { type: "ble", slot: 1 } },
-  { layer: 2, row: 5, col: 6, led: 5, kind: { type: "ble", slot: 2 } },
-  { layer: 2, row: 0, col: 6, led: 0, kind: { type: "usb" } },
-];
+export interface BarKey {
+  ledId: number;
+  x: number;
+  y: number;
+}
+
+/** Vertical for a column, horizontal for a row — column stagger makes a row's
+ *  keys differ in y, so the wider extent decides. */
+export function detectBarOrder(keys: readonly BarKey[]): BarOrder {
+  if (keys.length === 0) return "bottom-up";
+  const xs = keys.map((key) => key.x);
+  const ys = keys.map((key) => key.y);
+  const xSpan = Math.max(...xs) - Math.min(...xs);
+  const ySpan = Math.max(...ys) - Math.min(...ys);
+  return xSpan > ySpan ? "left-right" : "bottom-up";
+}
+
+/** LEDs in 20%→100% order. `keys` is in selection order. */
+export function orderBatteryBar(keys: readonly BarKey[], order: BarOrder): number[] {
+  const sorted = [...keys];
+  switch (order) {
+    case "bottom-up":
+      sorted.sort((a, b) => b.y - a.y || a.x - b.x);
+      break;
+    case "top-down":
+      sorted.sort((a, b) => a.y - b.y || a.x - b.x);
+      break;
+    case "left-right":
+      sorted.sort((a, b) => a.x - b.x || b.y - a.y);
+      break;
+    case "right-left":
+      sorted.sort((a, b) => b.x - a.x || b.y - a.y);
+      break;
+    case "selection":
+      break;
+  }
+  return sorted.map((key) => key.ledId);
+}
 
 const solid = (r: number, g: number, b: number): LightingEffect => ({
   Solid: { color: { r, g, b } },
@@ -239,10 +296,13 @@ export function replaceUsbStatus(current: StatusRule[], layer: number, led: numb
   return [...kept, ...usbStatusRules(layer, led)];
 }
 
-export function installGlove80StatusRules(current: StatusRule[]): StatusRule[] {
+export function installGlove80StatusRules(
+  current: StatusRule[],
+  layer = GLOVE80_MAGIC_LAYER,
+): StatusRule[] {
   let rules = current;
-  for (const bar of GLOVE80_BATTERY_BARS) rules = replaceBatteryBar(rules, bar);
-  for (const key of GLOVE80_CONNECTION_KEYS) {
+  for (const bar of glove80BatteryBars(layer)) rules = replaceBatteryBar(rules, bar);
+  for (const key of glove80ConnectionKeys(layer)) {
     rules = key.kind.type === "ble"
       ? replaceBleStatus(rules, key.layer, key.led, key.kind.slot)
       : replaceUsbStatus(rules, key.layer, key.led);
@@ -253,10 +313,11 @@ export function installGlove80StatusRules(current: StatusRule[]): StatusRule[] {
 export async function writeGlove80StatusSetup(
   writer: StatusSetupWriter,
   current: StatusRule[],
+  layer = GLOVE80_MAGIC_LAYER,
 ): Promise<StatusSetupResult> {
-  for (const preset of GLOVE80_CONNECTION_KEYS) {
+  for (const preset of glove80ConnectionKeys(layer)) {
     const result = await writer.setKey(preset, connectionKeyAction(preset.kind));
     if (!result.ok) return result;
   }
-  return writer.applyRules(installGlove80StatusRules(current));
+  return writer.applyRules(installGlove80StatusRules(current, layer));
 }

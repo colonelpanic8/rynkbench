@@ -1,16 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  GLOVE80_BATTERY_BARS,
-  GLOVE80_CONNECTION_KEYS,
   batteryBarRules,
   bleStatusRules,
   connectionKeyAction,
+  detectBarOrder,
+  glove80BatteryBars,
+  glove80ConnectionKeys,
   installGlove80StatusRules,
+  orderBatteryBar,
   replaceBatteryBar,
   replaceBleStatus,
   usbStatusRules,
   writeGlove80StatusSetup,
 } from "./statusPresets";
+
+const GLOVE80_BATTERY_BARS = glove80BatteryBars();
+const GLOVE80_CONNECTION_KEYS = glove80ConnectionKeys();
 
 describe("status lighting presets", () => {
   it("builds the ordered five-segment battery treatment from the config", () => {
@@ -56,6 +61,40 @@ describe("status lighting presets", () => {
     expect(twice).toEqual(once);
     expect(GLOVE80_BATTERY_BARS[0].leds).toEqual([39, 38, 37, 36, 35]);
     expect(GLOVE80_BATTERY_BARS[1].leds).toEqual([79, 78, 77, 76, 75]);
+  });
+
+  it("installs the complete Glove80 setup on the chosen layer", () => {
+    const rules = installGlove80StatusRules([], 11);
+
+    expect(rules).toHaveLength(47);
+    expect(rules.every((rule) => rule.cell.conditions.layer?.layer === 11)).toBe(true);
+    expect(glove80ConnectionKeys(11).every((key) => key.layer === 11)).toBe(true);
+  });
+
+  it("orders a bar along its longer axis, tolerating column stagger", () => {
+    // A staggered row: y drifts per column, as on the Glove80's finger columns.
+    const row = [
+      { ledId: 30, x: 4, y: 3.2 },
+      { ledId: 33, x: 1, y: 3.0 },
+      { ledId: 31, x: 3, y: 3.4 },
+      { ledId: 34, x: 0, y: 2.8 },
+      { ledId: 32, x: 2, y: 3.3 },
+    ];
+    expect(detectBarOrder(row)).toBe("left-right");
+    expect(orderBatteryBar(row, "left-right")).toEqual([34, 33, 32, 31, 30]);
+    expect(orderBatteryBar(row, "right-left")).toEqual([30, 31, 32, 33, 34]);
+    expect(orderBatteryBar(row, "selection")).toEqual([30, 33, 31, 34, 32]);
+
+    const column = [
+      { ledId: 35, x: 5, y: 0 },
+      { ledId: 36, x: 5, y: 1 },
+      { ledId: 39, x: 5, y: 4 },
+      { ledId: 37, x: 5, y: 2 },
+      { ledId: 38, x: 5, y: 3 },
+    ];
+    expect(detectBarOrder(column)).toBe("bottom-up");
+    expect(orderBatteryBar(column, "bottom-up")).toEqual([39, 38, 37, 36, 35]);
+    expect(orderBatteryBar(column, "top-down")).toEqual([35, 36, 37, 38, 39]);
   });
 
   it("replaces only matching status rules and preserves unrelated entries", () => {

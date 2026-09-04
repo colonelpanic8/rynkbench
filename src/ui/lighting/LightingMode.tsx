@@ -1,6 +1,6 @@
 // Lighting mode: drag-paint overlay cells on the canvas, stage vs apply.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   LightingEffect,
   LightingOverlayCell,
@@ -11,6 +11,7 @@ import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
 import { keyAddressLabel, keyAddressWithLegend } from "../key-address";
 import { keyActionGlyph } from "../labels";
+import { layerName } from "../layer-names";
 import type { LightingTarget } from "../state";
 import {
   activeLightingBase,
@@ -126,14 +127,29 @@ function LightingTargets() {
 
   const key = (t: LightingTarget) => (t === "overlay" ? "overlay" : `L${t}`);
 
+  // Mirror Keymap mode's tabs: occupied layers by name, plus any layer that
+  // already carries scene cells so nothing lit is hidden.
+  const layers = useMemo(() => {
+    const set = new Set(layersWithCells);
+    if (state.layerMetadata) {
+      state.layerMetadata.forEach((metadata, layer) => {
+        if (metadata.occupied) set.add(layer);
+      });
+    } else {
+      for (let layer = 0; layer < numLayers; layer++) set.add(layer);
+    }
+    if (target !== "overlay") set.add(target);
+    return [...set].filter((layer) => layer < numLayers).sort((a, b) => a - b);
+  }, [layersWithCells, state.layerMetadata, numLayers, target]);
+
   useLayoutEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
     const btn = wrap.querySelector<HTMLButtonElement>(`[data-target="${key(target)}"]`);
     if (btn) setUnderline({ left: btn.offsetLeft, width: btn.offsetWidth });
-  }, [target, numLayers]);
+  }, [target, layers.length]);
 
-  const targets: LightingTarget[] = ["overlay", ...Array.from({ length: numLayers }, (_, n) => n)];
+  const targets: LightingTarget[] = ["overlay", ...layers];
 
   return (
     <div className="flex items-center gap-3 px-1">
@@ -144,9 +160,9 @@ function LightingTargets() {
           const live = isLayer && t === state.currentLayer;
           const hasContent = isLayer && layersWithCells.has(t);
           const title = isLayer
-            ? `Layer ${t} scene${hasContent ? " · lit" : " · unlit"}${
-                live ? " · effective layer" : ""
-              }`
+            ? `${layerName(state.layerMetadata, t)} · physical layer ${t} · scene ${
+                hasContent ? "lit" : "unlit"
+              }${live ? " · effective layer" : ""}`
             : "Transient overlay — cleared on reboot";
           return (
             <button
@@ -160,7 +176,7 @@ function LightingTargets() {
                 selected ? "text-ink" : "text-faint hover:text-mute",
               )}
             >
-              <span className="tnum">{t === "overlay" ? "Overlay" : `L${t}`}</span>
+              <span>{t === "overlay" ? "Overlay" : layerName(state.layerMetadata, t)}</span>
               {hasContent && <span className="size-1 rounded-full bg-accent" />}
               {live && (
                 <span title="Effective layer" className="size-1.5 rounded-full bg-ok" />
@@ -202,6 +218,10 @@ function FirmwareRulesPanel() {
     }
     return result;
   }, [bundle.model]);
+  const nameOf = useCallback(
+    (layer: number) => layerName(state.layerMetadata, layer),
+    [state.layerMetadata],
+  );
   const groups = useMemo(() => {
     const result = new Map<
       string,
@@ -210,7 +230,7 @@ function FirmwareRulesPanel() {
     for (const cell of state.compiledScenes) {
       const key = JSON.stringify({ layer: cell.layer, effect: cell.effect });
       const group = result.get(key) ?? {
-        description: `L${cell.layer} active`,
+        description: `${nameOf(cell.layer)} active`,
         color: effectColor(cell.effect),
         leds: [],
         active: activeLayers.has(cell.layer),
@@ -221,7 +241,7 @@ function FirmwareRulesPanel() {
     for (const cell of state.conditionalScenes) {
       const key = JSON.stringify({ conditions: cell.conditions, effect: cell.effect });
       const group = result.get(key) ?? {
-        description: describeConditions(cell),
+        description: describeConditions(cell, nameOf),
         color: effectColor(cell.effect),
         leds: [],
         active: conditionalRuleMatches(cell, {
@@ -240,6 +260,7 @@ function FirmwareRulesPanel() {
     state.compiledScenes,
     state.conditionalScenes,
     state.lightingOutputMode,
+    nameOf,
   ]);
 
   const activeCount = groups.reduce(
@@ -263,7 +284,7 @@ function FirmwareRulesPanel() {
           {toggleAction !== undefined && `User${toggleAction} toggles all lighting`}
           {toggleAction !== undefined && wakeLayerList.length > 0 && " · "}
           {wakeLayerList.length > 0 &&
-            `${wakeLayerList.map((layer) => `L${layer}`).join(", ")} ${
+            `${wakeLayerList.map(nameOf).join(", ")} ${
               wakeLayerList.length === 1 ? "wakes" : "wake"
             } lighting and presents status`}
         </p>
@@ -542,7 +563,9 @@ export function LightingMode() {
       <div className="flex min-h-0 flex-1 flex-col gap-3 max-lg:min-h-[380px]">
         {sceneStatus && <LightingTargets />}
         <div className="flex items-center gap-3 px-1">
-          <SectionLabel>{isLayerTarget ? `Layer ${target} scene` : "Overlay"}</SectionLabel>
+          <SectionLabel>
+            {isLayerTarget ? `${layerName(state.layerMetadata, target)} scene` : "Overlay"}
+          </SectionLabel>
           <span className="tnum text-[12px] text-faint">
             {visibleCount} lit
             {isLayerTarget && compiledCount > 0 ? ` · ${compiledCount} firmware defaults` : ""}
@@ -880,13 +903,13 @@ export function LightingMode() {
               disabled={stagedCount === 0 || state.lightingBusy}
               title={
                 isLayerTarget
-                  ? `Replace Layer ${target}'s stored scene with the canvas`
+                  ? `Replace the stored scene of ${layerName(state.layerMetadata, target)} (physical layer ${target}) with the canvas`
                   : "Apply the staged overlay to the device"
               }
               onClick={() => (isLayerTarget ? applyLayerDraft() : io.applyOverlay(Object.values(draftMap)))}
             >
               {state.lightingBusy && <SpinnerIcon size={13} />}
-              Apply{isLayerTarget ? ` to L${target}` : ""}
+              Apply{isLayerTarget ? ` to ${layerName(state.layerMetadata, target)}` : ""}
               {stagedCount > 0 ? ` · ${stagedCount} staged` : ""}
             </Button>
             <div className="flex items-center gap-2">
