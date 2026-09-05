@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  batteryBarLevels,
   batteryBarRules,
   bleStatusRules,
   connectionKeyAction,
@@ -28,6 +29,45 @@ describe("status lighting presets", () => {
     expect(rules.slice(5, 8).map((rule) => rule.cell.led_id)).toEqual([39, 38, 39]);
     expect(rules.slice(8).every((rule) => rule.cell.conditions.battery?.charge === "Charging"))
       .toBe(true);
+  });
+
+  it("spaces segments as equal bands, or as MoErgo's 0…100 steps", () => {
+    expect(batteryBarLevels(5)).toEqual([1, 21, 41, 61, 81]);
+    expect(batteryBarLevels(6)).toEqual([1, 17, 34, 51, 67, 84]);
+    expect(batteryBarLevels(6, "stock")).toEqual([1, 20, 40, 60, 80, 100]);
+  });
+
+  it("builds a six-segment stock bar colored as a whole", () => {
+    const leds = [36, 30, 24, 18, 12, 7];
+    const rules = batteryBarRules({ layer: 2, node: 0, leds, style: "stock" });
+    const levelled = rules.filter((rule) => rule.cell.conditions.battery?.charge === "Any");
+    const at = (level: number) =>
+      levelled
+        .filter(({ cell }) => {
+          const { min_level = 0, max_level = 100 } = cell.conditions.battery!;
+          return level >= min_level && level <= max_level;
+        })
+        .reduce((lit, rule) => lit.set(rule.cell.led_id, rule.cell.effect), new Map());
+
+    expect(rules).toHaveLength(6 + 2 + 1 + 6);
+    expect([...at(100).keys()]).toEqual(leds);
+    expect([...at(55).keys()]).toEqual([36, 30, 24]);
+    expect([...new Set(at(55).values())]).toEqual([{ Solid: { color: { r: 0, g: 128, b: 0 } } }]);
+    expect([...at(25).keys()]).toEqual([36, 30]);
+    expect([...new Set(at(25).values())]).toEqual([{ Solid: { color: { r: 160, g: 128, b: 0 } } }]);
+    expect([...at(5).keys()]).toEqual([36]);
+    expect(at(5).get(36)).toEqual({ Solid: { color: { r: 160, g: 0, b: 0 } } });
+  });
+
+  it("draws the stock Glove80 layout across the left half", () => {
+    const bars = glove80BatteryBars(11, "stock");
+    expect(bars.map((bar) => bar.leds)).toEqual([
+      [36, 30, 24, 18, 12, 7],
+      [37, 31, 25, 19, 13, 8],
+    ]);
+    const rules = installGlove80StatusRules([], 11, "stock");
+    expect(rules).toHaveLength(2 * 15 + 3 * 6 + 3);
+    expect(rules.every((rule) => rule.cell.conditions.layer?.layer === 11)).toBe(true);
   });
 
   it("orders Bluetooth states so active transport wins last", () => {

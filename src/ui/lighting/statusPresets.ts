@@ -6,11 +6,27 @@ import type {
 
 export type StatusRule = LightingExtendedConditionalSceneCell;
 
+/** How a bar colors itself as the level drops.
+ *  - `bands`: each segment owns an equal band; the lowest lit segments turn
+ *    amber under 40% and the first turns red under 20%.
+ *  - `stock`: MoErgo's firmware treatment — thresholds 0…100 in equal steps,
+ *    the whole bar green at 40%+, yellow at 20%+, red below. */
+export type BarStyle = "bands" | "stock";
+
+export const BAR_STYLES: Array<{ id: BarStyle; label: string }> = [
+  { id: "bands", label: "Equal bands · amber/red low" },
+  { id: "stock", label: "MoErgo stock · whole bar green/yellow/red" },
+];
+
+export const MIN_BAR_SEGMENTS = 3;
+export const MAX_BAR_SEGMENTS = 8;
+
 export interface BatteryBarPreset {
   layer: number;
   node: number;
-  /** Bottom-to-top LEDs. */
+  /** Empty-to-full LEDs. */
   leds: number[];
+  style?: BarStyle;
 }
 
 export interface ConnectionKeyPreset {
@@ -31,7 +47,35 @@ export interface StatusSetupWriter {
 /** The layer MoErgo's stock Glove80 config keeps its Magic cluster on. */
 export const GLOVE80_MAGIC_LAYER = 2;
 
-export function glove80BatteryBars(layer = GLOVE80_MAGIC_LAYER): BatteryBarPreset[] {
+/** Where the Glove80 preset draws its bars.
+ *  - `outer-columns`: five keys up each half's outer column, below the top key.
+ *  - `stock`: MoErgo's firmware layout — six keys across the left half, the
+ *    left battery on row 2 and the right battery on row 3. */
+export type Glove80BarLayout = "outer-columns" | "stock";
+
+export const GLOVE80_BAR_LAYOUTS: Array<{ id: Glove80BarLayout; label: string; hint: string }> = [
+  {
+    id: "outer-columns",
+    label: "Outer columns",
+    hint: "five vertical segments per half, each on its own half",
+  },
+  {
+    id: "stock",
+    label: "MoErgo stock",
+    hint: "six horizontal segments per half, both across the left half's rows 2 and 3",
+  },
+];
+
+export function glove80BatteryBars(
+  layer = GLOVE80_MAGIC_LAYER,
+  layout: Glove80BarLayout = "outer-columns",
+): BatteryBarPreset[] {
+  if (layout === "stock") {
+    return [
+      { layer, node: 0, leds: [36, 30, 24, 18, 12, 7], style: "stock" },
+      { layer, node: 1, leds: [37, 31, 25, 19, 13, 8], style: "stock" },
+    ];
+  }
   return [
     { layer, node: 0, leds: [39, 38, 37, 36, 35] },
     { layer, node: 1, leds: [79, 78, 77, 76, 75] },
@@ -103,6 +147,7 @@ const solid = (r: number, g: number, b: number): LightingEffect => ({
 
 const GREEN = solid(0, 128, 0);
 const AMBER = solid(160, 48, 0);
+const YELLOW = solid(160, 128, 0);
 const RED = solid(160, 0, 0);
 const CHARGING = solid(0, 64, 160);
 const EMPTY = solid(42, 42, 42);
@@ -133,45 +178,56 @@ function rule(
   };
 }
 
+/** The minimum level at which each segment lights, empty to full. */
+export function batteryBarLevels(count: number, style: BarStyle = "bands"): number[] {
+  return Array.from({ length: count }, (_, index) => {
+    if (index === 0) return 1;
+    return style === "stock"
+      ? Math.round((index * 100) / (count - 1))
+      : 1 + Math.floor((index * 100) / count);
+  });
+}
+
 export function batteryBarRules(preset: BatteryBarPreset): StatusRule[] {
-  if (preset.leds.length !== 5) throw new Error("a battery bar needs exactly five LEDs");
-  if (new Set(preset.leds).size !== 5) throw new Error("a battery bar needs five distinct LEDs");
-  const levels = [1, 21, 41, 61, 81];
-  const base = levels.map((min_level, index) => {
-    const entry = rule(preset.leds[index], preset.layer, GREEN);
-    entry.cell.conditions.battery = {
-      node: preset.node,
-      min_level,
-      max_level: undefined,
-      charge: "Any",
-    };
-    return entry;
-  });
-  const low = [
-    { led: preset.leds[0], min_level: 1, max_level: 40, effect: AMBER },
-    { led: preset.leds[1], min_level: 21, max_level: 40, effect: AMBER },
-    { led: preset.leds[0], min_level: 1, max_level: 20, effect: RED },
-  ].map(({ led, min_level, max_level, effect }) => {
+  const count = preset.leds.length;
+  if (count < MIN_BAR_SEGMENTS || count > MAX_BAR_SEGMENTS) {
+    throw new Error(`a battery bar needs ${MIN_BAR_SEGMENTS}–${MAX_BAR_SEGMENTS} LEDs`);
+  }
+  if (new Set(preset.leds).size !== count) throw new Error("a battery bar needs distinct LEDs");
+  const style = preset.style ?? "bands";
+  const levels = batteryBarLevels(count, style);
+  const band = (
+    led: number,
+    effect: LightingEffect,
+    min_level: number,
+    max_level: number | undefined,
+    charge: "Any" | "Charging" = "Any",
+  ): StatusRule => {
     const entry = rule(led, preset.layer, effect);
-    entry.cell.conditions.battery = {
-      node: preset.node,
-      min_level,
-      max_level,
-      charge: "Any",
-    };
+    entry.cell.conditions.battery = { node: preset.node, min_level, max_level, charge };
     return entry;
-  });
-  const charging = levels.map((min_level, index) => {
-    const entry = rule(preset.leds[index], preset.layer, CHARGING);
-    entry.cell.conditions.battery = {
-      node: preset.node,
-      min_level,
-      max_level: undefined,
-      charge: "Charging",
-    };
-    return entry;
-  });
-  return [...base, ...low, ...charging];
+  };
+  const levelled: StatusRule[] = [];
+  if (style === "stock") {
+    levels.forEach((level, index) => {
+      const led = preset.leds[index];
+      levelled.push(band(led, GREEN, Math.max(level, 40), undefined));
+      if (level < 40) levelled.push(band(led, YELLOW, Math.max(level, 20), 39));
+      if (level < 20) levelled.push(band(led, RED, level, 19));
+    });
+  } else {
+    levels.forEach((level, index) => levelled.push(band(preset.leds[index], GREEN, level, undefined)));
+    levels.forEach((level, index) => {
+      if (level <= 40) levelled.push(band(preset.leds[index], AMBER, level, 40));
+    });
+    levels.forEach((level, index) => {
+      if (level <= 20) levelled.push(band(preset.leds[index], RED, level, 20));
+    });
+  }
+  const charging = levels.map((level, index) =>
+    band(preset.leds[index], CHARGING, level, undefined, "Charging"),
+  );
+  return [...levelled, ...charging];
 }
 
 export function bleStatusRules(layer: number, led: number, slot: number): StatusRule[] {
@@ -299,9 +355,10 @@ export function replaceUsbStatus(current: StatusRule[], layer: number, led: numb
 export function installGlove80StatusRules(
   current: StatusRule[],
   layer = GLOVE80_MAGIC_LAYER,
+  layout: Glove80BarLayout = "outer-columns",
 ): StatusRule[] {
   let rules = current;
-  for (const bar of glove80BatteryBars(layer)) rules = replaceBatteryBar(rules, bar);
+  for (const bar of glove80BatteryBars(layer, layout)) rules = replaceBatteryBar(rules, bar);
   for (const key of glove80ConnectionKeys(layer)) {
     rules = key.kind.type === "ble"
       ? replaceBleStatus(rules, key.layer, key.led, key.kind.slot)
@@ -314,10 +371,11 @@ export async function writeGlove80StatusSetup(
   writer: StatusSetupWriter,
   current: StatusRule[],
   layer = GLOVE80_MAGIC_LAYER,
+  layout: Glove80BarLayout = "outer-columns",
 ): Promise<StatusSetupResult> {
   for (const preset of glove80ConnectionKeys(layer)) {
     const result = await writer.setKey(preset, connectionKeyAction(preset.kind));
     if (!result.ok) return result;
   }
-  return writer.applyRules(installGlove80StatusRules(current, layer));
+  return writer.applyRules(installGlove80StatusRules(current, layer, layout));
 }

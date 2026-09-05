@@ -87,10 +87,13 @@ key inspector retain the raw matrix row and column for diagnostics.
   a firmware and Rynk protocol addition rather than only a Rynkbench UI change.
 - **Battery indicators use conditional lighting rules.** Node 0 is the central
   half and node 1 is the peripheral half on a split board. A bar is a set of
-  rules on chosen LEDs with increasing minimum levels (for example 1, 21, 41,
-  61, and 81 percent); later low-battery or charging rules can override their
-  colors. The connected firmware must advertise conditional lighting and both
-  battery nodes for the complete two-half bar to work.
+  rules on three to eight chosen LEDs with increasing minimum levels; later
+  low-battery or charging rules override their colors. Two styles are offered:
+  equal bands (a five-key bar lights at 1, 21, 41, 61, and 81 percent, with the
+  lowest segments amber under 40 and red under 20) and MoErgo stock (levels
+  step 0…100 across the bar and the whole bar is green, yellow, or red). The
+  connected firmware must advertise conditional lighting and both battery
+  nodes for the complete two-half bar to work.
 - **Status setup installs those rules for you.** In Lighting, use **Select** to
   choose one connection key or five battery-bar keys, then use **Status setup**
   to bind the action and install the ordered indicator rules on the chosen
@@ -98,9 +101,11 @@ key inspector retain the raw matrix row and column for diagnostics.
   along its longer axis—bottom-to-top for a column, left-to-right for a row—and
   the fill direction can be overridden, including using the order the keys were
   selected in; the panel lists the resulting 20%→100% keys before installing.
-  On a Glove80, the complete Magic-layer layout from `moergo-config`—two
-  battery bars, three BLE profile keys, and the USB key—is available as a
-  single preset that targets the chosen layer. Rules already installed on
+  On a Glove80, the complete Magic-layer layout—two battery bars, three BLE
+  profile keys, and the USB key—is available as a single preset that targets
+  the chosen layer. Its bars can run up each half's outer column (five
+  segments each) or follow MoErgo's stock firmware, which draws both halves'
+  six-segment bars across the left half on rows 2 and 3. Rules already installed on
   another layer can be re-pointed in bulk with **Move rules between layers**
   under the Conditional rules list; key bindings stay where they are.
 
