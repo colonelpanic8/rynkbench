@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emissiveRgb } from "./color";
+import { emissiveRgb, hexToRgb, hsvToRgb, rgbToHex, rgbToHsv } from "./color";
 
 describe("emissiveRgb", () => {
   it("leaves off and already-visible colors unchanged", () => {
@@ -11,4 +11,14 @@ describe("emissiveRgb", () => {
     expect(emissiveRgb({ r: 32, g: 32, b: 32 })).toEqual({ r: 96, g: 96, b: 96 });
     expect(emissiveRgb({ r: 8, g: 16, b: 32 })).toEqual({ r: 24, g: 48, b: 96 });
   });
+});
+
+describe("painted pastel colors", () => {
+  it.each(["#ffb3ba", "#baffc9", "#bae1ff", "#e0bbff"])(
+    "preserves %s through the hex field and HSV brush",
+    (hex) => {
+      const rgb = hexToRgb(hex)!;
+      expect(rgbToHex(hsvToRgb(rgbToHsv(rgb)))).toBe(hex);
+    },
+  );
 });
