@@ -186,14 +186,14 @@ function keyCodeLabel(code: KeyCode): string {
 }
 
 const LIGHT_LABELS: Record<string, string> = {
-  BacklightOn: "BL On",
-  BacklightOff: "BL Off",
-  BacklightToggle: "BL",
+  BacklightOn: "All On",
+  BacklightOff: "All Off",
+  BacklightToggle: "All RGB",
   BacklightDown: "BL−",
   BacklightUp: "BL+",
   BacklightStep: "BL Step",
   BacklightToggleBreathing: "BL Br",
-  RgbTog: "RGB",
+  RgbTog: "FX RGB",
   RgbModeForward: "RGB→",
   RgbModeReverse: "RGB←",
   RgbHui: "Hue+",

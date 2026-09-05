@@ -10,8 +10,8 @@ import type { KeyView } from "../../model/keyboard";
 import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
 import { keyAddressLabel, keyAddressWithLegend } from "../key-address";
-import { keyActionGlyph } from "../labels";
 import { layerName } from "../layer-names";
+import { lightingKeyLegend } from "./keyLegend";
 import type { LightingTarget } from "../state";
 import {
   activeLightingBase,
@@ -28,7 +28,6 @@ import type { Hsv } from "../color";
 import { cssEmissiveRgb, cssRgb, hsvToRgb } from "../color";
 import { Button, InspectorShell, SectionLabel, cx } from "../kit";
 import { EraserIcon, MarqueeIcon, SparkleIcon, SpinnerIcon, WarningIcon } from "../icons";
-import { effectiveAction } from "../live/compositor";
 import { targetPreviewEffects } from "./preview";
 import { layersInMask, maskHasLayer } from "./wakeLayers";
 import { conditionalRuleMatches, describeConditions, firmwarePreviewCells } from "./firmwareRules";
@@ -214,10 +213,16 @@ function FirmwareRulesPanel() {
   const labels = useMemo(() => {
     const result = new Map<number, string>();
     for (const key of bundle.model.keys) {
-      if (key.ledId !== undefined) result.set(key.ledId, keyAddressWithLegend(key));
+      if (key.ledId !== undefined) {
+        const label = lightingKeyLegend(
+          key, state.layers, bundle.caps.num_cols,
+          state.lightingTarget, state.activeLayers, state.defaultLayer,
+        );
+        result.set(key.ledId, keyAddressWithLegend({ ...key, label }));
+      }
     }
     return result;
-  }, [bundle.model]);
+  }, [bundle.model, bundle.caps.num_cols, state.layers, state.lightingTarget, state.activeLayers, state.defaultLayer]);
   const nameOf = useCallback(
     (layer: number) => layerName(state.layerMetadata, layer),
     [state.layerMetadata],
@@ -490,21 +495,13 @@ export function LightingMode() {
     }
   };
 
-  // Legend fallback mirrors keymap mode (enrichment label, else the resolved
-  // live binding) so every cap remains identifiable while lighting is previewed.
-  // It stays dimmed so the paint color remains the loudest thing.
-  const cols = bundle.caps.num_cols;
-  const legendFor = (key: KeyView): KeyDecor["glyph"] => {
-    const action = effectiveAction(
-      state.layers,
-      state.activeLayers,
-      state.defaultLayer,
-      key.row * cols + key.col,
-    );
-    const text = keyActionGlyph(action).text;
-    if (text) return { text, dim: true };
-    return key.label ? { text: key.label, dim: true } : undefined;
-  };
+  const legendFor = (key: KeyView): KeyDecor["glyph"] => ({
+    text: lightingKeyLegend(
+      key, state.layers, bundle.caps.num_cols,
+      target, state.activeLayers, state.defaultLayer,
+    ),
+    dim: true,
+  });
 
   const decorFor = (key: KeyView): KeyDecor => {
     if (key.ledId === undefined) {
@@ -610,6 +607,9 @@ export function LightingMode() {
 
       <InspectorShell>
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+          <div className="border-b border-line-soft pb-4">
+            <BackgroundPanel />
+          </div>
           {/* Brush */}
           <div>
             <SectionLabel>Brush</SectionLabel>
@@ -856,10 +856,6 @@ export function LightingMode() {
               </div>
             </>
           )}
-
-          <div className="border-t border-line-soft pt-4">
-            <BackgroundPanel />
-          </div>
 
           {/* The effect pack is configured in its own mode; this is only a
               signpost so the lighting inspector still says where it went. */}
