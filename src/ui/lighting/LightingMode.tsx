@@ -490,14 +490,16 @@ export function LightingMode() {
     }
   };
 
-  // Legend fallback mirrors keymap mode (enrichment label, else the resolved
-  // live binding) so every cap remains identifiable while lighting is previewed.
-  // It stays dimmed so the paint color remains the loudest thing.
+  // Legends follow the scene target the same way the preview composites it:
+  // the target layer over the default layer, or the live stack for the
+  // overlay. Enrichment labels fill any gap. They stay dimmed so the paint
+  // color remains the loudest thing.
   const cols = bundle.caps.num_cols;
+  const legendLayers = isLayerTarget ? [target] : state.activeLayers;
   const legendFor = (key: KeyView): KeyDecor["glyph"] => {
     const action = effectiveAction(
       state.layers,
-      state.activeLayers,
+      legendLayers,
       state.defaultLayer,
       key.row * cols + key.col,
     );
