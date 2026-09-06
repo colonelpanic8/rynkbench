@@ -7,6 +7,7 @@ import {
   canTravelKeyEditHistory,
   hasPendingConfigurationWrite,
   initialWorkbenchState,
+  ioFeaturesFor,
   makeIo,
   makeWorkbenchReducer,
 } from "./state";
@@ -126,38 +127,16 @@ export function Workbench({
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  // The bundle is an immutable connect-time snapshot, so it is the whole
+  // dependency: every feature flag derives from it.
   const io = useMemo(
     () =>
-      makeIo(
-        bundle.session,
-        () => stateRef.current,
-        dispatch,
-        bundle.caps.num_cols,
-        onClose,
-        bundle.sceneStatus !== null,
-        bundle.lightingExtension !== null,
-        bundle.runtimeConditionalStatus !== null,
-        {
-          sceneCapacity: bundle.sceneStatus?.capacity ?? null,
-          conditionalSceneCapacity: bundle.runtimeConditionalStatus?.capacity ?? null,
-          scenesSupported: bundle.sceneStatus !== null,
-          conditionalScenesSupported: bundle.runtimeConditionalStatus !== null,
-          pointingSupported: bundle.pointingConfig !== null,
-          lightingOutputSupported:
-            bundle.lightingState !== null && bundle.lightingOutputMode !== null,
-        },
-      ),
-    [
-      bundle.session,
-      bundle.caps.num_cols,
-      onClose,
-      bundle.sceneStatus,
-      bundle.lightingExtension,
-      bundle.runtimeConditionalStatus,
-      bundle.pointingConfig,
-      bundle.lightingState,
-      bundle.lightingOutputMode,
-    ],
+      makeIo(bundle.session, () => stateRef.current, dispatch, {
+        cols: bundle.caps.num_cols,
+        onDisconnect: onClose,
+        features: ioFeaturesFor(bundle),
+      }),
+    [bundle, onClose],
   );
 
   const historyBusy = hasPendingConfigurationWrite(state);

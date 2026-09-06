@@ -353,7 +353,7 @@ describe("verified status writes", () => {
         },
       },
     } as unknown as RynkSession;
-    const io = makeIo(session, () => baseState(), (act) => actions.push(act), 2, () => {});
+    const io = makeIo(session, () => baseState(), (act) => actions.push(act), { cols: 2, onDisconnect: () => {} });
 
     const result = await io.applyConditionalScenes(cells);
 
@@ -372,7 +372,7 @@ describe("verified status writes", () => {
         },
       },
     } as unknown as RynkSession;
-    const io = makeIo(session, () => baseState(), (act) => actions.push(act), 2, () => {});
+    const io = makeIo(session, () => baseState(), (act) => actions.push(act), { cols: 2, onDisconnect: () => {} });
 
     const result = await io.applyConditionalScenes([statusRule(1, 7)]);
 
@@ -394,7 +394,7 @@ describe("verified status writes", () => {
       },
     } as unknown as RynkSession;
     const state = baseState({ layers: [["No", "No"], []] });
-    const io = makeIo(session, () => state, (act) => actions.push(act), 2, () => {});
+    const io = makeIo(session, () => state, (act) => actions.push(act), { cols: 2, onDisconnect: () => {} });
 
     const result = await io.setKey(0, 0, 0, "No");
 
@@ -421,8 +421,7 @@ describe("verified status writes", () => {
       (action) => {
         state = reducer(state, action);
       },
-      2,
-      () => {},
+      { cols: 2, onDisconnect: () => {} },
     );
 
     const result = await io.moveKey(0, { row: 0, col: 0 }, { row: 0, col: 1 });
@@ -449,8 +448,7 @@ describe("verified status writes", () => {
       (action) => {
         state = reducer(state, action);
       },
-      2,
-      () => {},
+      { cols: 2, onDisconnect: () => {} },
     );
 
     const result = await io.moveKey(0, { row: 0, col: 0 }, { row: 0, col: 1 });
@@ -479,8 +477,7 @@ describe("verified status writes", () => {
       (action) => {
         state = reducer(state, action);
       },
-      2,
-      () => {},
+      { cols: 2, onDisconnect: () => {} },
     );
 
     const result = await io.moveKey(0, { row: 0, col: 0 }, { row: 0, col: 1 });
@@ -505,7 +502,7 @@ describe("verified status writes", () => {
     });
     const setKey = vi.fn();
     const session = { keymap: { setKey } } as unknown as RynkSession;
-    const io = makeIo(session, () => state, () => {}, 2, () => {});
+    const io = makeIo(session, () => state, () => {}, { cols: 2, onDisconnect: () => {} });
 
     const result = await io.moveKey(0, { row: 0, col: 0 }, { row: 0, col: 1 });
 
@@ -532,7 +529,7 @@ describe("device-backed direct key history", () => {
       },
     } as unknown as RynkSession;
     return {
-      io: makeIo(session, () => state, dispatch, 2, () => {}),
+      io: makeIo(session, () => state, dispatch, { cols: 2, onDisconnect: () => {} }),
       state: () => state,
     };
   }
@@ -641,20 +638,25 @@ describe("positional hold triggers", () => {
 
   it("optimistically replaces the table and clears pending on success", () => {
     const started = reducer(baseState({ morseHoldTriggerPositions: previous }), {
-      type: "holdTriggerPositionsWriteStart",
-      positions: next,
+      type: "fieldWriteStart",
+      field: "morseHoldTriggerPositions",
+      value: next,
     });
     expect(started.morseHoldTriggerPositions).toEqual(next);
     expect(started.pending.morseHoldTriggerPositions).toEqual({ status: "pending" });
 
-    const finished = reducer(started, { type: "holdTriggerPositionsWriteOk" });
+    const finished = reducer(started, {
+      type: "fieldWriteOk",
+      field: "morseHoldTriggerPositions",
+    });
     expect(finished.morseHoldTriggerPositions).toEqual(next);
     expect(finished.pending.morseHoldTriggerPositions).toBeUndefined();
   });
 
   it("restores the previous table when the write fails", () => {
     const failed = reducer(baseState({ morseHoldTriggerPositions: next }), {
-      type: "holdTriggerPositionsWriteErr",
+      type: "fieldWriteErr",
+      field: "morseHoldTriggerPositions",
       prev: previous,
       message: "flash busy",
     });
@@ -737,7 +739,7 @@ describe("extension parameters", () => {
   function ioWith(lighting: Partial<RynkSession["lighting"]>, state = baseState()) {
     const actions: WorkbenchAction[] = [];
     const session = { lighting } as unknown as RynkSession;
-    const io = makeIo(session, () => state, (act) => actions.push(act), 2, () => {});
+    const io = makeIo(session, () => state, (act) => actions.push(act), { cols: 2, onDisconnect: () => {} });
     return { io, actions };
   }
 
@@ -1065,7 +1067,7 @@ describe("pointing configuration state", () => {
     const dispatch = (action: WorkbenchAction) => {
       state = reducer(state, action);
     };
-    const io = makeIo(session, () => state, dispatch, 2, () => {});
+    const io = makeIo(session, () => state, dispatch, { cols: 2, onDisconnect: () => {} });
 
     await expect(io.applyPointingConfig()).resolves.toEqual({ ok: true });
     expect(set).toHaveBeenCalledOnce();
@@ -1091,7 +1093,7 @@ describe("pointing configuration state", () => {
     const dispatch = (action: WorkbenchAction) => {
       state = reducer(state, action);
     };
-    const io = makeIo(session, () => state, dispatch, 2, () => {});
+    const io = makeIo(session, () => state, dispatch, { cols: 2, onDisconnect: () => {} });
 
     await expect(io.applyPointingConfig()).resolves.toEqual({
       ok: false,
@@ -1117,7 +1119,7 @@ describe("pointing configuration state", () => {
     const dispatch = (action: WorkbenchAction) => {
       state = reducer(state, action);
     };
-    const io = makeIo(session, () => state, dispatch, 2, () => {});
+    const io = makeIo(session, () => state, dispatch, { cols: 2, onDisconnect: () => {} });
 
     await expect(io.reloadPointingConfig()).resolves.toEqual({ ok: true });
     expect(state.pointingConfig?.revision).toBe(4);
@@ -1280,8 +1282,7 @@ describe("batch mode", () => {
         (action) => {
           state = reducer(state, action);
         },
-        2,
-        () => {},
+        { cols: 2, onDisconnect: () => {} },
       ),
       state: () => state,
       writes,

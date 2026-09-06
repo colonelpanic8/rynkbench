@@ -181,26 +181,31 @@ async function writeBehaviors(
 
   if (config !== undefined && !same(config, state.behavior)) {
     const prev = state.behavior;
-    dispatch({ type: "behaviorWriteStart", config });
+    dispatch({ type: "fieldWriteStart", field: "behavior", value: config });
     try {
       await session.behavior.set(config);
-      dispatch({ type: "behaviorWriteOk" });
+      dispatch({ type: "fieldWriteOk", field: "behavior" });
       applied.push("global behavior timing");
     } catch (error) {
-      dispatch({ type: "behaviorWriteErr", prev, message: errorMessage(error) });
+      dispatch({ type: "fieldWriteErr", field: "behavior", prev, message: errorMessage(error) });
       throw new Error(`Writing global behavior timing: ${errorMessage(error)}`);
     }
   }
 
   if (options !== undefined && !same(options, state.behaviorOptions)) {
     const prev = state.behaviorOptions;
-    dispatch({ type: "behaviorOptionsWriteStart", options });
+    dispatch({ type: "fieldWriteStart", field: "behaviorOptions", value: options });
     try {
       await session.behavior.setOptions(options);
-      dispatch({ type: "behaviorOptionsWriteOk" });
+      dispatch({ type: "fieldWriteOk", field: "behaviorOptions" });
       applied.push("behavior options");
     } catch (error) {
-      dispatch({ type: "behaviorOptionsWriteErr", prev, message: errorMessage(error) });
+      dispatch({
+        type: "fieldWriteErr",
+        field: "behaviorOptions",
+        prev,
+        message: errorMessage(error),
+      });
       throw new Error(`Writing behavior options: ${errorMessage(error)}`);
     }
   }
@@ -275,16 +280,21 @@ async function writeBehaviors(
       );
     } else if (!same(hold_trigger_positions, state.morseHoldTriggerPositions)) {
       const prev = state.morseHoldTriggerPositions;
-      dispatch({ type: "holdTriggerPositionsWriteStart", positions: hold_trigger_positions });
+      dispatch({
+        type: "fieldWriteStart",
+        field: "morseHoldTriggerPositions",
+        value: hold_trigger_positions,
+      });
       try {
         await session.behavior.setHoldTriggerPositions(hold_trigger_positions);
-        dispatch({ type: "holdTriggerPositionsWriteOk" });
+        dispatch({ type: "fieldWriteOk", field: "morseHoldTriggerPositions" });
         applied.push(
           `${hold_trigger_positions.length} morse hold trigger position${hold_trigger_positions.length === 1 ? "" : "s"}`,
         );
       } catch (error) {
         dispatch({
-          type: "holdTriggerPositionsWriteErr",
+          type: "fieldWriteErr",
+          field: "morseHoldTriggerPositions",
           prev,
           message: errorMessage(error),
         });
@@ -300,13 +310,18 @@ async function writeBehaviors(
       );
     } else if (!same(auto_mouse_layers, state.autoMouseLayers)) {
       const prev = state.autoMouseLayers;
-      dispatch({ type: "autoMouseWriteStart", configs: auto_mouse_layers });
+      dispatch({ type: "fieldWriteStart", field: "autoMouseLayers", value: auto_mouse_layers });
       try {
         await session.behavior.setAutoMouseLayers(auto_mouse_layers);
-        dispatch({ type: "autoMouseWriteOk" });
+        dispatch({ type: "fieldWriteOk", field: "autoMouseLayers" });
         applied.push(`${auto_mouse_layers.length} auto-mouse layer${auto_mouse_layers.length === 1 ? "" : "s"}`);
       } catch (error) {
-        dispatch({ type: "autoMouseWriteErr", prev, message: errorMessage(error) });
+        dispatch({
+          type: "fieldWriteErr",
+          field: "autoMouseLayers",
+          prev,
+          message: errorMessage(error),
+        });
         throw new Error(`Writing auto-mouse layers: ${errorMessage(error)}`);
       }
     }
@@ -320,13 +335,13 @@ async function writeBehaviors(
       );
     } else if (!same([...bytes], [...state.macroBytes])) {
       const prev = state.macroBytes;
-      dispatch({ type: "macrosWriteStart", bytes });
+      dispatch({ type: "fieldWriteStart", field: "macros", value: bytes });
       try {
         await session.macros.write(bytes);
-        dispatch({ type: "macrosWriteOk" });
+        dispatch({ type: "fieldWriteOk", field: "macros" });
         applied.push(`${bytes.length} B of macro space`);
       } catch (error) {
-        dispatch({ type: "macrosWriteErr", prev, message: errorMessage(error) });
+        dispatch({ type: "fieldWriteErr", field: "macros", prev, message: errorMessage(error) });
         throw new Error(`Writing macro space: ${errorMessage(error)}`);
       }
     }

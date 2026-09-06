@@ -197,6 +197,30 @@ export function slotPendingId(kind: SlotKind, index: number): string {
   return `${kind}:${index}`;
 }
 
+export function morseProfilePendingId(index: number): string {
+  return `morseProfile:${index}`;
+}
+
+/** Whole-value configuration surfaces written optimistically as one unit.
+ *  The key is the pending id; the value names the state field it replaces. */
+const FIELD_STATE_KEY = {
+  behavior: "behavior",
+  behaviorOptions: "behaviorOptions",
+  macros: "macroBytes",
+  morseHoldTriggerPositions: "morseHoldTriggerPositions",
+  autoMouseLayers: "autoMouseLayers",
+} as const satisfies Record<string, keyof WorkbenchState>;
+
+export type WritableField = keyof typeof FIELD_STATE_KEY;
+
+export type FieldValue<F extends WritableField> = WorkbenchState[(typeof FIELD_STATE_KEY)[F]];
+
+type FieldWriteAction = {
+  [F in WritableField]:
+    | { type: "fieldWriteStart"; field: F; value: FieldValue<F> }
+    | { type: "fieldWriteErr"; field: F; prev: FieldValue<F>; message: string };
+}[WritableField];
+
 export interface WorkbenchState {
   mode: Mode;
   uiLayer: number;
@@ -573,17 +597,10 @@ export type WorkbenchAction =
       message: string;
     }
   | { type: "slotErrDismiss"; kind: SlotKind; index: number }
-  | { type: "macrosWriteStart"; bytes: Uint8Array }
-  | { type: "macrosWriteOk" }
-  | { type: "macrosWriteErr"; prev: Uint8Array; message: string }
-  | { type: "macrosErrDismiss" }
-  | { type: "behaviorWriteStart"; config: BehaviorConfig }
-  | { type: "behaviorWriteOk" }
-  | { type: "behaviorWriteErr"; prev: BehaviorConfig | null; message: string }
-  | { type: "behaviorErrDismiss" }
-  | { type: "behaviorOptionsWriteStart"; options: BehaviorOptions }
-  | { type: "behaviorOptionsWriteOk" }
-  | { type: "behaviorOptionsWriteErr"; prev: BehaviorOptions | null; message: string }
+  | FieldWriteAction
+  | { type: "fieldWriteOk"; field: WritableField }
+  /** Drop any pending record's error by its id (slot, field, morse profile). */
+  | { type: "pendingErrDismiss"; id: string }
   | { type: "morseProfileWriteStart"; entry: MorseProfileEntry }
   | { type: "morseProfileWriteOk"; index: number }
   | { type: "morseProfileWriteErr"; index: number; prev: MorseProfileEntry | null; message: string }
@@ -595,16 +612,6 @@ export type WorkbenchAction =
       positions: MorseHoldTriggerPosition[];
       message: string;
     }
-  | { type: "holdTriggerPositionsWriteStart"; positions: MorseHoldTriggerPosition[] }
-  | { type: "holdTriggerPositionsWriteOk" }
-  | {
-      type: "holdTriggerPositionsWriteErr";
-      prev: MorseHoldTriggerPosition[];
-      message: string;
-    }
-  | { type: "autoMouseWriteStart"; configs: AutoMouseLayerConfig[] }
-  | { type: "autoMouseWriteOk" }
-  | { type: "autoMouseWriteErr"; prev: AutoMouseLayerConfig[]; message: string }
   | { type: "topicLedIndicator"; indicator: LedIndicator }
   | { type: "topicModifier"; modifiers: ModifierCombination };
 
@@ -1040,18 +1047,9 @@ export function makeWorkbenchReducer(cols: number) {
         };
       case "pointingWriteStart":
         return { ...state, pointingBusy: true, pointingError: null };
-      case "pointingWriteOk": {
-        const config = normalizePointingConfig(act.config);
-        return {
-          ...state,
-          pointingConfig: config,
-          pointingDraft: structuredClone(config),
-          pointingBusy: false,
-          pointingError: null,
-        };
-      }
       case "pointingWriteErr":
         return { ...state, pointingBusy: false, pointingError: act.message };
+      case "pointingWriteOk":
       case "pointingReloaded": {
         const config = normalizePointingConfig(act.config);
         return {
@@ -1132,65 +1130,24 @@ export function makeWorkbenchReducer(cols: number) {
         const { [id]: _gone, ...pending } = state.pending;
         return { ...state, pending };
       }
-      case "macrosWriteStart":
+      case "fieldWriteStart":
         return {
           ...state,
-          macroBytes: act.bytes,
-          pending: { ...state.pending, macros: { status: "pending" } },
+          [FIELD_STATE_KEY[act.field]]: act.value,
+          pending: { ...state.pending, [act.field]: { status: "pending" } },
         };
-      case "macrosWriteOk": {
-        const { macros: _done, ...pending } = state.pending;
+      case "fieldWriteErr":
+        return {
+          ...state,
+          [FIELD_STATE_KEY[act.field]]: act.prev,
+          pending: { ...state.pending, [act.field]: { status: "error", message: act.message } },
+        };
+      case "fieldWriteOk":
+      case "pendingErrDismiss": {
+        const id = act.type === "fieldWriteOk" ? act.field : act.id;
+        const { [id]: _done, ...pending } = state.pending;
         return { ...state, pending };
       }
-      case "macrosWriteErr":
-        return {
-          ...state,
-          macroBytes: act.prev,
-          pending: { ...state.pending, macros: { status: "error", message: act.message } },
-        };
-      case "macrosErrDismiss": {
-        const { macros: _gone, ...pending } = state.pending;
-        return { ...state, pending };
-      }
-      case "behaviorWriteStart":
-        return {
-          ...state,
-          behavior: act.config,
-          pending: { ...state.pending, behavior: { status: "pending" } },
-        };
-      case "behaviorWriteOk": {
-        const { behavior: _done, ...pending } = state.pending;
-        return { ...state, pending };
-      }
-      case "behaviorWriteErr":
-        return {
-          ...state,
-          behavior: act.prev,
-          pending: { ...state.pending, behavior: { status: "error", message: act.message } },
-        };
-      case "behaviorErrDismiss": {
-        const { behavior: _gone, ...pending } = state.pending;
-        return { ...state, pending };
-      }
-      case "behaviorOptionsWriteStart":
-        return {
-          ...state,
-          behaviorOptions: act.options,
-          pending: { ...state.pending, behaviorOptions: { status: "pending" } },
-        };
-      case "behaviorOptionsWriteOk": {
-        const { behaviorOptions: _done, ...pending } = state.pending;
-        return { ...state, pending };
-      }
-      case "behaviorOptionsWriteErr":
-        return {
-          ...state,
-          behaviorOptions: act.prev,
-          pending: {
-            ...state.pending,
-            behaviorOptions: { status: "error", message: act.message },
-          },
-        };
       case "morseProfileWriteStart": {
         const morseProfiles = state.morseProfiles
           .filter((entry) => entry.index !== act.entry.index)
@@ -1201,12 +1158,12 @@ export function makeWorkbenchReducer(cols: number) {
           morseProfiles,
           pending: {
             ...state.pending,
-            [`morseProfile:${act.entry.index}`]: { status: "pending" },
+            [morseProfilePendingId(act.entry.index)]: { status: "pending" },
           },
         };
       }
       case "morseProfileWriteOk": {
-        const { [`morseProfile:${act.index}`]: _done, ...pending } = state.pending;
+        const { [morseProfilePendingId(act.index)]: _done, ...pending } = state.pending;
         return { ...state, pending };
       }
       case "morseProfileWriteErr": {
@@ -1219,7 +1176,7 @@ export function makeWorkbenchReducer(cols: number) {
           morseProfiles,
           pending: {
             ...state.pending,
-            [`morseProfile:${act.index}`]: { status: "error", message: act.message },
+            [morseProfilePendingId(act.index)]: { status: "error", message: act.message },
           },
         };
       }
@@ -1232,11 +1189,11 @@ export function makeWorkbenchReducer(cols: number) {
           ),
           pending: {
             ...state.pending,
-            [`morseProfile:${act.index}`]: { status: "pending" },
+            [morseProfilePendingId(act.index)]: { status: "pending" },
           },
         };
       case "morseProfileDeleteOk": {
-        const { [`morseProfile:${act.index}`]: _done, ...pending } = state.pending;
+        const { [morseProfilePendingId(act.index)]: _done, ...pending } = state.pending;
         return { ...state, pending };
       }
       case "morseProfileDeleteErr":
@@ -1246,45 +1203,7 @@ export function makeWorkbenchReducer(cols: number) {
           morseHoldTriggerPositions: act.positions,
           pending: {
             ...state.pending,
-            [`morseProfile:${act.entry.index}`]: { status: "error", message: act.message },
-          },
-        };
-      case "holdTriggerPositionsWriteStart":
-        return {
-          ...state,
-          morseHoldTriggerPositions: act.positions,
-          pending: { ...state.pending, morseHoldTriggerPositions: { status: "pending" } },
-        };
-      case "holdTriggerPositionsWriteOk": {
-        const { morseHoldTriggerPositions: _done, ...pending } = state.pending;
-        return { ...state, pending };
-      }
-      case "holdTriggerPositionsWriteErr":
-        return {
-          ...state,
-          morseHoldTriggerPositions: act.prev,
-          pending: {
-            ...state.pending,
-            morseHoldTriggerPositions: { status: "error", message: act.message },
-          },
-        };
-      case "autoMouseWriteStart":
-        return {
-          ...state,
-          autoMouseLayers: act.configs,
-          pending: { ...state.pending, autoMouseLayers: { status: "pending" } },
-        };
-      case "autoMouseWriteOk": {
-        const { autoMouseLayers: _done, ...pending } = state.pending;
-        return { ...state, pending };
-      }
-      case "autoMouseWriteErr":
-        return {
-          ...state,
-          autoMouseLayers: act.prev,
-          pending: {
-            ...state.pending,
-            autoMouseLayers: { status: "error", message: act.message },
+            [morseProfilePendingId(act.entry.index)]: { status: "error", message: act.message },
           },
         };
       case "topicLedIndicator":
@@ -1339,12 +1258,7 @@ export function stagedBetween(
 }
 
 /** The draft a given target edits (overlay draft, or that layer's). */
-export function lightingDraftFor(
-  state: WorkbenchState,
-  target: LightingTarget,
-): Record<number, LightingOverlayCell> {
-  return targetDraft(state, target);
-}
+export const lightingDraftFor = targetDraft;
 
 /** The baseline a given target stages against: the on-device overlay, or that
  *  layer's stored scene cells. */
@@ -1468,27 +1382,58 @@ export interface WorkbenchIo {
   /** Read one effect's generic parameter list. Firmware without the parameter
    *  surface records an empty list, which renders as no parameter controls. */
   loadExtensionParams(effect: number): void;
-  setSlot<K extends SlotKind>(kind: K, index: number, value: SlotValueOf<K>): void;
-  writeMacros(bytes: Uint8Array): void;
-  setBehavior(config: BehaviorConfig): void;
-  setBehaviorOptions(options: BehaviorOptions): void;
-  setMorseProfile(entry: MorseProfileEntry): void;
-  deleteMorseProfile(index: number): void;
-  setMorseHoldTriggerPositions(positions: MorseHoldTriggerPosition[]): void;
-  setAutoMouseLayers(configs: AutoMouseLayerConfig[]): void;
+  /** Optimistic single-value writes. Each resolves once the device has
+   *  answered; the reducer already reflects the outcome by then. */
+  setSlot<K extends SlotKind>(kind: K, index: number, value: SlotValueOf<K>): Promise<IoWriteResult>;
+  writeMacros(bytes: Uint8Array): Promise<IoWriteResult>;
+  setBehavior(config: BehaviorConfig): Promise<IoWriteResult>;
+  setMorseProfile(entry: MorseProfileEntry): Promise<IoWriteResult>;
+  deleteMorseProfile(index: number): Promise<IoWriteResult>;
+  setMorseHoldTriggerPositions(positions: MorseHoldTriggerPosition[]): Promise<IoWriteResult>;
   applyPointingConfig(): Promise<IoWriteResult>;
   reloadPointingConfig(): Promise<IoWriteResult>;
   disconnect(): void;
   rebootToBootloader(): Promise<void>;
 }
 
-export interface LayerManagementConfig {
+/** What the connected firmware exposes, as far as the io facade needs to
+ *  know: which optional surfaces exist and how much room they have. */
+export interface IoFeatures {
   sceneCapacity: number | null;
   conditionalSceneCapacity: number | null;
   scenesSupported: boolean;
   conditionalScenesSupported: boolean;
+  extensionSupported: boolean;
   pointingSupported: boolean;
   lightingOutputSupported: boolean;
+}
+
+export const NO_IO_FEATURES: IoFeatures = {
+  sceneCapacity: null,
+  conditionalSceneCapacity: null,
+  scenesSupported: false,
+  conditionalScenesSupported: false,
+  extensionSupported: false,
+  pointingSupported: false,
+  lightingOutputSupported: false,
+};
+
+export function ioFeaturesFor(bundle: ConnectedBundle): IoFeatures {
+  return {
+    sceneCapacity: bundle.sceneStatus?.capacity ?? null,
+    conditionalSceneCapacity: bundle.runtimeConditionalStatus?.capacity ?? null,
+    scenesSupported: bundle.sceneStatus !== null,
+    conditionalScenesSupported: bundle.runtimeConditionalStatus !== null,
+    extensionSupported: bundle.lightingExtension !== null,
+    pointingSupported: bundle.pointingConfig !== null,
+    lightingOutputSupported: bundle.lightingState !== null && bundle.lightingOutputMode !== null,
+  };
+}
+
+export interface IoOptions {
+  cols: number;
+  onDisconnect: () => void;
+  features?: IoFeatures;
 }
 
 export const WorkbenchContext = createContext<WorkbenchContextValue | null>(null);
@@ -1507,7 +1452,7 @@ export function errorMessage(err: unknown): string {
 async function readLayerRewriteSnapshot(
   session: RynkSession,
   state: WorkbenchState,
-  config: LayerManagementConfig,
+  config: IoFeatures,
 ): Promise<LayerRewriteSnapshot> {
   if (state.layerMetadata === null) {
     throw new Error("this firmware does not support persistent layer metadata");
@@ -1587,7 +1532,7 @@ async function readLayerRewriteSnapshot(
 async function writeLayerRewriteSnapshot(
   session: RynkSession,
   snapshot: LayerRewriteSnapshot,
-  config: LayerManagementConfig,
+  config: IoFeatures,
 ): Promise<void> {
   await session.keymap.replaceAll(
     snapshot.layers.map((actions, layer) => ({ layer, actions })),
@@ -1642,19 +1587,7 @@ export function makeIo(
   session: RynkSession,
   getState: () => WorkbenchState,
   dispatch: Dispatch<WorkbenchAction>,
-  cols: number,
-  onDisconnect: () => void,
-  scenesSupported = false,
-  extensionSupported = false,
-  conditionalScenesSupported = false,
-  layerConfig: LayerManagementConfig = {
-    sceneCapacity: null,
-    conditionalSceneCapacity: null,
-    scenesSupported: false,
-    conditionalScenesSupported: false,
-    pointingSupported: false,
-    lightingOutputSupported: false,
-  },
+  { cols, onDisconnect, features = NO_IO_FEATURES }: IoOptions,
 ): WorkbenchIo {
   let keyEditSequence = 0;
   let directKeyWritesPending = 0;
@@ -1667,6 +1600,40 @@ export function makeIo(
     session.lighting.extensionParams(effect).then(
       (items) => dispatch({ type: "extensionParamsLoaded", effect, items }),
       () => dispatch({ type: "extensionParamsLoaded", effect, items: [] }),
+    );
+  };
+
+  /** Run one optimistic write: `start` narrates the intent, then the device
+   *  answer settles it as `ok` or `err`. Every single-value write below is
+   *  this shape; only the dispatches differ. */
+  const settle = (
+    write: Promise<unknown>,
+    ok: () => void,
+    err: (message: string) => void,
+  ): Promise<IoWriteResult> =>
+    write.then(
+      () => {
+        ok();
+        return { ok: true } as const;
+      },
+      (error: unknown) => {
+        const message = errorMessage(error);
+        err(message);
+        return { ok: false, message } as const;
+      },
+    );
+
+  const writeField = <F extends WritableField>(
+    field: F,
+    value: FieldValue<F>,
+    write: () => Promise<unknown>,
+  ): Promise<IoWriteResult> => {
+    const prev = getState()[FIELD_STATE_KEY[field]] as FieldValue<F>;
+    dispatch({ type: "fieldWriteStart", field, value } as WorkbenchAction);
+    return settle(
+      write(),
+      () => dispatch({ type: "fieldWriteOk", field }),
+      (message) => dispatch({ type: "fieldWriteErr", field, prev, message } as WorkbenchAction),
     );
   };
 
@@ -1701,7 +1668,7 @@ export function makeIo(
     dispatch({ type: "layerOperationStart" });
     let original: LayerRewriteSnapshot | null = null;
     try {
-      original = await readLayerRewriteSnapshot(session, getState(), layerConfig);
+      original = await readLayerRewriteSnapshot(session, getState(), features);
       let plan: LayerRewrite;
       if (operation.type === "duplicate") {
         const baseName = original.metadata[operation.layer]?.name;
@@ -1715,14 +1682,14 @@ export function makeIo(
           original,
           operation.layer,
           name,
-          layerConfig.sceneCapacity,
-          layerConfig.conditionalSceneCapacity,
+          features.sceneCapacity,
+          features.conditionalSceneCapacity,
         );
       } else {
         plan = planLayerRewrite(original, operation);
       }
-      await writeLayerRewriteSnapshot(session, plan, layerConfig);
-      const readback = await readLayerRewriteSnapshot(session, getState(), layerConfig);
+      await writeLayerRewriteSnapshot(session, plan, features);
+      const readback = await readLayerRewriteSnapshot(session, getState(), features);
       assertLayerRewriteReadback(plan, readback);
       dispatch({ type: "keyHistoryClear" });
       dispatch({ type: "layerOperationApplied", rewrite: { ...readback, order: plan.order } });
@@ -1731,7 +1698,7 @@ export function makeIo(
       let message = errorMessage(error);
       if (original) {
         try {
-          await writeLayerRewriteSnapshot(session, original, layerConfig);
+          await writeLayerRewriteSnapshot(session, original, features);
         } catch (rollbackError) {
           message += `; rollback also failed: ${errorMessage(rollbackError)}`;
         }
@@ -2035,16 +2002,16 @@ export function makeIo(
         session.lighting.state(),
         session.lighting.outputMode().catch(() => getState().lightingOutputMode),
         session.lighting.readOverlay().catch(() => Object.values(getState().applied)),
-        scenesSupported
+        features.scenesSupported
           ? session.lighting.scenes.readScenes().catch(() => getState().scenes)
           : Promise.resolve(undefined),
-        extensionSupported
+        features.extensionSupported
           ? session.lighting.extension().catch(() => getState().lightingExtension)
           : Promise.resolve(undefined),
-        extensionSupported
+        features.extensionSupported
           ? session.lighting.extensionLayers().catch(() => getState().lightingExtensionLayers)
           : Promise.resolve(undefined),
-        conditionalScenesSupported
+        features.conditionalScenesSupported
           ? session.lighting.conditionalScenes
               .read()
               .catch(() => getState().runtimeConditionalScenes)
@@ -2173,87 +2140,43 @@ export function makeIo(
           : kind === "morse"
             ? session.morse.set(index, value as Morse)
             : session.forks.set(index, value as Fork);
-      write.then(
+      return settle(
+        write,
         () => dispatch({ type: "slotWriteOk", kind, index }),
-        (err) =>
-          dispatch({ type: "slotWriteErr", kind, index, prev, message: errorMessage(err) }),
+        (message) => dispatch({ type: "slotWriteErr", kind, index, prev, message }),
       );
     },
     writeMacros(bytes) {
-      const prev = getState().macroBytes;
-      dispatch({ type: "macrosWriteStart", bytes });
-      session.macros.write(bytes).then(
-        () => dispatch({ type: "macrosWriteOk" }),
-        (err) => dispatch({ type: "macrosWriteErr", prev, message: errorMessage(err) }),
-      );
+      return writeField("macros", bytes, () => session.macros.write(bytes));
     },
     setBehavior(config) {
-      const prev = getState().behavior;
-      dispatch({ type: "behaviorWriteStart", config });
-      session.behavior.set(config).then(
-        () => dispatch({ type: "behaviorWriteOk" }),
-        (err) => dispatch({ type: "behaviorWriteErr", prev, message: errorMessage(err) }),
-      );
-    },
-    setBehaviorOptions(options) {
-      const prev = getState().behaviorOptions;
-      dispatch({ type: "behaviorOptionsWriteStart", options });
-      session.behavior.setOptions(options).then(
-        () => dispatch({ type: "behaviorOptionsWriteOk" }),
-        (err) =>
-          dispatch({ type: "behaviorOptionsWriteErr", prev, message: errorMessage(err) }),
-      );
+      return writeField("behavior", config, () => session.behavior.set(config));
     },
     setMorseProfile(entry) {
       const prev = getState().morseProfiles.find((item) => item.index === entry.index) ?? null;
       dispatch({ type: "morseProfileWriteStart", entry });
-      session.behavior.setProfile(entry).then(
+      return settle(
+        session.behavior.setProfile(entry),
         () => dispatch({ type: "morseProfileWriteOk", index: entry.index }),
-        (err) =>
-          dispatch({
-            type: "morseProfileWriteErr",
-            index: entry.index,
-            prev,
-            message: errorMessage(err),
-          }),
+        (message) =>
+          dispatch({ type: "morseProfileWriteErr", index: entry.index, prev, message }),
       );
     },
     deleteMorseProfile(index) {
       const state = getState();
       const entry = state.morseProfiles.find((item) => item.index === index);
-      if (!entry) return;
+      if (!entry) return Promise.resolve({ ok: false, message: `no profile in slot ${index}` });
       const positions = state.morseHoldTriggerPositions;
       dispatch({ type: "morseProfileDeleteStart", index });
-      session.behavior.deleteProfile(index).then(
+      return settle(
+        session.behavior.deleteProfile(index),
         () => dispatch({ type: "morseProfileDeleteOk", index }),
-        (err) =>
-          dispatch({
-            type: "morseProfileDeleteErr",
-            entry,
-            positions,
-            message: errorMessage(err),
-          }),
+        (message) => dispatch({ type: "morseProfileDeleteErr", entry, positions, message }),
       );
     },
     setMorseHoldTriggerPositions(positions) {
-      const prev = getState().morseHoldTriggerPositions;
-      dispatch({ type: "holdTriggerPositionsWriteStart", positions });
-      session.behavior.setHoldTriggerPositions(positions).then(
-        () => dispatch({ type: "holdTriggerPositionsWriteOk" }),
-        (err) =>
-          dispatch({
-            type: "holdTriggerPositionsWriteErr",
-            prev,
-            message: errorMessage(err),
-          }),
-      );
-    },
-    setAutoMouseLayers(configs) {
-      const prev = getState().autoMouseLayers;
-      dispatch({ type: "autoMouseWriteStart", configs });
-      session.behavior.setAutoMouseLayers(configs).then(
-        () => dispatch({ type: "autoMouseWriteOk" }),
-        (err) => dispatch({ type: "autoMouseWriteErr", prev, message: errorMessage(err) }),
+      return writeField("morseHoldTriggerPositions", positions, () =>
+        session.behavior.setHoldTriggerPositions(positions),
       );
     },
     async applyPointingConfig() {
