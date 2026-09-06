@@ -3,6 +3,7 @@ import type {
   ConnectionStatus,
   ConnectionType,
   LightingConditionalSceneCell,
+  LightingEffect,
   LightingExtendedConditionalSceneCell,
   LightingOverlayCell,
   LightingOutputMode,
@@ -141,11 +142,56 @@ export function firmwarePreviewCells(
   return result;
 }
 
+export interface FirmwareRuleGroup {
+  /** Stable within one grouping pass — the shared condition + effect. */
+  id: string;
+  description: string;
+  effect: LightingEffect;
+  leds: number[];
+  active: boolean;
+}
+
+/** The compiled sources as the rule list shows them: one entry per distinct
+ *  condition + effect, carrying every LED it claims. Compiled layer cells and
+ *  conditional cells never share a group, since their conditions differ in
+ *  kind. */
+export function firmwareRuleGroups(
+  layerScenes: LightingSceneCell[],
+  conditionalScenes: LightingConditionalSceneCell[],
+  preview: FirmwareLightingPreview,
+  layerLabel: (layer: number) => string,
+): FirmwareRuleGroup[] {
+  const result = new Map<string, FirmwareRuleGroup>();
+  const push = (id: string, ledId: number, group: () => Omit<FirmwareRuleGroup, "id" | "leds">) => {
+    const existing = result.get(id) ?? { id, leds: [], ...group() };
+    existing.leds.push(ledId);
+    result.set(id, existing);
+  };
+  for (const cell of layerScenes) {
+    push(JSON.stringify({ layer: cell.layer, effect: cell.effect }), cell.led_id, () => ({
+      description: `${layerLabel(cell.layer)} active`,
+      effect: cell.effect,
+      active: preview.activeLayers.has(cell.layer),
+    }));
+  }
+  for (const cell of conditionalScenes) {
+    push(JSON.stringify({ conditions: cell.conditions, effect: cell.effect }), cell.led_id, () => ({
+      description: describeConditions(cell, layerLabel),
+      effect: cell.effect,
+      active: conditionalRuleMatches(cell, preview),
+    }));
+  }
+  return [...result.values()];
+}
+
 /** Human summary of a runtime rule, including the predicates only the
  *  extended cell carries. */
-export function describeRuleConditions(rule: LightingExtendedConditionalSceneCell): string {
+export function describeRuleConditions(
+  rule: LightingExtendedConditionalSceneCell,
+  layerLabel?: (layer: number) => string,
+): string {
   const parts: string[] = [];
-  const base = describeConditions(rule.cell);
+  const base = describeConditions(rule.cell, layerLabel);
   if (base !== "always") parts.push(base);
   if (rule.effects !== undefined) {
     parts.push(rule.effects.enabled ? "effects on" : "effects off");
@@ -173,10 +219,13 @@ export function describeRuleConditions(rule: LightingExtendedConditionalSceneCel
   return parts.length > 0 ? parts.join(" + ") : "always";
 }
 
-export function describeConditions(cell: LightingConditionalSceneCell): string {
+export function describeConditions(
+  cell: LightingConditionalSceneCell,
+  layerLabel: (layer: number) => string = (layer) => `L${layer}`,
+): string {
   const parts: string[] = [];
   const { layer, battery, output_mode } = cell.conditions;
-  if (layer) parts.push(`L${layer.layer} ${layer.active ? "active" : "inactive"}`);
+  if (layer) parts.push(`${layerLabel(layer.layer)} ${layer.active ? "active" : "inactive"}`);
   if (battery) {
     let range = "level known";
     if (battery.min_level !== undefined && battery.max_level !== undefined) {

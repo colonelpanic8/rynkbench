@@ -1,22 +1,25 @@
 import { describe, expect, it } from "vitest";
 import type { KeyAction } from "../../vendor/rynk-wasm/rynk_wasm";
-import { EMPTY_MODS } from "../labels";
+import { noModifiers } from "../../model/slots";
 import {
   isTextEditingTarget,
   keyClipboardShortcut,
   parseKeyActionClipboard,
+  pasteStillTargets,
+  planClipboardAction,
   serializeKeyAction,
 } from "./keyManipulation";
+import type { ClipboardBoard } from "./keyManipulation";
 
 describe("key-action clipboard", () => {
   it("round-trips a complete structured KeyAction", () => {
     const action: KeyAction = {
       TapHold: [
-        { KeyWithModifier: ["Kc1", { ...EMPTY_MODS, left_shift: true }] },
+        { KeyWithModifier: ["Kc1", { ...noModifiers(), left_shift: true }] },
         {
           LayerOnWithModifier: [
             3,
-            { ...EMPTY_MODS, left_ctrl: true, right_alt: true },
+            { ...noModifiers(), left_ctrl: true, right_alt: true },
           ],
         },
         7,
@@ -91,5 +94,50 @@ describe("key clipboard shortcuts", () => {
         closest: () => ({ role: "textbox" }),
       } as unknown as EventTarget),
     ).toBe(true);
+  });
+});
+
+describe("copy/paste policy", () => {
+  const enter = { Single: { Key: { Hid: "Enter" } } } as KeyAction;
+  const board: ClipboardBoard = {
+    cols: 2,
+    layers: [["No", enter] as KeyAction[]],
+    pending: {},
+  };
+  const selection = { type: "key", col: 1, row: 0 } as const;
+
+  it("copies and pastes the selected key", () => {
+    expect(planClipboardAction("copy", selection, 0, board)).toEqual({
+      kind: "copy",
+      target: { layer: 0, row: 0, col: 1, action: enter },
+    });
+    expect(planClipboardAction("paste", selection, 0, board).kind).toBe("paste");
+  });
+
+  it("ignores keystrokes without a shortcut, a key selection, or a key", () => {
+    expect(planClipboardAction(null, selection, 0, board).kind).toBe("ignore");
+    expect(planClipboardAction("copy", { type: "encoder", id: 0 }, 0, board).kind).toBe("ignore");
+    expect(planClipboardAction("copy", { type: "key", row: 4, col: 0 }, 0, board).kind).toBe(
+      "ignore",
+    );
+  });
+
+  it("refuses to paste over a key whose write is still in flight", () => {
+    const busy = { ...board, pending: { "0:0:1": { status: "pending" as const } } };
+    expect(planClipboardAction("paste", selection, 0, busy).kind).toBe("blocked");
+    // Copying reads what is already there, so it is never blocked.
+    expect(planClipboardAction("copy", selection, 0, busy).kind).toBe("copy");
+  });
+
+  it("drops a paste whose key changed while the clipboard was read", () => {
+    const target = { layer: 0, row: 0, col: 1, action: enter };
+    expect(pasteStillTargets(target, board)).toBe(true);
+    expect(pasteStillTargets(target, { ...board, layers: [["No", "No"]] })).toBe(false);
+    expect(
+      pasteStillTargets(target, {
+        ...board,
+        pending: { "0:0:1": { status: "pending" as const } },
+      }),
+    ).toBe(false);
   });
 });

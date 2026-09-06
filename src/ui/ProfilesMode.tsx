@@ -1,9 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type {
-  MorseMode,
-  MorseProfile,
-  MorseProfileEntry,
-} from "../vendor/rynk-wasm/rynk_wasm";
+import { useCallback, useMemo, useState } from "react";
+import type { MorseMode, MorseProfile, MorseProfileEntry } from "../vendor/rynk-wasm/rynk_wasm";
 import type { KeyView } from "../model/keyboard";
 import { BoardWell, KeyboardCanvas } from "./KeyboardCanvas";
 import type { KeyDecor } from "./KeyboardCanvas";
@@ -13,15 +9,13 @@ import {
   replaceProfilePositions,
   type MatrixPosition,
 } from "./profiles";
-import { useWorkbench } from "./state";
+import { morseProfilePendingId, useWorkbench } from "./state";
+import { useDeviceDraft } from "./device-draft";
+import { emptyMorseProfile } from "../model/slots";
+import { MORSE_MODES } from "./morse-profile";
+import { DEFAULT_TAP_HOLD_PROFILE } from "./morse";
+import { SaveBar, WriteStatus } from "./write-status";
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-const MODES: Array<MorseMode> = [
-  "Normal",
-  "PermissiveHold",
-  "HoldOnOtherPress",
-  "TapUnlessInterrupted",
-];
 const NUMBER_FIELDS: Array<{ key: keyof MorseProfile; label: string }> = [
   { key: "hold_timeout_ms", label: "Hold timeout" },
   { key: "gap_timeout_ms", label: "Gap timeout" },
@@ -42,19 +36,6 @@ function optionalNumber(value: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-const DEFAULT_PROFILE = 255;
-const EMPTY_PROFILE: MorseProfile = {
-  unilateral_tap: undefined,
-  opposite_hand_hold: undefined,
-  enable_flow_tap: undefined,
-  mode: undefined,
-  hold_timeout_ms: undefined,
-  gap_timeout_ms: undefined,
-  quick_tap_timeout_ms: undefined,
-  retro_tap: undefined,
-  prior_idle_time_ms: undefined,
-  hold_trigger_on_release: undefined,
-};
 
 function positionKey(position: MatrixPosition): string {
   return `${position.row},${position.col}`;
@@ -76,28 +57,24 @@ function HoldTriggerPositionsPanel({
         .map(({ row, col }) => ({ row, col })),
     [profile, state.morseHoldTriggerPositions],
   );
-  const [draft, setDraft] = useState<MatrixPosition[]>(saved);
-
-  useEffect(() => setDraft(saved), [saved]);
+  const pending = state.pending.morseHoldTriggerPositions;
+  const { draft, setDraft, dirty, reset } = useDeviceDraft(saved, pending?.status === "pending");
 
   const selected = useMemo(() => new Set(draft.map(positionKey)), [draft]);
   const otherCount = state.morseHoldTriggerPositions.length - saved.length;
   const full = capacity !== null && otherCount + draft.length >= capacity;
-  const dirty = !same(saved, draft);
-  const pending = state.pending.morseHoldTriggerPositions;
 
   const toggle = useCallback(
     (key: KeyView) => {
       const id = positionKey(key);
-      setDraft((current) => {
-        if (current.some((position) => positionKey(position) === id)) {
-          return current.filter((position) => positionKey(position) !== id);
-        }
-        if (capacity === null || otherCount + current.length >= capacity) return current;
-        return [...current, { row: key.row, col: key.col }];
-      });
+      if (draft.some((position) => positionKey(position) === id)) {
+        setDraft(draft.filter((position) => positionKey(position) !== id));
+        return;
+      }
+      if (capacity === null || otherCount + draft.length >= capacity) return;
+      setDraft([...draft, { row: key.row, col: key.col }]);
     },
-    [capacity, otherCount],
+    [capacity, otherCount, draft, setDraft],
   );
 
   const decorFor = useCallback(
@@ -153,26 +130,22 @@ function HoldTriggerPositionsPanel({
 
       <div className="mt-2 text-[11.5px] text-faint">
         {draft.length === 0
-          ? profile === DEFAULT_PROFILE
+          ? profile === DEFAULT_TAP_HOLD_PROFILE
             ? "No board-wide restriction: any key may trigger a hold."
             : `${profileName} currently inherits the board default.`
           : `${draft.length} key${draft.length === 1 ? "" : "s"} selected for this list.`}
       </div>
-      {pending?.status === "error" && (
-        <div className="mt-3 text-[12px] text-danger">Write failed: {pending.message}</div>
-      )}
-      <div className="mt-4 flex gap-2 border-t border-line-soft pt-4">
-        <Button
-          variant="primary"
-          disabled={!dirty || pending?.status === "pending"}
-          onClick={apply}
-        >
-          {pending?.status === "pending" ? "Writing…" : "Save positions"}
-        </Button>
-        <Button variant="ghost" disabled={!dirty} onClick={() => setDraft(saved)}>
-          Reset
-        </Button>
+      <div className="mt-3">
+        <WriteStatus id="morseHoldTriggerPositions" onRetry={apply} />
       </div>
+      <SaveBar
+        className="mt-4 flex gap-2 border-t border-line-soft pt-4"
+        dirty={dirty}
+        writing={pending?.status === "pending"}
+        saveLabel="Save positions"
+        onSave={apply}
+        onReset={reset}
+      />
     </Panel>
   );
 }
@@ -192,13 +165,21 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
   onDelete: () => void;
 }) {
   const { state, io } = useWorkbench();
-  const [draft, setDraft] = useState<MorseProfileEntry>(() => structuredClone(entry));
-  const pending = state.pending[`morseProfile:${entry.index}`];
-  const dirty = isNew || !same(entry, draft);
+  const pendingId = morseProfilePendingId(entry.index);
+  const pending = state.pending[pendingId];
+  const { draft, setDraft, dirty: edited, reset } = useDeviceDraft(entry, pending?.status === "pending");
+  const dirty = isNew || edited;
   const duplicateName = state.morseProfiles.some(
     (item) => item.index !== entry.index && item.name === draft.name.trim(),
   );
   const validName = draft.name.trim().length > 0 && !duplicateName;
+
+  // The new-profile form has to survive a failed write: leaving it early drops
+  // the entry the reducer just rolled back, along with its error.
+  const save = async () => {
+    const result = await io.setMorseProfile({ ...draft, name: draft.name.trim() });
+    if (result.ok) onSaved();
+  };
 
   return (
     <Panel className="p-5">
@@ -273,7 +254,11 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
                   className="rounded-md border border-line bg-raised px-2 py-1.5 text-[12px] text-ink"
                 >
                   <option value="">Global default</option>
-                  {MODES.map((mode) => <option key={mode} value={mode}>{mode}</option>)}
+                  {MORSE_MODES.map((mode) => (
+                    <option key={mode.id} value={mode.id}>
+                      {mode.label}
+                    </option>
+                  ))}
                 </select>
               </label>
               {BOOL_FIELDS.map(({ key, label }) => (
@@ -311,24 +296,18 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
           opposite-hand or bilateral key activates the hold.
         </p>
       )}
-      {pending?.status === "error" && (
-        <div className="mt-4 text-[12px] text-danger">Write failed: {pending.message}</div>
-      )}
-      <div className="mt-5 flex gap-2 border-t border-line-soft pt-4">
-        <Button
-          variant="primary"
-          disabled={!dirty || !validName || pending?.status === "pending"}
-          onClick={() => {
-            io.setMorseProfile({ ...draft, name: draft.name.trim() });
-            onSaved();
-          }}
-        >
-          {pending?.status === "pending" ? "Writing…" : isNew ? "Create profile" : "Save profile"}
-        </Button>
-        <Button variant="ghost" disabled={!dirty} onClick={() => setDraft(structuredClone(entry))}>
-          Reset
-        </Button>
+      <div className="mt-4">
+        <WriteStatus id={pendingId} onRetry={save} />
       </div>
+      <SaveBar
+        className="mt-5 flex gap-2 border-t border-line-soft pt-4"
+        dirty={dirty}
+        writing={pending?.status === "pending"}
+        saveDisabled={!validName}
+        saveLabel={isNew ? "Create profile" : "Save profile"}
+        onSave={save}
+        onReset={reset}
+      />
     </Panel>
   );
 }
@@ -359,14 +338,14 @@ export function ProfilesMode() {
     ? {
         index: activeSelection.index,
         name: "",
-        profile: EMPTY_PROFILE,
+        profile: emptyMorseProfile(),
       }
     : activeSelection.kind === "saved"
       ? state.morseProfiles.find((entry) => entry.index === activeSelection.index) ?? null
       : null;
   const positionProfile =
     activeSelection.kind === "default"
-      ? DEFAULT_PROFILE
+      ? DEFAULT_TAP_HOLD_PROFILE
       : activeSelection.kind === "saved"
         ? activeSelection.index
         : null;
@@ -414,7 +393,7 @@ export function ProfilesMode() {
                 <span className="mt-0.5 block text-[10.5px] text-faint">Fallback related keys</span>
               </span>
               <Chip tone={activeSelection.kind === "default" ? "accent" : "neutral"} className="tnum">
-                {profilePositionCount(state.morseHoldTriggerPositions, DEFAULT_PROFILE)}
+                {profilePositionCount(state.morseHoldTriggerPositions, DEFAULT_TAP_HOLD_PROFILE)}
               </Chip>
             </button>
 
@@ -474,7 +453,7 @@ export function ProfilesMode() {
           <div className="mx-auto flex max-w-5xl flex-col gap-4 pb-8">
           {editorEntry && activeSelection.kind !== "default" && (
             <ProfileEditor
-              key={`${activeSelection.kind}:${activeSelection.index}:${editorEntry.name}`}
+              key={`${activeSelection.kind}:${activeSelection.index}`}
               entry={editorEntry}
               isNew={activeSelection.kind === "new"}
               onSaved={() => setSelection({ kind: "saved", index: activeSelection.index })}

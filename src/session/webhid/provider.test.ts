@@ -13,6 +13,7 @@ vi.mock("../../vendor/rynk-wasm/rynk_wasm", () => ({
 }));
 vi.mock("../wasm", () => ({ initWasm: () => Promise.resolve() }));
 vi.mock("../link-session", () => ({
+  REQUEST_TIMEOUT_MS: 5_000,
   LinkSession: class {
     client: { label: string };
     link: { close(): Promise<void> };

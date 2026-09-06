@@ -305,9 +305,14 @@ export function planLayerRewrite(
       ...structuredClone(config),
       target_layer: mapLayer(config.target_layer, mapping, "auto-mouse layer"),
     })),
-    scenes: snapshot.scenes.flatMap((cell) => {
+    scenes: snapshot.scenes.map((cell) => {
       const layer = mapping.get(cell.layer);
-      return layer === undefined ? [] : [{ ...structuredClone(cell), layer }];
+      // Every other surface refuses rather than dropping; painted cells are no
+      // different, and losing them is not part of deleting a layer.
+      if (layer === undefined) {
+        throw new Error(`layer ${cell.layer} still has painted lighting; clear it first`);
+      }
+      return { ...structuredClone(cell), layer };
     }),
     runtimeConditionalScenes: snapshot.runtimeConditionalScenes.map((cell, index) => {
       const condition = cell.cell.conditions.layer;

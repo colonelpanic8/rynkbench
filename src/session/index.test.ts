@@ -8,6 +8,7 @@ describe("default session providers", () => {
       "nativeble",
       "webhid",
       "webserial",
+      "webbluetooth",
     ]);
   });
 });

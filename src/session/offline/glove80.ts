@@ -120,7 +120,8 @@ export function offlineGlove80Board(snapshot?: RuntimeSnapshot): BoardSpec {
     extensionEffects: {
       ...extensionEffects,
       initial: structuredClone(lighting?.effects ?? extensionEffects.initial),
-      overlay: lighting?.overlay,
+      // Tri-state: `undefined` would claim the workspace cannot layer at all.
+      overlay: lighting?.overlay ?? null,
     },
   };
 }

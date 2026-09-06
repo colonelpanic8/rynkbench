@@ -106,6 +106,7 @@ function harness(layerMetadata: LayerMetadata[] | null) {
     combos: [],
     forks: [],
     lightingState: null,
+    lightingControls: { output_toggle_user_action: undefined, wake_layers: 0 },
   } as unknown as WorkbenchState;
   const dispatch = (action: WorkbenchAction) => {
     recorded.actions.push(action);
@@ -224,6 +225,7 @@ describe("importDocument pointing configuration", () => {
       combos: [],
       forks: [],
       lightingState: null,
+      lightingControls: { output_toggle_user_action: undefined, wake_layers: 0 },
     } as unknown as WorkbenchState;
     return {
       actions,

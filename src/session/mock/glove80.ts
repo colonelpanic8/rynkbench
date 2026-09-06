@@ -28,17 +28,13 @@ import {
   type Glove80Key,
 } from "../../model/boards/glove80";
 import {
-  buildTopology,
   emptyFork,
   emptyMorse,
   emptyMorseProfile,
-  hid,
-  layerOn,
   noModifiers,
   noStateBits,
-  type BoardSpec,
-  type SimLed,
-} from "./board";
+} from "../../model/slots";
+import { buildTopology, hid, layerOn, type BoardSpec, type SimLed } from "./board";
 
 // Placement + LED-chain data is the shared board table in model/boards —
 // the same real geometry current firmware serves through GetLayout.
@@ -269,7 +265,7 @@ function ledForLabel(wanted: string): number {
 // Representative keyboard.toml-compiled rules: F1-F5 show active layers,
 // layer 3 marks its gaming keys, and the Magic layer exposes both batteries.
 const conditionalScenes: LightingConditionalSceneCell[] = [];
-for (let layer = 0; layer < 5; layer++) {
+for (let layer = 0; layer < NUM_LAYERS; layer++) {
   const led_id = ledForLabel(`F${layer + 1}`);
   conditionalScenes.push(
     {
@@ -496,7 +492,7 @@ export const glove80Board: BoardSpec = {
   },
   topology: buildTopology(1, zones, simLeds),
   defaultLayers: buildLayers(),
-  layerNames: ["Base", "Lower", "Magic", "Games", "Mac Hyper", "Paseo"],
+  layerNames: ["Base", "Lower", "Magic", "Games"],
   pointingConfig: {
     revision: 1,
     device_count: 0,
@@ -505,7 +501,6 @@ export const glove80Board: BoardSpec = {
     overrides: [],
   },
   initialDefaultLayer: 1,
-  initialActiveLayers: [1, 2, 3],
   defaultEncoders,
   battery: { Available: { charge_state: "Discharging", level: 84 } },
   brightness: 180,

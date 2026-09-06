@@ -12,6 +12,7 @@ import type {
   MorseProfileEntry,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import type { LayerMetadata } from "../../session/types";
+import { layerName as nameOfLayer } from "../layer-names";
 import { comboIsEmpty, forkIsEmpty, morseIsEmpty } from "./bits";
 import { DEFAULT_TAP_HOLD_PROFILE } from "../morse";
 import { decodeMacros, macroPreview } from "../macros";
@@ -168,12 +169,9 @@ function comboParts(combo: ComboDefinition): {
   return { triggers: [], output: combo.Positions.output, layer: combo.Positions.layer ?? null };
 }
 
-const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
-
 export function analyzeUsage(input: UsageInput): UsageReport {
   const warnings: string[] = [];
-  const layerName = (layer: number): string =>
-    input.layerMetadata?.[layer]?.name || `Layer ${layer}`;
+  const layerName = (layer: number): string => nameOfLayer(input.layerMetadata, layer);
 
   // Every reference-bearing site: keymap cells, morse slot actions (attributed
   // to the layers that reference the slot), combo triggers/outputs, forks.
@@ -347,9 +345,11 @@ export function analyzeUsage(input: UsageInput): UsageReport {
   for (const combo of input.combos) {
     if (!comboIsEmpty(combo)) boundActions.push(comboParts(combo).output);
   }
+  // Membership, not pairwise comparison: the naive `some(same(...))` re-encoded
+  // every bound action once per fork and once per combo trigger.
+  const boundKeys = new Set(boundActions.map((action) => JSON.stringify(action)));
   const forks: ForkUsage[] = input.forks.map((fork, index) => {
-    const triggerBound =
-      forkIsEmpty(fork) || boundActions.some((action) => same(action, fork.trigger));
+    const triggerBound = forkIsEmpty(fork) || boundKeys.has(JSON.stringify(fork.trigger));
     if (!triggerBound) {
       warnings.push(`Fork ${index}'s trigger is not bound anywhere, so it can never fire.`);
     }
@@ -361,8 +361,7 @@ export function analyzeUsage(input: UsageInput): UsageReport {
     const { triggers, layer } = comboParts(combo);
     if (comboIsEmpty(combo)) return { index, layer, unboundTriggers: 0 };
     const unboundTriggers = triggers.filter(
-      (trigger) =>
-        trigger !== "Transparent" && !boundActions.some((action) => same(action, trigger)),
+      (trigger) => trigger !== "Transparent" && !boundKeys.has(JSON.stringify(trigger)),
     ).length;
     if (unboundTriggers > 0) {
       warnings.push(

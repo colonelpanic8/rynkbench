@@ -51,6 +51,21 @@ count outer-to-inner as `T1` onward; the Glove80 numbers its upper three-key fan
 before its lower fan, while the Go60 has one three-key fan. Hover text and the
 key inspector retain the raw matrix row and column for diagnostics.
 
+### RGB controls and painted layer colors
+
+In **Lighting**, **All RGB lighting** controls the composed output, including
+painted layer scenes and indicators. Change the checkbox and press its **Apply**
+button. For a keyboard shortcut, assign **Output toggle** (`BacklightToggle`)
+in Keymap. `RgbTog` toggles the background/effect source; layer scenes remain
+visible. Layers marked **MoErgo Magic Layer** can temporarily wake lighting even
+when output is off; disable that option on each wake layer for darkness on every
+layer. Turning output off preserves the stored color scheme.
+
+Background/effect hue, saturation, and speed controls do not transform painted
+layer colors. Select the layer in Lighting and use the color brush to edit its
+scene. Layer key legends follow the selected layer's bindings (including
+transparent fallthrough to the default layer); Overlay follows the live layers.
+
 ## Behavior and indicator notes
 
 - **Undo/redo currently covers direct matrix-key assignments only.** Each undo
@@ -87,15 +102,27 @@ key inspector retain the raw matrix row and column for diagnostics.
   a firmware and Rynk protocol addition rather than only a Rynkbench UI change.
 - **Battery indicators use conditional lighting rules.** Node 0 is the central
   half and node 1 is the peripheral half on a split board. A bar is a set of
-  rules on chosen LEDs with increasing minimum levels (for example 1, 21, 41,
-  61, and 81 percent); later low-battery or charging rules can override their
-  colors. The connected firmware must advertise conditional lighting and both
-  battery nodes for the complete two-half bar to work.
+  rules on three to eight chosen LEDs with increasing minimum levels; later
+  low-battery or charging rules override their colors. Two styles are offered:
+  equal bands (a five-key bar lights at 1, 21, 41, 61, and 81 percent, with the
+  lowest segments amber under 40 and red under 20) and MoErgo stock (levels
+  step 0…100 across the bar and the whole bar is green, yellow, or red). The
+  connected firmware must advertise conditional lighting and both battery
+  nodes for the complete two-half bar to work.
 - **Status setup installs those rules for you.** In Lighting, use **Select** to
   choose one connection key or five battery-bar keys, then use **Status setup**
-  to bind the action and install the ordered indicator rules. On a Glove80, the
-  complete Magic-layer layout from `moergo-config`—two battery bars, three BLE
-  profile keys, and the USB key—is available as a single preset.
+  to bind the action and install the ordered indicator rules on the chosen
+  status layer (the designated Magic layer by default). A battery bar fills
+  along its longer axis—bottom-to-top for a column, left-to-right for a row—and
+  the fill direction can be overridden, including using the order the keys were
+  selected in; the panel lists the resulting 20%→100% keys before installing.
+  On a Glove80, the complete Magic-layer layout—two battery bars, three BLE
+  profile keys, and the USB key—is available as a single preset that targets
+  the chosen layer. Its bars can run up each half's outer column (five
+  segments each) or follow MoErgo's stock firmware, which draws both halves'
+  six-segment bars across the left half on rows 2 and 3. Rules already installed on
+  another layer can be re-pointed in bulk with **Move rules between layers**
+  under the Conditional rules list; key bindings stay where they are.
 - **Lighting control key presets pair behavior and colors.** In Lighting →
   Status setup, select one key and choose its layer under **Lighting control
   key**. **Cycle lighting policy** installs the output-mode action and
@@ -108,12 +135,17 @@ key inspector retain the raw matrix row and column for diagnostics.
   The indicator is layer-scoped and follows the output policy; designate its
   layer as a **MoErgo Magic Layer** to see it while normal lighting is off.
 
-Web Serial and WebHID need a Chromium-based browser (Chrome or Edge); Firefox
-and Safari don't implement them. Use **Web Serial** for upstream RMK's USB CDC
-transport and **WebHID** for firmware exposing the vendor Rynk HID interface.
+Web Serial, WebHID, and Web Bluetooth need a Chromium-based browser (Chrome or
+Edge); Firefox and Safari don't implement them. Use **Web Serial** for upstream
+RMK's USB CDC transport, **WebHID** for firmware exposing the vendor Rynk HID
+interface, and **Web Bluetooth** for firmware exposing the Rynk BLE GATT
+service — the one transport that also works in Chrome for Android, where the
+two USB backends don't exist. The keyboard must be paired (bonded) with the
+connecting device: the firmware only answers Rynk traffic on an encrypted link.
 The page must be served from a secure context — `localhost` counts, so local dev
 works out of the box. Alternatively, the [Tauri desktop app](#desktop-app-tauri)
-bundles the same UI with a native HID transport, so no browser is needed at all.
+bundles the same UI with native HID and BLE transports, so no browser is needed
+at all.
 
 ## Quick start
 
@@ -141,12 +173,20 @@ production bundle. Enable them only for a particular build/startup with
 - **Vite + React + TypeScript + Tailwind v4.** UI under `src/ui`, keyboard/board
   models under `src/model`.
 - **The session seam** (`src/session/types.ts`) is the one interface the UI talks
-  to. It is backed by a local-file workspace, a `mock` backend with demo boards,
-  `webserial` and `webhid` backends that drive real hardware in the browser, and
-  a `native` backend that drives the Tauri app's hidapi transport. The UI never
-  imports a transport or WASM directly — only *types* from the generated client
-  and the seam. All USB backends share one protocol core
-  (`src/session/link-session.ts`); only their byte plumbing differs.
+  to. It is backed by the in-memory `mock` engine (demo boards, and the
+  local-file `offline` workspace built on it), the `webhid`, `webserial` and
+  `webbluetooth` backends that drive real hardware in the browser, and the
+  `native` / `native-ble` backends that drive the Tauri app's hidapi and
+  bluest transports. The UI never imports a transport or WASM directly — only
+  *types* from the generated client and the seam. Every real transport is a
+  byte link handed to one protocol core (`src/session/link-session.ts`)
+  through one opener (`src/session/open-link.ts`); only the byte plumbing
+  differs. A backend reports a surface the firmware lacks by rejecting with an
+  error `isUnsupportedError` recognizes (`src/session/unsupported.ts`) — the
+  UI relies on that to tell "not supported" from "read failed".
+- **Connect-time snapshot.** `src/ui/bundle.ts` reads everything the workbench
+  needs off a fresh session in one pass; `src/ui/state.tsx` is the single
+  reducer + `io` facade the UI mutates through afterwards.
 - **`src/vendor/rynk-wasm`** is an ignored build output containing the Rynk
   protocol client compiled to WASM with `wasm-pack`. The browser owns transports
   (Web Serial/WebHID choosers, stream locks, hot-plug); the WASM owns

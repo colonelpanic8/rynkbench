@@ -478,6 +478,7 @@ describe("snapshotFromState", () => {
         overlay_len: 0,
       },
       lightingOutputMode: { mode: lighting.output_mode, powered: true, wake_active: false, effective_enabled: true },
+      lightingControls: { output_toggle_user_action: undefined, wake_layers: 0 },
       scenePolicy: lighting.scene_policy,
       scenes: lighting.scenes,
       runtimeConditionalScenes: lighting.conditional_scenes ?? [],
@@ -576,6 +577,38 @@ describe("snapshotFromState", () => {
     expect(text).toContain("[behavior.morse.profiles.profile_000]");
     expect(text).toContain("hold_trigger_key_positions");
     expect(text).toContain("[[fork]]");
+  });
+
+  it("carries a document's bluetooth name across an export", () => {
+    // The keyboard reports no advertising name over this seam and the renderer
+    // does not take one from `previous`, so an export that did not carry it
+    // would quietly drop the name on every round trip.
+    const named = `bluetooth_name = "Glove80 {slot}"\n${MINIMAL}`;
+    const parsed = parseDocument(named, CATALOG);
+    expect(parsed.snapshot.bluetooth_name).toBe("Glove80 {slot}");
+    const state = {
+      defaultLayer: 0,
+      layers: parsed.snapshot.layers,
+      lightingState: null,
+      lightingControls: { output_toggle_user_action: undefined, wake_layers: 0 },
+      scenePolicy: null,
+      morseProfiles: [],
+      morseHoldTriggerPositionCapacity: null,
+      morseHoldTriggerPositions: [],
+      autoMouseLayers: [],
+      morse: [],
+      combos: [],
+      forks: [],
+      macroBytes: new Uint8Array(),
+      layerMetadata: null,
+    } as unknown as WorkbenchState;
+
+    expect(renderDocument(snapshotFromState(state), CATALOG, "toml", named)).not.toContain(
+      "bluetooth_name",
+    );
+    expect(exportDocument(state, CATALOG, "toml", named)).toContain(
+      'bluetooth_name = "Glove80 {slot}"',
+    );
   });
 
   it("refuses to export fallback values from a partial device read", () => {

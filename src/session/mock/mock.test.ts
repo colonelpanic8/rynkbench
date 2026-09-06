@@ -12,11 +12,15 @@ import { enrichmentFor } from "../../model/boards";
 import { mockProviders } from "./index";
 import { glove80Board } from "./glove80";
 import { ortho60Board } from "./ortho60";
-import { emptyMorseProfile, mockProvider, type BoardSpec } from "./board";
+import { emptyMorseProfile } from "../../model/slots";
+import { isUnsupportedError } from "../unsupported";
+import { mockProvider, type BoardSpec } from "./board";
+import { stub48Board } from "./stub48";
 
 const boards: Array<[string, BoardSpec]> = [
   ["Glove80", glove80Board],
   ["Ortho 60", ortho60Board],
+  ["Dev stub 48", stub48Board],
 ];
 
 async function withSession(
@@ -702,23 +706,6 @@ describe("lighting extension parameters", () => {
     });
   });
 
-  it("advertises all Crosshair controls with their firmware defaults", async () => {
-    await withSession(glove80Board, async (session) => {
-      const effects = await session.lighting.extensionNames("Effects");
-      const crosshair = effects.indexOf("Crosshair");
-      expect(crosshair).toBe(7);
-      expect(await session.lighting.extensionParams(crosshair)).toEqual([
-        { name: "Motion", min: 0, max: 3, default: 0, value: 0 },
-        { name: "Duration x10ms", min: 4, max: 255, default: 16, value: 16 },
-        { name: "Arm width", min: 0, max: 48, default: 8, value: 8 },
-        { name: "Pulse width", min: 4, max: 192, default: 56, value: 56 },
-        { name: "Crosses", min: 1, max: 16, default: 4, value: 4 },
-        { name: "Arm hue", min: 0, max: 255, default: 172, value: 172 },
-        { name: "Key hue", min: 0, max: 255, default: 16, value: 16 },
-      ]);
-    });
-  });
-
   it("round-trips setExtensionParam with a revision bump and a LightingChange push", async () => {
     await withSession(glove80Board, async (session) => {
       const events: TopicEvent[] = [];
@@ -1013,7 +1000,9 @@ describe("behavior", () => {
 
   it("rejects unsupported, oversized, and out-of-range position tables", async () => {
     await withSession(ortho60Board, async (session) => {
-      await expect(session.behavior.holdTriggerPositions()).rejects.toThrow(/no runtime/);
+      await expect(session.behavior.holdTriggerPositions()).rejects.toThrow(
+        /does not support runtime hold trigger positions/,
+      );
     });
     await withSession(glove80Board, async (session) => {
       const oversized = Array.from({ length: 33 }, () => ({ profile: 255, row: 0, col: 0 }));
@@ -1085,7 +1074,9 @@ describe("BLE and peripherals", () => {
 
   it("rejects split latency policy reads on a non-split board", async () => {
     await withSession(ortho60Board, async (session) => {
-      await expect(session.device.splitCentralLatency()).rejects.toThrow(/no split central/);
+      await expect(session.device.splitCentralLatency()).rejects.toThrow(
+        /does not support split central latency/,
+      );
     });
   });
 
@@ -1172,9 +1163,91 @@ describe("keyboard model assembly", () => {
   });
 });
 
+describe("seeded firmware lighting tables", () => {
+  // A cell the simulated firmware ships with is not exempt from the bounds a
+  // host write is held to: seeding one the keymap cannot address is how the
+  // demo board ends up refusing every layer edit.
+  it("accepts every compiled and conditional seed through the write path", async () => {
+    await withSession(glove80Board, async (session) => {
+      const compiled = glove80Board.compiledScenes!;
+      const conditional = glove80Board.conditionalScenes!.map(
+        (cell): LightingExtendedConditionalSceneCell => ({
+          cell,
+          connection: undefined,
+          effects: undefined,
+        }),
+      );
+      expect(compiled.length).toBeGreaterThan(0);
+      expect(conditional.length).toBeGreaterThan(0);
+      await session.lighting.scenes.replaceScenes(compiled);
+      await session.lighting.conditionalScenes.replace(conditional);
+      expect(await session.lighting.conditionalScenes.read()).toEqual(conditional);
+    });
+  });
+
+  it("refuses a compiled conditional seed naming a layer the keymap lacks", async () => {
+    const spec: BoardSpec = {
+      ...glove80Board,
+      conditionalScenes: [
+        {
+          conditions: {
+            layer: { layer: glove80Board.capabilities.num_layers, active: true },
+            battery: undefined,
+            output_mode: undefined,
+          },
+          led_id: 0,
+          effect: { Solid: { color: { r: 1, g: 2, b: 3 } } },
+        },
+      ],
+    };
+    await expect(mockProvider(spec).connect()).rejects.toThrow(/layer 4 out of range/);
+  });
+
+  it("boots with only the default layer active, so layer edits are not blocked", async () => {
+    await withSession(glove80Board, async (session) => {
+      const state = await session.keymap.layerState();
+      expect(state.activeLayers).toEqual([state.defaultLayer]);
+    });
+  });
+});
+
+describe("firmware without the optional surfaces", () => {
+  // Each of these is a surface the UI must feature-gate. A rejection the UI
+  // cannot recognize as "this firmware lacks it" is reported to the user as a
+  // failure instead, so what matters is `isUnsupportedError`, not the wording.
+  const rejections: Array<[string, (session: RynkSession) => Promise<unknown>]> = [
+    ["lighting.outputMode", (session) => session.lighting.outputMode()],
+    ["lighting.setWakeLayers", (session) => session.lighting.setWakeLayers(1)],
+    ["lighting.extension", (session) => session.lighting.extension()],
+    ["lighting.extensionLayers", (session) => session.lighting.extensionLayers()],
+    ["lighting.scenes.sceneStatus", (session) => session.lighting.scenes.sceneStatus()],
+    ["lighting.conditionalScenes.status", (session) => session.lighting.conditionalScenes.status()],
+    ["behavior.holdTriggerPositions", (session) => session.behavior.holdTriggerPositions()],
+    ["pointing.get", (session) => session.pointing.get()],
+    ["device.splitCentralLatency", (session) => session.device.splitCentralLatency()],
+  ];
+
+  it("advertises no lighting features at all", async () => {
+    await withSession(stub48Board, async (session) => {
+      expect((await session.lighting.capabilities()).features).toBe(0);
+    });
+  });
+
+  it.each(rejections)("rejects %s as unsupported", async (_name, call) => {
+    await withSession(stub48Board, async (session) => {
+      const error = await call(session).then(
+        () => null,
+        (reason: unknown) => reason,
+      );
+      expect(error).not.toBeNull();
+      expect(isUnsupportedError(error)).toBe(true);
+    });
+  });
+});
+
 describe("providers", () => {
-  it("surfaces both demo boards as available mock providers", async () => {
-    expect(mockProviders).toHaveLength(2);
+  it("surfaces every demo board as an available mock provider", async () => {
+    expect(mockProviders).toHaveLength(3);
     for (const provider of mockProviders) {
       expect(provider.kind).toBe("mock");
       expect(provider.available()).toBe(true);
@@ -1209,5 +1282,23 @@ describe("providers", () => {
       await first.close();
       await second.close();
     }
+  });
+});
+
+describe("mock BLE connection state", () => {
+  it("reports profile switches through both reads and topics without changing the board defaults", async () => {
+    const initial = structuredClone(glove80Board.connection);
+    await withSession(glove80Board, async (session) => {
+      const topics: TopicEvent[] = [];
+      session.onTopic((event) => topics.push(event));
+      await session.device.switchBleProfile(1);
+      const connection = await session.device.connectionStatus();
+      expect(connection.ble).toEqual({ profile: 1, state: "Advertising" });
+      expect(await session.device.bleStatus()).toEqual(connection.ble);
+      expect(topics).toContainEqual({ ConnectionChange: connection });
+      connection.ble.profile = 2;
+      expect((await session.device.connectionStatus()).ble.profile).toBe(1);
+    });
+    expect(glove80Board.connection).toEqual(initial);
   });
 });

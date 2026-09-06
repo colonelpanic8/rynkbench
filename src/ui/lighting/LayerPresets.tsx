@@ -16,8 +16,9 @@ import type {
   LightingOverlayCell,
   LightingSceneStatus,
 } from "../../vendor/rynk-wasm/rynk_wasm";
+import { layerName } from "../layer-names";
 import { useWorkbench } from "../state";
-import { Button, SectionLabel, TextInput, cx } from "../kit";
+import { Button, SectionLabel, Segmented, TextInput, cx } from "../kit";
 import { TrashIcon } from "../icons";
 import { maskHasLayer, setLayerInMask } from "./wakeLayers";
 
@@ -58,6 +59,7 @@ function LayerChips({
   onSel,
   hasContent,
   live,
+  labelFor,
   titleFor,
 }: {
   numLayers: number;
@@ -65,6 +67,7 @@ function LayerChips({
   onSel: (layer: number) => void;
   hasContent: (layer: number) => boolean;
   live: number;
+  labelFor: (layer: number) => string;
   titleFor: (layer: number) => string;
 }) {
   return (
@@ -76,13 +79,13 @@ function LayerChips({
           onClick={() => onSel(n)}
           title={titleFor(n)}
           className={cx(
-            "relative flex h-7 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-md border px-1.5 font-mono text-[11.5px] transition-colors duration-120",
+            "relative flex h-7 min-w-9 cursor-pointer items-center justify-center gap-1 rounded-md border px-2 text-[11.5px] transition-colors duration-120",
             n === sel
               ? "border-accent bg-accent-dim/30 text-accent"
               : "border-line bg-raised text-mute hover:border-line-strong",
           )}
         >
-          L{n}
+          {labelFor(n)}
           {hasContent(n) && <span className="size-1 rounded-full bg-accent" />}
           {n === live && (
             <span className="absolute -top-0.5 right-0.5 size-1 rounded-full bg-ok" />
@@ -109,6 +112,7 @@ function DeviceScenes({ status }: { status: LightingSceneStatus }) {
   const targetLayer = state.lightingTarget === "overlay" ? null : state.lightingTarget;
   const wakeLayers = state.lightingOutputMode?.wake_layers ?? state.lightingControls.wake_layers;
   const targetIsMagic = targetLayer !== null && maskHasLayer(wakeLayers, targetLayer);
+  const targetName = targetLayer === null ? "" : layerName(state.layerMetadata, targetLayer);
 
   /** Layers with a local preset take that preset; the rest pass through. */
   const copyLocalPresets = () => {
@@ -138,25 +142,17 @@ function DeviceScenes({ status }: { status: LightingSceneStatus }) {
 
         <div>
           <div className="text-[11px] text-faint">When several layers are active</div>
-          <div className="mt-1 flex gap-0.5 rounded-lg border border-line-soft bg-well p-0.5">
-            {POLICIES.map((policy) => (
-              <button
-                key={policy.id}
-                type="button"
-                title={policy.hint}
-                disabled={state.lightingBusy}
-                onClick={() => io.setScenePolicy(policy.id)}
-                className={cx(
-                  "flex-1 cursor-pointer rounded-md py-1.5 text-[11.5px] font-medium transition-colors duration-120",
-                  state.scenePolicy === policy.id
-                    ? "bg-raised text-ink shadow-sm"
-                    : "text-faint hover:text-mute",
-                )}
-              >
-                {policy.label}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            className="mt-1"
+            items={POLICIES.map((policy) => ({
+              value: policy.id,
+              label: policy.label,
+              title: policy.hint,
+              disabled: state.lightingBusy,
+            }))}
+            value={state.scenePolicy}
+            onChange={(policy) => io.setScenePolicy(policy)}
+          />
         </div>
 
         {state.lightingOutputMode !== null && (
@@ -178,20 +174,20 @@ function DeviceScenes({ status }: { status: LightingSceneStatus }) {
                   disabled={state.lightingBusy}
                   title={
                     targetIsMagic
-                      ? `Let Layer ${targetLayer} follow the normal lighting output policy`
-                      : `Keep Layer ${targetLayer}'s scene visible while normal lighting is off`
+                      ? `Let ${targetName} follow the normal lighting output policy`
+                      : `Keep the scene of ${targetName} visible while normal lighting is off`
                   }
                   onClick={() =>
                     io.setWakeLayers(setLayerInMask(wakeLayers, targetLayer, !targetIsMagic))
                   }
                 >
                   {targetIsMagic
-                    ? `L${targetLayer} is Magic · remove designation`
-                    : `Use L${targetLayer} as a Magic Layer`}
+                    ? `${targetName} is Magic · remove designation`
+                    : `Use ${targetName} as a Magic Layer`}
                 </Button>
                 <p className="mt-1.5 text-[10.5px] leading-relaxed text-faint">
-                  Paint and apply L{targetLayer}&apos;s scene above. The scene and Magic setting are
-                  stored on the keyboard and survive reboot.
+                  Paint and apply the scene of {targetName} above. The scene and Magic setting
+                  are stored on the keyboard and survive reboot.
                 </p>
               </>
             )}
@@ -279,8 +275,9 @@ function LocalPresets() {
         onSel={setSel}
         hasContent={(n) => stored.presets[n] !== undefined}
         live={state.currentLayer}
+        labelFor={(n) => layerName(state.layerMetadata, n)}
         titleFor={(n) =>
-          `Layer ${n}${
+          `${layerName(state.layerMetadata, n)} · physical layer ${n}${
             stored.presets[n] ? ` · ${stored.presets[n].name}` : " · no preset"
           }${n === state.currentLayer ? " · live" : ""}`
         }
@@ -299,11 +296,11 @@ function LocalPresets() {
                   })
                 }
                 className="py-1"
-                placeholder={`Layer ${sel} preset`}
+                placeholder={`${layerName(state.layerMetadata, sel)} preset`}
               />
               <button
                 type="button"
-                title={`Remove the Layer ${sel} preset`}
+                title={`Remove the ${layerName(state.layerMetadata, sel)} preset`}
                 onClick={() => {
                   const presets = { ...stored.presets };
                   delete presets[sel];
@@ -360,19 +357,19 @@ function LocalPresets() {
             title={
               drawnCount === 0
                 ? "Paint some keys first, then save them as this layer's preset"
-                : `Save the current ${drawnCount}-key overlay as the Layer ${sel} preset`
+                : `Save the current ${drawnCount}-key overlay as the ${layerName(state.layerMetadata, sel)} preset`
             }
             onClick={() =>
               save({
                 ...stored,
                 presets: {
                   ...stored.presets,
-                  [sel]: { name: `Layer ${sel}`, cells: Object.values(state.draft) },
+                  [sel]: { name: layerName(state.layerMetadata, sel), cells: Object.values(state.draft) },
                 },
               })
             }
           >
-            Save current overlay as L{sel} preset
+            Save current overlay as {layerName(state.layerMetadata, sel)} preset
           </Button>
         )}
 
@@ -387,7 +384,7 @@ function LocalPresets() {
         </label>
         {stored.follow && applied !== null && (
           <div className="text-[11px] text-accent">
-            L{applied} preset applied · following the live layer
+            {layerName(state.layerMetadata, applied)} preset applied · following the live layer
           </div>
         )}
         <div className="text-[10.5px] leading-relaxed text-faint">

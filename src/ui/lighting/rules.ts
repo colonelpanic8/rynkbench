@@ -54,3 +54,23 @@ export function moveRule(rules: Rules, from: number, to: number): Rules {
   next.splice(to, 0, moved);
   return next;
 }
+
+/** Rules whose layer condition names `layer`, in table order. */
+export function rulesOnLayer(rules: Rules, layer: number): number[] {
+  return rules.flatMap((rule, index) => (rule.cell.conditions.layer?.layer === layer ? [index] : []));
+}
+
+/** Point every rule conditioned on `from` at `to` instead, keeping its
+ *  active/inactive sense and its position. Rules on other layers, and
+ *  unconditioned rules, are untouched. */
+export function retargetLayer(rules: Rules, from: number, to: number): Rules {
+  if (from === to || rulesOnLayer(rules, from).length === 0) return rules;
+  return rules.map((rule) => {
+    const layer = rule.cell.conditions.layer;
+    if (layer?.layer !== from) return rule;
+    return {
+      ...rule,
+      cell: { ...rule.cell, conditions: { ...rule.cell.conditions, layer: { ...layer, layer: to } } },
+    };
+  });
+}

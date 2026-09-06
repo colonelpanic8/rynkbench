@@ -18,7 +18,6 @@
 // keyboard in use is not advertising, so a scan would not find the one case
 // that matters. This mirrors `rynk-ble` in the rmk fork.
 
-use std::sync::Mutex;
 use std::time::Duration;
 
 use bluest::{Adapter, Characteristic, Device, Uuid};
@@ -27,6 +26,8 @@ use serde::Serialize;
 use tauri::async_runtime::{self, JoinHandle};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc::{self, UnboundedSender};
+
+use crate::transport::{emit_disconnect, Link, LinkSlot};
 
 // Source of truth: `rmk_types::protocol::rynk` in the pinned rmk fork. Copied
 // rather than imported for the same reason the HID usage page is copied — the
@@ -44,23 +45,38 @@ const GATT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Adapter enumeration hangs rather than erroring when Bluetooth is off or
 /// permission is denied, so bound it and report that as a plain failure.
 const ADAPTER_TIMEOUT: Duration = Duration::from_secs(5);
+/// How long a closing link may keep writing what is already queued. A close
+/// usually follows the last request by microseconds, and aborting outright
+/// dropped those bytes on the floor.
+const DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// The webview listens for this on the BLE transport.
+const DISCONNECT_EVENT: &str = "rynk-ble-disconnect";
 
 pub struct BleLink {
     outbound: UnboundedSender<Vec<u8>>,
     task: JoinHandle<()>,
 }
 
-impl BleLink {
-    /// Dropping the sender ends the task's receive loop; the abort is only a
-    /// backstop for a task parked in a GATT call that never returns.
-    fn stop(self) {
-        drop(self.outbound);
-        self.task.abort();
+impl Link for BleLink {
+    /// Dropping the sender ends the task's receive loop — but only after it
+    /// has written everything already queued, so the wait is the point. The
+    /// abort is the backstop for a task parked in a GATT call that never
+    /// returns.
+    async fn stop(self) {
+        let BleLink { outbound, mut task } = self;
+        drop(outbound);
+        if tokio::time::timeout(DRAIN_TIMEOUT, &mut task)
+            .await
+            .is_err()
+        {
+            task.abort();
+            let _ = task.await;
+        }
     }
 }
 
-#[derive(Default)]
-pub struct BleState(Mutex<Option<BleLink>>);
+pub type BleState = LinkSlot<BleLink>;
 
 #[derive(Serialize)]
 pub struct BleOpenResult {
@@ -179,7 +195,7 @@ async fn run_io(
                     // reliably, and skipping the ATT ack saves a full connection
                     // interval per chunk.
                     if output.write_without_response(chunk).await.is_err() {
-                        emit_disconnect(&app);
+                        emit_disconnect(&app, DISCONNECT_EVENT);
                         return;
                     }
                 }
@@ -191,17 +207,13 @@ async fn run_io(
                     }
                     // An unsubscribe or a dropped link both end the stream.
                     Some(Err(_)) | None => {
-                        emit_disconnect(&app);
+                        emit_disconnect(&app, DISCONNECT_EVENT);
                         return;
                     }
                 }
             }
         }
     }
-}
-
-fn emit_disconnect(app: &AppHandle) {
-    let _ = app.emit("rynk-ble-disconnect", ());
 }
 
 /// Enumerate connected Rynk keyboards. Presence of the service is the only
@@ -225,72 +237,132 @@ pub async fn rynk_ble_open(
     state: State<'_, BleState>,
     id: Option<String>,
 ) -> Result<BleOpenResult, String> {
-    if let Some(previous) = state.0.lock().unwrap().take() {
-        previous.stop();
-    }
+    state
+        .open(|| async {
+            let adapter = adapter().await?;
+            let device = connected_devices(&adapter)
+                .await?
+                .into_iter()
+                .find(|device| match &id {
+                    Some(wanted) => device_key(device) == *wanted,
+                    None => true,
+                })
+                .ok_or_else(|| match &id {
+                    Some(wanted) => format!("Rynk device {wanted} is no longer connected"),
+                    None => "No connected Rynk keyboard found over Bluetooth".to_string(),
+                })?;
+            let label = label_of(&device).await;
 
-    let adapter = adapter().await?;
-    let device = connected_devices(&adapter)
-        .await?
-        .into_iter()
-        .find(|device| match &id {
-            Some(wanted) => device_key(device) == *wanted,
-            None => true,
+            let (tx, rx) = mpsc::unbounded_channel();
+            let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+            let mut task = None;
+            let ready = tokio::time::timeout(GATT_TIMEOUT, async {
+                adapter
+                    .connect_device(&device)
+                    .await
+                    .map_err(|e| format!("Could not connect to {label}: {e}"))?;
+                let (input, output) = characteristics(&device).await?;
+                // Cap writes to what the characteristic will accept.
+                let write_chunk = output
+                    .max_write_len_async()
+                    .await
+                    .unwrap_or(BLE_SAFE_WRITE)
+                    .clamp(BLE_SAFE_WRITE, RYNK_BLE_CHUNK_SIZE);
+
+                task = Some(async_runtime::spawn(run_io(
+                    app.clone(),
+                    input,
+                    output,
+                    write_chunk,
+                    rx,
+                    ready_tx,
+                )));
+                match ready_rx.await {
+                    Ok(Ok(())) => Ok(()),
+                    Ok(Err(error)) => Err(error),
+                    Err(_) => Err("Rynk input subscription ended before it was live".to_string()),
+                }
+            })
+            .await
+            .unwrap_or_else(|_| Err(format!("Timed out attaching to {label}")));
+            if let Err(error) = ready {
+                if let Some(task) = task {
+                    task.abort();
+                    let _ = task.await;
+                }
+                return Err(error);
+            }
+
+            Ok((
+                BleLink {
+                    outbound: tx,
+                    task: task.unwrap(),
+                },
+                BleOpenResult { label },
+            ))
         })
-        .ok_or_else(|| match &id {
-            Some(wanted) => format!("Rynk device {wanted} is no longer connected"),
-            None => "No connected Rynk keyboard found over Bluetooth".to_string(),
-        })?;
-    let label = label_of(&device).await;
-
-    let (tx, rx) = mpsc::unbounded_channel();
-    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
-    let task = tokio::time::timeout(GATT_TIMEOUT, async {
-        adapter
-            .connect_device(&device)
-            .await
-            .map_err(|e| format!("Could not connect to {label}: {e}"))?;
-        let (input, output) = characteristics(&device).await?;
-        // Cap writes to what the characteristic will accept.
-        let write_chunk = output
-            .max_write_len_async()
-            .await
-            .unwrap_or(BLE_SAFE_WRITE)
-            .clamp(BLE_SAFE_WRITE, RYNK_BLE_CHUNK_SIZE);
-
-        let task = async_runtime::spawn(run_io(
-            app.clone(),
-            input,
-            output,
-            write_chunk,
-            rx,
-            ready_tx,
-        ));
-        match ready_rx.await {
-            Ok(Ok(())) => Ok(task),
-            Ok(Err(error)) => Err(error),
-            Err(_) => Err("Rynk input subscription ended before it was live".to_string()),
-        }
-    })
-    .await
-    .map_err(|_| format!("Timed out attaching to {label}"))??;
-
-    *state.0.lock().unwrap() = Some(BleLink { outbound: tx, task });
-    Ok(BleOpenResult { label })
+        .await
 }
 
 #[tauri::command]
 pub fn rynk_ble_send(state: State<'_, BleState>, bytes: Vec<u8>) -> Result<(), String> {
-    let slot = state.0.lock().unwrap();
-    let link = slot.as_ref().ok_or("No Bluetooth device open")?;
-    link.outbound
-        .send(bytes)
-        .map_err(|_| "Bluetooth link is down".to_string())
+    state
+        .with(|link| {
+            link.outbound
+                .send(bytes)
+                .map_err(|_| "Bluetooth link is down".to_string())
+        })
+        .unwrap_or_else(|| Err("No Bluetooth device open".to_string()))
 }
 
+/// Async because closing drains: see `BleLink::stop`.
 #[tauri::command]
-pub fn rynk_ble_close(state: State<'_, BleState>) {
-    if let Some(link) = state.0.lock().unwrap().take() {
-        link.stop();
+pub async fn rynk_ble_close(state: State<'_, BleState>) -> Result<(), String> {
+    state.take_and_stop().await;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+    use tokio::sync::oneshot;
+
+    #[tokio::test]
+    async fn close_drains_queued_frames() {
+        let (outbound, mut frames) = mpsc::unbounded_channel();
+        let written = Arc::new(Mutex::new(Vec::new()));
+        let received = written.clone();
+        let task = JoinHandle::Tokio(tokio::spawn(async move {
+            while let Some(frame) = frames.recv().await {
+                received.lock().unwrap().push(frame);
+            }
+        }));
+        outbound.send(vec![1, 2]).unwrap();
+        outbound.send(vec![3]).unwrap();
+        BleLink { outbound, task }.stop().await;
+        assert_eq!(*written.lock().unwrap(), [vec![1, 2], vec![3]]);
+    }
+
+    #[tokio::test]
+    async fn close_waits_for_a_stuck_worker_to_be_cancelled() {
+        struct Stopped(Option<oneshot::Sender<()>>);
+        impl Drop for Stopped {
+            fn drop(&mut self) {
+                let _ = self.0.take().unwrap().send(());
+            }
+        }
+
+        let (outbound, _frames) = mpsc::unbounded_channel();
+        let (started, running) = oneshot::channel();
+        let (stopped, mut ended) = oneshot::channel();
+        let task = JoinHandle::Tokio(tokio::spawn(async move {
+            let _stopped = Stopped(Some(stopped));
+            started.send(()).unwrap();
+            std::future::pending::<()>().await;
+        }));
+        running.await.unwrap();
+        BleLink { outbound, task }.stop().await;
+        assert_eq!(ended.try_recv(), Ok(()));
     }
 }

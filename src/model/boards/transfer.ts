@@ -8,6 +8,7 @@ import {
   GLOVE80_ROWS,
   glove80Enrichment,
 } from "./glove80";
+import { GO60_COLS, GO60_KEYS, GO60_ROWS } from "./go60";
 
 export type MoErgoBoard = "glove80" | "go60";
 
@@ -69,48 +70,11 @@ export const GLOVE80_TRANSFER_MODEL = model(
   gloveKeys,
 );
 
-const GO60_ROWS = 5;
-const GO60_COLS = 14;
-const GO60_FINGER_LABELS = [
-  ["=", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "−"],
-  ["Tab", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "\\"],
-  ["Ctrl", "A", "S", "D", "F", "G", "H", "J", "K", "L", ";", "'"],
-  ["Shift", "Z", "X", "C", "V", "B", "N", "M", ",", ".", "/", "Shift"],
-] as const;
-
-const go60Keys: Array<{ position: MatrixPosition; label: string; led: number }> = [];
-const leftLedByColumn = [26, 22, 17, 12, 7, 3];
-const rightLedByColumn = [33, 37, 42, 47, 52, 56];
-for (let row = 0; row < 4; row += 1) {
-  for (let col = 0; col < 6; col += 1) {
-    go60Keys.push({
-      position: position(row, col),
-      label: GO60_FINGER_LABELS[row][col],
-      led: leftLedByColumn[col] + row,
-    });
-  }
-  for (let col = 8; col < 14; col += 1) {
-    go60Keys.push({
-      position: position(row, col),
-      label: GO60_FINGER_LABELS[row][col - 2],
-      led: rightLedByColumn[col - 8] + row,
-    });
-  }
-}
-for (const [col, label, led] of [
-  [2, "lower-left outer", 21],
-  [3, "lower-left middle", 16],
-  [4, "lower-left inner", 11],
-  [9, "lower-right inner", 41],
-  [10, "lower-right middle", 46],
-  [11, "lower-right outer", 51],
-] as const) {
-  go60Keys.push({ position: position(4, col), label, led });
-}
-for (let row = 0; row < 3; row += 1) {
-  go60Keys.push({ position: position(row, 6), label: `left thumb ${row + 1}`, led: row });
-  go60Keys.push({ position: position(row, 7), label: `right thumb ${3 - row}`, led: 30 + row });
-}
+const go60Keys = GO60_KEYS.map((key) => ({
+  position: position(key.row, key.col),
+  label: key.label,
+  led: key.led,
+}));
 
 export const GO60_TRANSFER_MODEL = model(
   "go60",
@@ -181,15 +145,21 @@ export function boardForTarget(
   return board;
 }
 
+/** The board a matrix-cell count identifies, or `undefined` for a size neither
+ *  MoErgo board uses. */
+export function boardForMatrixCells(cells: number): BoardTransferModel | undefined {
+  return Object.values(BOARD_MODELS).find(
+    (candidate) => candidate.rows * candidate.cols === cells,
+  );
+}
+
 export function boardForSnapshot(snapshot: RuntimeSnapshot): BoardTransferModel {
   const size = snapshot.layers[0]?.length;
   if (size === undefined) throw new Error("Configuration has no keymap layers");
   if (snapshot.layers.some((layer) => layer.length !== size)) {
     throw new Error("Configuration keymap layers do not all use the same matrix size");
   }
-  const found = Object.values(BOARD_MODELS).find(
-    (candidate) => candidate.rows * candidate.cols === size,
-  );
+  const found = boardForMatrixCells(size);
   if (!found) {
     throw new Error(
       `Configuration transfer supports Glove80 (84 matrix cells) and Go60 (70 matrix cells); found ${size}`,

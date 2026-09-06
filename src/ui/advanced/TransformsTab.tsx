@@ -3,13 +3,16 @@
 
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { useWorkbench } from "../state";
+import { stagedEditCount, useWorkbench } from "../state";
 import { Button, Chip, Panel, SectionLabel } from "../kit";
 import { CenterScroll } from "./bits";
+import { layerName as nameOfLayer } from "../layer-names";
 import {
   planLayoutSwitch,
   planOsSwap,
+  planKeyCount,
   planSize,
+  transformBlockedReason,
   type AlphaLayout,
   type LayerMigration,
   type TransformPlan,
@@ -78,28 +81,37 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
   );
 
   const busy = run.phase === "running";
+  const blocked = transformBlockedReason(state.batchMode, stagedEditCount(state));
 
   const execute = async (plan: TransformPlan) => {
     const total = planSize(plan);
     if (total === 0 || busy) return;
+    if (blocked !== null) {
+      setRun({ phase: "error", message: blocked });
+      return;
+    }
     dispatch({ type: "keyHistorySuspend", suspended: true });
     history.clear();
     let done = 0;
     let failed = 0;
     setRun({ phase: "running", done, total });
+    const step = (result: { ok: boolean }) => {
+      if (!result.ok) failed += 1;
+      done += 1;
+      setRun({ phase: "running", done, total });
+    };
     try {
       for (const edit of plan.keys) {
-        const result = await io.setKey(edit.layer, edit.row, edit.col, edit.after, {
-          history: "invalidate",
-        });
-        if (!result.ok) failed += 1;
-        done += 1;
-        setRun({ phase: "running", done, total });
+        step(
+          await io.setKey(edit.layer, edit.row, edit.col, edit.after, {
+            history: "invalidate",
+          }),
+        );
       }
-      for (const edit of plan.combos) io.setSlot("combos", edit.index, edit.after);
-      for (const edit of plan.morse) io.setSlot("morse", edit.index, edit.after);
-      for (const edit of plan.forks) io.setSlot("forks", edit.index, edit.after);
-      if (plan.macroBytes) io.writeMacros(plan.macroBytes);
+      for (const edit of plan.combos) step(await io.setSlot("combos", edit.index, edit.after));
+      for (const edit of plan.morse) step(await io.setSlot("morse", edit.index, edit.after));
+      for (const edit of plan.forks) step(await io.setSlot("forks", edit.index, edit.after));
+      if (plan.macroBytes) step(await io.writeMacros(plan.macroBytes));
       setRun({ phase: "done", written: total - failed, failed });
     } catch (err) {
       setRun({ phase: "error", message: err instanceof Error ? err.message : String(err) });
@@ -109,8 +121,15 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
     }
   };
 
-  const layerName = (layer: number): string =>
-    state.layerMetadata?.[layer]?.name || `Layer ${layer}`;
+  /** The chip aggregates key cells with slot-table and macro-region writes;
+   *  spell the split out rather than leaving one number to explain both. */
+  const planBreakdown = (plan: TransformPlan): string => {
+    const keys = planKeyCount(plan);
+    const tables = planSize(plan) - keys;
+    return `${keys} key binding${keys === 1 ? "" : "s"}, ${tables} combo/morse/fork/macro write${tables === 1 ? "" : "s"}`;
+  };
+
+  const layerName = (layer: number): string => nameOfLayer(state.layerMetadata, layer);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -127,14 +146,16 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
           <div className="mt-4 flex items-center gap-2 border-t border-line-soft pt-4">
             <Button
               variant="primary"
-              disabled={busy || planSize(osPlan) === 0}
+              disabled={busy || blocked !== null || planSize(osPlan) === 0}
               onClick={() => execute(osPlan)}
             >
               Swap everywhere
             </Button>
-            <Chip tone={planSize(osPlan) === 0 ? "neutral" : "accent"}>
-              {planSize(osPlan)} {planSize(osPlan) === 1 ? "change" : "changes"}
-            </Chip>
+            <span title={planBreakdown(osPlan)}>
+              <Chip tone={planSize(osPlan) === 0 ? "neutral" : "accent"}>
+                {planSize(osPlan)} {planSize(osPlan) === 1 ? "change" : "changes"}
+              </Chip>
+            </span>
           </div>
         </Panel>
 
@@ -208,18 +229,23 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
           <div className="mt-4 flex items-center gap-2 border-t border-line-soft pt-4">
             <Button
               variant="primary"
-              disabled={busy || from === to || planSize(layoutPlan) === 0}
+              disabled={busy || blocked !== null || from === to || planSize(layoutPlan) === 0}
               onClick={() => execute(layoutPlan)}
             >
               Switch {LAYOUTS.find((entry) => entry.id === from)?.label} →{" "}
               {LAYOUTS.find((entry) => entry.id === to)?.label}
             </Button>
-            <Chip tone={planSize(layoutPlan) === 0 ? "neutral" : "accent"}>
-              {planSize(layoutPlan)} {planSize(layoutPlan) === 1 ? "key" : "keys"}
-            </Chip>
+            <span title={planBreakdown(layoutPlan)}>
+              <Chip tone={planSize(layoutPlan) === 0 ? "neutral" : "accent"}>
+                {planSize(layoutPlan)} {planSize(layoutPlan) === 1 ? "change" : "changes"}
+              </Chip>
+            </span>
           </div>
         </Panel>
 
+        {blocked !== null && (
+          <div className="text-center text-[12.5px] text-warn">{blocked}</div>
+        )}
         {run.phase === "running" && (
           <div className="text-center text-[12.5px] text-accent">
             Writing {run.done}/{run.total}…

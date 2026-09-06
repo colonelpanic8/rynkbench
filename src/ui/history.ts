@@ -1,4 +1,5 @@
 import type { KeyAction } from "../vendor/rynk-wasm/rynk_wasm";
+import { same } from "./deep-equal";
 
 export const KEY_EDIT_HISTORY_LIMIT = 100;
 
@@ -36,7 +37,7 @@ export function reduceKeyEditHistory(
 ): KeyEditHistory {
   switch (action.type) {
     case "record": {
-      if (JSON.stringify(action.entry.before) === JSON.stringify(action.entry.after)) {
+      if (same(action.entry.before, action.entry.after)) {
         return history;
       }
       const past = [...history.past, action.entry]

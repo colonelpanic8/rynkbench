@@ -271,6 +271,7 @@
         packages.moergo-config-wasm = moergo-config-wasm;
 
         checks.default = rynkbench;
+        checks.tauri = rynkbench-tauri;
 
         formatter = pkgs.nixpkgs-fmt;
       });

@@ -171,15 +171,17 @@ export function UsageTab({ nav }: { nav: ReactNode }) {
           <Panel className="p-5">
             <SectionLabel>Macros</SectionLabel>
             <div className="mt-2">
-              {report.macros.map((macro) => (
-                <CountRow
-                  key={macro.index}
-                  label={`Macro ${macro.index}`}
-                  detail={macro.preview}
-                  refs={macro.refs}
-                  orphan={macro.refs.length === 0}
-                />
-              ))}
+              {report.macros
+                .filter((macro) => macro.refs.length > 0 || macro.preview !== "")
+                .map((macro) => (
+                  <CountRow
+                    key={macro.index}
+                    label={`Macro ${macro.index}`}
+                    detail={macro.preview}
+                    refs={macro.refs}
+                    orphan={macro.refs.length === 0}
+                  />
+                ))}
             </div>
           </Panel>
         )}

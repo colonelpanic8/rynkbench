@@ -1,6 +1,6 @@
 // Keymap mode: layer tabs over the canvas; binding editor in the inspector.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   EncoderAction,
   KeyAction,
@@ -10,6 +10,7 @@ import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
 import { keyActionGlyph, keyActionDescription } from "../labels";
 import { keyAddressLabel, matrixKeyLabel } from "../key-address";
+import type { WorkbenchState } from "../state";
 import {
   encoderPendingId,
   keyPendingId,
@@ -23,6 +24,8 @@ import { ActionEditor } from "./ActionEditor";
 import { LayerLighting } from "./LayerLighting";
 import { LayerPointing } from "./LayerPointing";
 import { effectAnim, effectColor } from "../lighting/decor";
+import { targetPreviewEffects } from "../lighting/preview";
+import { layerName } from "../layer-names";
 import {
   activePointingDevices,
   activePointingOverrides,
@@ -31,10 +34,17 @@ import {
 import {
   keyClipboardShortcut,
   parseKeyActionClipboard,
+  pasteStillTargets,
+  planClipboardAction,
   serializeKeyAction,
 } from "./keyManipulation";
-import { Button, SectionLabel, TextInput, cx } from "../kit";
+import type { ClipboardBoard } from "./keyManipulation";
+import { Button, SectionLabel, TextInput, UnderlineTabs, cx } from "../kit";
 import { StarIcon, WarningIcon, CloseIcon, PlusIcon, TrashIcon, SpinnerIcon } from "../icons";
+
+function clipboardBoard(state: WorkbenchState, cols: number): ClipboardBoard {
+  return { layers: state.layers, cols, pending: state.pending };
+}
 
 function LayerTabs() {
   const { bundle, state, dispatch, io } = useWorkbench();
@@ -42,26 +52,15 @@ function LayerTabs() {
   const occupiedLayers = state.layerMetadata
     ? state.layerMetadata.flatMap((metadata, layer) => (metadata.occupied ? [layer] : []))
     : Array.from({ length: numLayers }, (_, layer) => layer);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [underline, setUnderline] = useState({ left: 0, width: 0 });
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState("");
 
   useEffect(() => {
     setRenaming(false);
-    setName(state.layerMetadata?.[state.uiLayer]?.name ?? `Layer ${state.uiLayer}`);
+    setName(layerName(state.layerMetadata, state.uiLayer));
   }, [state.uiLayer, state.layerMetadata]);
 
-  useLayoutEffect(() => {
-    const wrap = wrapRef.current;
-    if (!wrap) return;
-    const btn = wrap.querySelector<HTMLButtonElement>(
-      `[data-layer="${state.uiLayer}"]`,
-    );
-    if (btn) setUnderline({ left: btn.offsetLeft, width: btn.offsetWidth });
-  }, [state.uiLayer, occupiedLayers.length]);
-
-  const selectedName = state.layerMetadata?.[state.uiLayer]?.name ?? `Layer ${state.uiLayer}`;
+  const selectedName = layerName(state.layerMetadata, state.uiLayer);
   const structureSupported =
     state.layerMetadata !== null &&
     state.pointingConfig !== null &&
@@ -71,43 +70,31 @@ function LayerTabs() {
 
   return (
     <div className="flex items-center gap-3 px-1">
-      <div ref={wrapRef} className="relative flex items-center gap-1">
-        {occupiedLayers.map((n) => {
+      <UnderlineTabs
+        items={occupiedLayers.map((n) => {
           const isDefault = n === state.defaultLayer;
-          const label = state.layerMetadata?.[n]?.name ?? `Layer ${n}`;
-          return (
-            <button
-              key={n}
-              type="button"
-              data-layer={n}
-              onClick={() => dispatch({ type: "uiLayer", layer: n })}
-              className={cx(
-                "relative flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors duration-150",
-                n === state.uiLayer ? "text-ink" : "text-faint hover:text-mute",
-              )}
-              title={`${label} · physical layer ${n}${isDefault ? " · default" : ""}`}
-            >
-              <span>{label}</span>
-              {isDefault && (
-                <span title="Default layer" className="inline-flex">
-                  <StarIcon size={11} filled className="text-warn" />
-                </span>
-              )}
-            </button>
-          );
+          const label = layerName(state.layerMetadata, n);
+          return {
+            id: n,
+            title: `${label} · physical layer ${n}${isDefault ? " · default" : ""}`,
+            label: (
+              <>
+                <span>{label}</span>
+                {isDefault && (
+                  <span title="Default layer" className="inline-flex">
+                    <StarIcon size={11} filled className="text-warn" />
+                  </span>
+                )}
+              </>
+            ),
+          };
         })}
-        <div
-          className="absolute -bottom-px h-0.5 rounded-full bg-accent transition-all duration-180"
-          style={{
-            left: underline.left,
-            width: underline.width,
-            transitionTimingFunction: "cubic-bezier(0.25,0.8,0.35,1)",
-          }}
-        />
-      </div>
+        value={state.uiLayer}
+        onChange={(layer) => dispatch({ type: "uiLayer", layer })}
+      />
       {state.uiLayer !== state.currentLayer && (
         <span className="text-[11.5px] text-faint">
-          Editing {selectedName} · {state.layerMetadata?.[state.currentLayer]?.name ?? `Layer ${state.currentLayer}`} is live
+          Editing {selectedName} · {layerName(state.layerMetadata, state.currentLayer)} is live
         </span>
       )}
       <div className="flex-1" />
@@ -212,7 +199,7 @@ export function KeymapCenter() {
   const { bundle, state, dispatch, io } = useWorkbench();
   const cols = bundle.caps.num_cols;
   const layer = state.layers[state.uiLayer];
-  const scenesSupported = bundle.sceneStatus !== null;
+  const layerLightingAvailable = bundle.sceneStatus !== null || bundle.compiledSceneStatus !== null;
   const [showLighting, setShowLighting] = useState(true);
   const [drag, setDrag] = useState<{
     source: KeyView;
@@ -229,7 +216,9 @@ export function KeymapCenter() {
   const dragLayerRef = useRef<number | null>(null);
   const latestStateRef = useRef(state);
   const localClipboardRef = useRef<KeyAction | null>(null);
-  latestStateRef.current = state;
+  useEffect(() => {
+    latestStateRef.current = state;
+  });
   const pointingDevices = state.pointingDraft
     ? activePointingDevices(state.pointingDraft)
     : [];
@@ -258,20 +247,24 @@ export function KeymapCenter() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const shortcut = keyClipboardShortcut(event);
-      const selection = state.selection;
-      if (
-        !shortcut ||
-        selection?.type !== "key" ||
-        window.getSelection()?.isCollapsed === false
-      )
-        return;
-      const selectedLayer = state.uiLayer;
-      const { row, col } = selection;
-      const action = state.layers[selectedLayer]?.[row * cols + col];
-      if (action === undefined) return;
+      if (shortcut === null || window.getSelection()?.isCollapsed === false) return;
+      const snapshot = latestStateRef.current;
+      const plan = planClipboardAction(
+        shortcut,
+        snapshot.selection,
+        snapshot.uiLayer,
+        clipboardBoard(snapshot, cols),
+      );
+      if (plan.kind === "ignore") return;
       event.preventDefault();
+      if (plan.kind === "blocked") {
+        setManipulationMessage(plan.message);
+        return;
+      }
+      const target = plan.target;
+      const { layer: selectedLayer, row, col, action } = target;
 
-      if (shortcut === "copy") {
+      if (plan.kind === "copy") {
         localClipboardRef.current = structuredClone(action);
         if (!navigator.clipboard?.writeText) {
           setManipulationMessage(
@@ -292,15 +285,6 @@ export function KeymapCenter() {
         return;
       }
 
-      if (
-        state.pending[keyPendingId(selectedLayer, row, col)]?.status ===
-        "pending"
-      ) {
-        setManipulationMessage(
-          "Wait for the selected key's current write to finish before pasting.",
-        );
-        return;
-      }
       const paste = async (pasted: KeyAction | null) => {
         if (!pasted) {
           setManipulationMessage(
@@ -308,14 +292,8 @@ export function KeymapCenter() {
           );
           return;
         }
-        const latestState = latestStateRef.current;
-        const latestAction =
-          latestState.layers[selectedLayer]?.[row * cols + col];
-        if (
-          latestState.pending[keyPendingId(selectedLayer, row, col)]?.status ===
-            "pending" ||
-          JSON.stringify(latestAction) !== JSON.stringify(action)
-        ) {
+        // Reading the clipboard is asynchronous, so the key may have moved on.
+        if (!pasteStillTargets(target, clipboardBoard(latestStateRef.current, cols))) {
           setManipulationMessage(
             "Paste cancelled because the selected key changed.",
           );
@@ -346,7 +324,7 @@ export function KeymapCenter() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [cols, io, state.layers, state.pending, state.selection, state.uiLayer]);
+  }, [cols, io]);
 
   const dropKey = (
     source: KeyView,
@@ -447,8 +425,21 @@ export function KeymapCenter() {
 
   // The layer's staged scene, previewed under the legends so bindings and
   // lighting can be judged together. Lighting mode remains the place to paint.
-  const lit = scenesSupported && showLighting;
-  const sceneDraft = lit ? lightingDraftFor(state, state.uiLayer) : null;
+  const lit = layerLightingAvailable && showLighting;
+  // The compiled firmware cells are part of what the layer shows, so the
+  // canvas previews the same composition Lighting mode does.
+  const sceneEffects = useMemo(
+    () =>
+      lit
+        ? targetPreviewEffects(
+            state.uiLayer,
+            lightingDraftFor(state, state.uiLayer),
+            state.compiledScenes,
+          )
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lit, state.compiledScenes, state.layerDrafts, state.scenes, state.uiLayer],
+  );
   const sceneStaged = useMemo(
     () =>
       lit ? stagedBetween(lightingDraftFor(state, state.uiLayer), lightingBaseFor(state, state.uiLayer)) : null,
@@ -462,8 +453,8 @@ export function KeymapCenter() {
       state.pending[keyPendingId(state.uiLayer, key.row, key.col)];
     const stagedBinding =
       state.stagedKeys[keyPendingId(state.uiLayer, key.row, key.col)] !== undefined;
-    const sceneCell =
-      sceneDraft && key.ledId !== undefined ? sceneDraft[key.ledId] : undefined;
+    const sceneEffect =
+      sceneEffects && key.ledId !== undefined ? sceneEffects.get(key.ledId) : undefined;
     const glyph = action !== undefined ? keyActionGlyph(action) : { text: "" };
     // Enrichment label as fallback for unbound keys.
     if (!glyph.text && key.label) {
@@ -497,8 +488,8 @@ export function KeymapCenter() {
       highlight: dropTarget,
       pending: pending?.status === "pending",
       error: pending?.status === "error",
-      fill: sceneCell ? effectColor(sceneCell.effect) : undefined,
-      fillAnim: sceneCell ? effectAnim(sceneCell.effect) : undefined,
+      fill: sceneEffect ? effectColor(sceneEffect) : undefined,
+      fillAnim: sceneEffect ? effectAnim(sceneEffect) : undefined,
       staged:
         stagedBinding ||
         (key.ledId !== undefined && (sceneStaged?.has(key.ledId) ?? false)),
@@ -510,7 +501,7 @@ export function KeymapCenter() {
       <LayerTabs />
       <div className="flex min-h-5 items-center justify-between gap-4 px-1 text-[11.5px] text-faint">
         <span className="flex items-center gap-3">
-          {scenesSupported && (
+          {layerLightingAvailable && (
             <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap">
               <input
                 type="checkbox"
@@ -846,13 +837,13 @@ function PointingInspector({ id }: { id: number }) {
   const label =
     bundle.model.pointingDevices.find((device) => device.id === id)?.label ??
     `Pointing device ${id}`;
-  const layerName = state.layerMetadata?.[state.uiLayer]?.name ?? `Layer ${state.uiLayer}`;
+  const name = layerName(state.layerMetadata, state.uiLayer);
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <SectionLabel>{label}</SectionLabel>
-        <span className="text-[11px] text-faint">{layerName}</span>
+        <span className="text-[11px] text-faint">{name}</span>
       </div>
       {state.pointingDraft ? (
         <LayerPointing selectedDeviceId={id} />

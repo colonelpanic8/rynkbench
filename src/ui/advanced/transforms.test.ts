@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { KeyAction, ModifierCombination } from "../../vendor/rynk-wasm/rynk_wasm";
 import { decodeMacros, encodeMacros } from "../macros";
-import { emptyStateBits } from "./bits";
+import { emptyFork, noStateBits } from "../../model/slots";
 import {
   CTRL_GUI_SWAP,
   layoutSpec,
   mapKeyAction,
+  planKeyCount,
   planLayoutSwitch,
   planOsSwap,
+  planSize,
   primaryHid,
+  transformBlockedReason,
   type TransformInput,
 } from "./transforms";
 
@@ -78,8 +81,8 @@ describe("CTRL_GUI_SWAP", () => {
             trigger: key("A"),
             negative_output: key("A"),
             positive_output: key("B"),
-            match_any: emptyStateBits(),
-            match_none: emptyStateBits(),
+            match_any: noStateBits(),
+            match_none: noStateBits(),
             kept_modifiers: { ...NO_MODS, left_ctrl: true },
             bindable: false,
           },
@@ -102,6 +105,21 @@ describe("CTRL_GUI_SWAP", () => {
     const plan = planOsSwap(baseInput({ layers: [[key("A"), key("LShift")]] }));
     expect(plan.keys).toHaveLength(0);
     expect(plan.macroBytes).toBeNull();
+  });
+
+  it("swaps fork modifier conditions along with their outputs", () => {
+    const fork = emptyFork();
+    fork.trigger = key("A");
+    fork.match_any.modifiers.left_ctrl = true;
+    fork.match_any.modifiers.right_alt = true;
+    fork.match_none.modifiers.right_gui = true;
+    fork.match_none.leds.caps_lock = true;
+    const { after } = planOsSwap(baseInput({ forks: [fork] })).forks[0];
+
+    expect(after.match_any.modifiers).toEqual({ ...NO_MODS, left_gui: true, right_alt: true });
+    expect(after.match_none.modifiers).toEqual({ ...NO_MODS, right_ctrl: true });
+    expect(after.match_none.leds).toEqual(fork.match_none.leds);
+    expect(planOsSwap(baseInput({ forks: [after] })).forks[0].after).toEqual(fork);
   });
 });
 
@@ -222,5 +240,39 @@ describe("layout switching", () => {
       { layer: 2, row: 0, col: 1, after: ctrl("T") },
     ]);
     expect(plan.keys.filter((edit) => edit.layer === 0)).toEqual([]);
+  });
+});
+
+describe("plan sizing", () => {
+  const plan = planOsSwap(
+    baseInput({
+      layers: [[key("LCtrl"), key("A")]],
+      combos: [{ Actions: { actions: [key("LGui")], output: key("C"), layer: undefined } }],
+      macroBytes: encodeMacros([{ steps: [{ kind: "press", code: "LCtrl" }] }]),
+    }),
+  );
+
+  it("counts every write the run will issue, not only the key cells", () => {
+    // The progress bar and the "wrote N changes" summary both use planSize;
+    // when it counted the non-key writes but the run did not, the two
+    // disagreed by exactly the slot and macro writes.
+    expect(planKeyCount(plan)).toBe(1);
+    expect(planSize(plan)).toBe(planKeyCount(plan) + plan.combos.length + 1);
+  });
+});
+
+describe("transformBlockedReason", () => {
+  it("refuses while batch mode is on", () => {
+    // Batch mode intercepts io.setKey but not io.setSlot/io.writeMacros, so a
+    // run would put the tables on the device and stage the keys.
+    expect(transformBlockedReason(true, 0)).toMatch(/staged edits/);
+  });
+
+  it("refuses while edits are staged, even with batch mode already off", () => {
+    expect(transformBlockedReason(false, 3)).toMatch(/staged edits/);
+  });
+
+  it("allows a run on a clean workbench", () => {
+    expect(transformBlockedReason(false, 0)).toBeNull();
   });
 });

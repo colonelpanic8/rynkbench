@@ -4,7 +4,6 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import type {
-  ComboDefinition,
   KeyAction,
   MatrixPosition,
 } from "../../vendor/rynk-wasm/rynk_wasm";
@@ -18,10 +17,13 @@ import {
   keyHoverTitle,
 } from "../key-address";
 import { ActionEditor, SlotPicker } from "../keymap/ActionEditor";
-import { slotPendingId, useWorkbench } from "../state";
+import { useWorkbench } from "../state";
+import { same } from "../deep-equal";
+import { emptyCombo } from "../../model/slots";
 import { Button, Chip, InspectorShell, SectionLabel, cx } from "../kit";
 import { CloseIcon, PlusIcon, TrashIcon } from "../icons";
 import { SlotStatus, comboIsEmpty } from "./bits";
+import { useSlotEditor } from "./use-slot-editor";
 import {
   comboIsActions,
   comboLayer,
@@ -29,11 +31,8 @@ import {
   comboTriggerCount,
   comboWithLayer,
   comboWithOutput,
-  emptyComboDefinition,
   samePosition,
 } from "../combos";
-
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 function TriggerChip({ action, onRemove }: { action: KeyAction; onRemove: () => void }) {
   const glyph = keyActionGlyph(action);
@@ -91,38 +90,9 @@ export function CombosTab({
   const caps = bundle.caps;
   const cols = caps.num_cols;
 
-  const [sel, setSel] = useState<number | null>(null);
-  const [draft, setDraft] = useState<ComboDefinition | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-
-  const editing = sel !== null && draft !== null;
-  const saved = sel !== null ? state.combos[sel] : null;
-  const dirty = editing && !same(draft, saved);
-  const pending = sel !== null && state.pending[slotPendingId("combos", sel)]?.status === "pending";
-
-  const open = (index: number) => {
-    setSel(index);
-    setDraft(structuredClone(state.combos[index]));
-    setPickerOpen(false);
-  };
-
-  const close = () => {
-    setSel(null);
-    setDraft(null);
-  };
-
-  const addNew = () => {
-    const free = state.combos.findIndex(comboIsEmpty);
-    if (free === -1) return;
-    setSel(free);
-    setDraft(emptyComboDefinition());
-    setPickerOpen(false);
-  };
-
-  const nonEmpty = state.combos
-    .map((combo, index) => ({ combo, index }))
-    .filter(({ combo, index }) => !comboIsEmpty(combo) || index === sel);
-  const hasFree = state.combos.some(comboIsEmpty);
+  const { sel, draft, setDraft, saved, editing, dirty, pending, open, close, addNew, entries, hasFree } =
+    useSlotEditor("combos", state.combos, comboIsEmpty, emptyCombo, () => setPickerOpen(false));
 
   // Trigger capture reads actions from the combo's scoped layer, else the
   // default layer — that is the keymap the chord will be matched against.
@@ -226,12 +196,12 @@ export function CombosTab({
         </div>
 
         <div className="mt-2 flex flex-col gap-1.5">
-          {nonEmpty.length === 0 && (
+          {entries.length === 0 && (
             <div className="rounded-lg border border-line-soft bg-well/50 px-3 py-4 text-center text-[12px] text-faint">
               No combos yet. A combo fires an action when several keys are pressed together.
             </div>
           )}
-          {nonEmpty.map(({ combo, index }) => (
+          {entries.map(({ value: combo, index }) => (
             <button
               key={index}
               type="button"
@@ -411,7 +381,7 @@ export function CombosTab({
                 title="Delete this combo (frees the slot)"
                 disabled={pending || (saved !== null && comboIsEmpty(saved))}
                 onClick={() => {
-                  io.setSlot("combos", sel, emptyComboDefinition());
+                  io.setSlot("combos", sel, emptyCombo());
                   close();
                 }}
               >

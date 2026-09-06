@@ -2,10 +2,8 @@
 // Chromium-only; the selected port carries the same Rynk byte stream as every
 // other backend, so protocol handling remains in LinkSession and rynk-wasm.
 
-import { connect } from "../../vendor/rynk-wasm/rynk_wasm";
-import { LinkSession, REQUEST_TIMEOUT_MS } from "../link-session";
+import { openLinkSession } from "../open-link";
 import type { SessionProvider } from "../types";
-import { initWasm } from "../wasm";
 import { requestRynkSerialPort, serialByteLink } from "./link";
 
 let lastPort: SerialPort | null = null;
@@ -38,10 +36,9 @@ async function rememberedSession(port: SerialPort) {
 
 async function session(port: SerialPort) {
   const link = await serialByteLink(port);
-  try {
-    await initWasm();
-    const client = await handshake(link);
-    return new LinkSession(client, link, {
+  return openLinkSession(
+    link,
+    {
       kind: "webserial",
       watchDisconnect(onUnplug) {
         const handler = (event: Event) => {
@@ -51,30 +48,9 @@ async function session(port: SerialPort) {
         navigator.serial.addEventListener("disconnect", handler);
         return () => navigator.serial.removeEventListener("disconnect", handler);
       },
-    });
-  } catch (error) {
-    await link.close().catch(() => undefined);
-    throw error;
-  }
-}
-
-async function handshake(link: Awaited<ReturnType<typeof serialByteLink>>) {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      connect(link),
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => {
-          link.end();
-          reject(
-            new Error(
-              `No Rynk response from the selected serial port within ${REQUEST_TIMEOUT_MS}ms`,
-            ),
-          );
-        }, REQUEST_TIMEOUT_MS);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
+    },
+    // The chooser is unfiltered, so the most likely silent port is simply
+    // not a Rynk one.
+    { handshakeHint: "check that the selected port is the keyboard's Rynk serial interface" },
+  );
 }

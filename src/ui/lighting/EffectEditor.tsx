@@ -3,10 +3,10 @@
 // a stored effect rather than a paint brush.
 
 import type { LightingEffect } from "../../vendor/rynk-wasm/rynk_wasm";
-import { TextInput, cx } from "../kit";
+import { Segmented, TextInput } from "../kit";
 import { rgbToHsv, hsvToRgb } from "../color";
 import { ColorPicker } from "./ColorPicker";
-import type { EffectKind } from "./effect";
+import type { EffectKind, EffectTiming } from "./effect";
 import { buildEffect, effectKind, effectRgb, effectTiming } from "./effect";
 
 export function NumberField({
@@ -46,44 +46,28 @@ export function NumberField({
 
 const KINDS: EffectKind[] = ["Solid", "Blink", "Breathe"];
 
-/** Edit one stored effect in place. Switching kinds keeps the color and the
- *  timing the previous kind carried, so the choice is reversible. */
-export function EffectEditor({
-  value,
-  onChange,
+/** The kind + timing half of an effect, shared by the stored-effect editor and
+ *  by the paint brushes, which carry a color of their own. */
+export function EffectShapeEditor({
+  kind,
+  timing,
+  onKind,
+  onTiming,
 }: {
-  value: LightingEffect;
-  onChange: (effect: LightingEffect) => void;
+  kind: EffectKind;
+  timing: EffectTiming;
+  onKind: (kind: EffectKind) => void;
+  onTiming: (timing: EffectTiming) => void;
 }) {
-  const kind = effectKind(value);
-  const color = effectRgb(value);
-  const timing = effectTiming(value);
-  const retime = (patch: Partial<typeof timing>) =>
-    onChange(buildEffect(kind, color, { ...timing, ...patch }));
-
+  const retime = (patch: Partial<EffectTiming>) => onTiming({ ...timing, ...patch });
   return (
-    <div className="flex flex-col gap-2.5">
-      <div className="flex gap-0.5 rounded-lg border border-line-soft bg-well p-0.5">
-        {KINDS.map((k) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => onChange(buildEffect(k, color, timing))}
-            className={cx(
-              "flex-1 cursor-pointer rounded-md py-1 text-[11.5px] font-medium transition-colors duration-120",
-              kind === k ? "bg-raised text-ink shadow-sm" : "text-faint hover:text-mute",
-            )}
-          >
-            {k}
-          </button>
-        ))}
-      </div>
-
-      <ColorPicker
-        value={rgbToHsv(color)}
-        onChange={(hsv) => onChange(buildEffect(kind, hsvToRgb(hsv), timing))}
+    <>
+      <Segmented
+        items={KINDS.map((k) => ({ value: k, label: k }))}
+        value={kind}
+        onChange={onKind}
+        size="sm"
       />
-
       {kind !== "Solid" && (
         <div className="flex flex-col gap-1.5">
           <NumberField
@@ -121,6 +105,35 @@ export function EffectEditor({
           />
         </div>
       )}
+    </>
+  );
+}
+
+/** Edit one stored effect in place. Switching kinds keeps the color and the
+ *  timing the previous kind carried, so the choice is reversible. */
+export function EffectEditor({
+  value,
+  onChange,
+}: {
+  value: LightingEffect;
+  onChange: (effect: LightingEffect) => void;
+}) {
+  const kind = effectKind(value);
+  const color = effectRgb(value);
+  const timing = effectTiming(value);
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <ColorPicker
+        value={rgbToHsv(color)}
+        onChange={(hsv) => onChange(buildEffect(kind, hsvToRgb(hsv), timing))}
+      />
+      <EffectShapeEditor
+        kind={kind}
+        timing={timing}
+        onKind={(next) => onChange(buildEffect(next, color, timing))}
+        onTiming={(next) => onChange(buildEffect(kind, color, next))}
+      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { KeyAction, Morse } from "../../vendor/rynk-wasm/rynk_wasm";
 import { encodeMacros } from "../macros";
-import { emptyStateBits } from "./bits";
+import { noStateBits } from "../../model/slots";
 import { analyzeUsage, keyActionRefs, type UsageInput } from "./usage";
 
 const key = (code: string): KeyAction => ({ Single: { Key: { Hid: code as never } } });
@@ -112,9 +112,9 @@ describe("analyzeUsage", () => {
             trigger: key("Z"),
             negative_output: key("Z"),
             positive_output: key("Y"),
-            match_any: emptyStateBits(),
-            match_none: emptyStateBits(),
-            kept_modifiers: emptyStateBits().modifiers,
+            match_any: noStateBits(),
+            match_none: noStateBits(),
+            kept_modifiers: noStateBits().modifiers,
             bindable: false,
           },
         ],

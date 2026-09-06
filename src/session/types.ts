@@ -1,20 +1,24 @@
 // The Rynkbench session seam.
 //
 // Everything above this interface is backend-neutral UI; everything below it
-// is one of the pluggable backends (mock, WebHID/Web Serial via rynk-wasm, or
-// native Tauri HID). Nothing outside src/session/ may import transport or wasm
-// machinery — but *types* from the vendored rynk-wasm package are fine
-// anywhere: `import type` is erased at compile time, so the mock backend and
-// the UI share the generated protocol types without pulling in wasm.
+// is one of the pluggable backends: the in-memory mock engine (which also
+// backs the offline file workspace), or LinkSession over one of the real
+// transports (WebHID, Web Serial, Web Bluetooth, native Tauri HID and BLE).
+// Nothing outside src/session/ may import transport or wasm machinery — but
+// *types* from the vendored rynk-wasm package are fine anywhere: `import type`
+// is erased at compile time, so the mock backend and the UI share the
+// generated protocol types without pulling in wasm.
 //
 // Design rules:
 // - Connection is modeled as "request a session" because the most constrained
 //   browser backends can only open a device from a user-gesture-triggered
 //   picker. Backends that can enumerate devices freely still fit.
-// - Paged topology endpoints are wrapped into whole-topology reads here; the
-//   UI never sees revision-pinned pagination.
-// - v1 scope is keymap + lighting + device status. Combos, macros, forks and
-//   morse exist in the protocol and can be added to this seam later.
+// - Paged and chunked endpoints are wrapped into whole-table reads and atomic
+//   replacements here; the UI never sees revision pins, pagination, or
+//   transaction handshakes.
+// - "The firmware lacks this" is reported by rejecting with a message
+//   `isUnsupportedError` (./unsupported.ts) recognizes, never by a sentinel
+//   value, so callers can tell a missing feature from a failed read.
 
 import type {
   AutoMouseLayerConfig,
@@ -145,8 +149,6 @@ export interface LightingOps {
   readOverlay(): Promise<LightingOverlayCell[]>;
   /** Mutate background/output state; revision handshake is the backend's job. */
   setState(state: LightingMutableState): Promise<LightingState>;
-  /** Persist the bitmask of layers that wake lighting while active. */
-  setWakeLayers(layers: number): Promise<LightingOutputModeState>;
   /** Extension discovery: firmware-provided name-list sizes plus live state.
    *  Supported iff the firmware advertises EXTENSION_EFFECTS; unsupported
    *  firmware rejects with a descriptive error. */

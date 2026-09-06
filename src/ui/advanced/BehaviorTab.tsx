@@ -4,10 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { BehaviorConfig } from "../../vendor/rynk-wasm/rynk_wasm";
 import { useWorkbench } from "../state";
-import { Button, Panel, SectionLabel, TextInput } from "../kit";
-import { WarningIcon } from "../icons";
-
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+import { useDeviceDraft } from "../device-draft";
+import { SaveBar, WriteStatus } from "../write-status";
+import { Panel, SectionLabel, TextInput } from "../kit";
 
 /** The millisecond knobs this card edits. `BehaviorConfig` also carries the
  *  default morse profile, which is a struct and belongs to the morse editor. */
@@ -62,18 +61,12 @@ const FIELDS: Array<{
 export function BehaviorTab({ nav }: { nav: ReactNode }) {
   const { state, io } = useWorkbench();
   const saved = state.behavior;
-  const [draft, setDraft] = useState<BehaviorConfig | null>(saved);
+  const pending = state.pending.behavior;
+  const { draft, setDraft, dirty, reset } = useDeviceDraft(saved, pending?.status === "pending");
   const [justSaved, setJustSaved] = useState(false);
 
-  // Follow device state while the draft is clean; flash "Saved" on write-ok.
-  const savedRef = useRef(saved);
-  const pending = state.pending.behavior;
+  // Flash "Saved" once the write settles.
   const wasPending = useRef(false);
-  useEffect(() => {
-    if (same(draft, savedRef.current)) setDraft(saved);
-    savedRef.current = saved;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saved]);
   useEffect(() => {
     const fired = wasPending.current && !pending;
     wasPending.current = pending?.status === "pending";
@@ -95,7 +88,6 @@ export function BehaviorTab({ nav }: { nav: ReactNode }) {
     );
   }
 
-  const dirty = !same(draft, saved);
   const writing = pending?.status === "pending";
 
   return (
@@ -132,35 +124,18 @@ export function BehaviorTab({ nav }: { nav: ReactNode }) {
               ))}
             </div>
 
-            {pending?.status === "error" && (
-              <div className="mt-4 flex items-center gap-2 text-[12px] text-danger">
-                <WarningIcon size={13} />
-                <span className="min-w-0 flex-1 truncate">Write failed: {pending.message}</span>
-                <button
-                  type="button"
-                  className="cursor-pointer underline underline-offset-2"
-                  onClick={() => io.setBehavior(draft)}
-                >
-                  Retry
-                </button>
-              </div>
-            )}
+            <div className="mt-4">
+              <WriteStatus id="behavior" onRetry={() => io.setBehavior(draft)} />
+            </div>
 
-            <div className="mt-5 flex items-center gap-2 border-t border-line-soft pt-4">
-              <Button
-                variant="primary"
-                disabled={!dirty || writing}
-                onClick={() => io.setBehavior({ ...draft })}
-              >
-                {writing ? "Writing…" : "Save timings"}
-              </Button>
-              <Button
-                variant="ghost"
-                disabled={!dirty || writing}
-                onClick={() => setDraft(saved)}
-              >
-                Reset
-              </Button>
+            <SaveBar
+              className="mt-5 flex items-center gap-2 border-t border-line-soft pt-4"
+              dirty={dirty}
+              writing={writing}
+              saveLabel="Save timings"
+              onSave={() => io.setBehavior({ ...draft })}
+              onReset={reset}
+            >
               <div className="flex-1" />
               {dirty && !writing && (
                 <span className="text-[11.5px] text-warn">Unsaved changes</span>
@@ -168,7 +143,7 @@ export function BehaviorTab({ nav }: { nav: ReactNode }) {
               {justSaved && !dirty && (
                 <span className="animate-pop text-[11.5px] text-ok">Saved to keyboard ✓</span>
               )}
-            </div>
+            </SaveBar>
           </Panel>
         </div>
       </div>

@@ -15,16 +15,19 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod ble;
+mod transport;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Sender, TryRecvError};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
 use hidapi::HidApi;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
+
+use transport::{emit_disconnect, Link, LinkSlot};
 
 /// Vendor usage pages that can carry Rynk, newest first. Firmware built with
 /// RMK's `rynk` feature puts the protocol on its own interface; before that it
@@ -44,14 +47,17 @@ fn carries_rynk(device: &hidapi::DeviceInfo) -> bool {
     device.usage() == RYNK_USAGE && RYNK_USAGE_PAGES.contains(&device.usage_page())
 }
 
-struct Link {
+/// The webview listens for this on the HID transport.
+const DISCONNECT_EVENT: &str = "rynk-disconnect";
+
+struct HidLink {
     outbound: Sender<Vec<u8>>,
     shutdown: Arc<AtomicBool>,
     reader: Option<JoinHandle<()>>,
 }
 
-impl Link {
-    fn stop(mut self) {
+impl Link for HidLink {
+    async fn stop(mut self) {
         self.shutdown.store(true, Ordering::Relaxed);
         if let Some(reader) = self.reader.take() {
             let _ = reader.join();
@@ -59,16 +65,11 @@ impl Link {
     }
 }
 
-#[derive(Default)]
-struct LinkState(Mutex<Option<Link>>);
+type LinkState = LinkSlot<HidLink>;
 
 #[derive(Serialize)]
 struct OpenResult {
     label: String,
-}
-
-fn emit_disconnect(app: &AppHandle) {
-    let _ = app.emit("rynk-disconnect", ());
 }
 
 /// Own the device on a dedicated thread: interleave short blocking reads with
@@ -90,7 +91,7 @@ fn run_io(
                     framed.push(0u8);
                     framed.extend_from_slice(&report);
                     if device.write(&framed).is_err() {
-                        emit_disconnect(&app);
+                        emit_disconnect(&app, DISCONNECT_EVENT);
                         return;
                     }
                 }
@@ -104,7 +105,7 @@ fn run_io(
                 let _ = app.emit("rynk-report", buf[..n].to_vec());
             }
             Err(_) => {
-                emit_disconnect(&app);
+                emit_disconnect(&app, DISCONNECT_EVENT);
                 return;
             }
         }
@@ -142,87 +143,93 @@ fn candidates(api: &HidApi) -> Vec<Candidate> {
 /// Enumerate every Rynk interface. Two keyboards of the same model are
 /// indistinguishable by label alone, so the serial number rides along and
 /// only the handshake proves which one is usable.
-#[tauri::command]
-fn rynk_list() -> Result<Vec<Candidate>, String> {
+#[tauri::command(async)]
+async fn rynk_list() -> Result<Vec<Candidate>, String> {
     let api = HidApi::new().map_err(|e| format!("HID subsystem unavailable: {e}"))?;
     Ok(candidates(&api))
 }
 
-#[tauri::command]
-fn rynk_open(
+/// `async` so Tauri runs it off the main thread: `HidApi::new()` enumerates
+/// every HID device on the system, which on Linux means walking sysfs.
+#[tauri::command(async)]
+async fn rynk_open(
     app: AppHandle,
     state: State<'_, LinkState>,
     path: Option<String>,
 ) -> Result<OpenResult, String> {
-    let mut slot = state.0.lock().unwrap();
-    if let Some(previous) = slot.take() {
-        previous.stop();
-    }
+    state
+        .open(|| async {
+            let api = HidApi::new().map_err(|e| format!("HID subsystem unavailable: {e}"))?;
+            let info = api
+                .device_list()
+                .filter(|d| carries_rynk(d))
+                .find(|d| match &path {
+                    Some(wanted) => d.path().to_string_lossy() == wanted.as_str(),
+                    None => true,
+                })
+                .ok_or_else(|| match &path {
+                    Some(wanted) => format!("Rynk interface {wanted} is no longer present"),
+                    None => {
+                        let pages: Vec<String> = RYNK_USAGE_PAGES
+                            .iter()
+                            .map(|page| format!("{page:#06x}"))
+                            .collect();
+                        format!(
+                            "No Rynk keyboard found (raw-HID usage {}/{RYNK_USAGE:#04x})",
+                            pages.join(" or ")
+                        )
+                    }
+                })?;
+            let label = info
+                .product_string()
+                .filter(|s| !s.is_empty())
+                .unwrap_or("Rynk (native)")
+                .to_string();
+            let device = info
+                .open_device(&api)
+                .map_err(|e| format!("Could not open {label}: {e}"))?;
 
-    let api = HidApi::new().map_err(|e| format!("HID subsystem unavailable: {e}"))?;
-    let info = api
-        .device_list()
-        .filter(|d| carries_rynk(d))
-        .find(|d| match &path {
-            Some(wanted) => d.path().to_string_lossy() == wanted.as_str(),
-            None => true,
+            let (tx, rx) = std::sync::mpsc::channel();
+            let shutdown = Arc::new(AtomicBool::new(false));
+            let reader = std::thread::spawn({
+                let app = app.clone();
+                let shutdown = shutdown.clone();
+                move || run_io(app, device, rx, shutdown)
+            });
+            Ok((
+                HidLink {
+                    outbound: tx,
+                    shutdown,
+                    reader: Some(reader),
+                },
+                OpenResult { label },
+            ))
         })
-        .ok_or_else(|| match &path {
-            Some(wanted) => format!("Rynk interface {wanted} is no longer present"),
-            None => {
-                let pages: Vec<String> = RYNK_USAGE_PAGES
-                    .iter()
-                    .map(|page| format!("{page:#06x}"))
-                    .collect();
-                format!(
-                    "No Rynk keyboard found (raw-HID usage {}/{RYNK_USAGE:#04x})",
-                    pages.join(" or ")
-                )
-            }
-        })?;
-    let label = info
-        .product_string()
-        .filter(|s| !s.is_empty())
-        .unwrap_or("Rynk (native)")
-        .to_string();
-    let device = info
-        .open_device(&api)
-        .map_err(|e| format!("Could not open {label}: {e}"))?;
-
-    let (tx, rx) = std::sync::mpsc::channel();
-    let shutdown = Arc::new(AtomicBool::new(false));
-    let reader = std::thread::spawn({
-        let app = app.clone();
-        let shutdown = shutdown.clone();
-        move || run_io(app, device, rx, shutdown)
-    });
-    *slot = Some(Link {
-        outbound: tx,
-        shutdown,
-        reader: Some(reader),
-    });
-    Ok(OpenResult { label })
+        .await
 }
 
 #[tauri::command]
 fn rynk_send(state: State<'_, LinkState>, bytes: Vec<u8>) -> Result<(), String> {
-    let slot = state.0.lock().unwrap();
-    let link = slot.as_ref().ok_or("No device open")?;
-    for chunk in bytes.chunks(RYNK_HID_REPORT_SIZE) {
-        let mut report = vec![0u8; RYNK_HID_REPORT_SIZE];
-        report[..chunk.len()].copy_from_slice(chunk);
-        link.outbound
-            .send(report)
-            .map_err(|_| "Device link is down".to_string())?;
-    }
-    Ok(())
+    state
+        .with(|link| {
+            for chunk in bytes.chunks(RYNK_HID_REPORT_SIZE) {
+                let mut report = vec![0u8; RYNK_HID_REPORT_SIZE];
+                report[..chunk.len()].copy_from_slice(chunk);
+                link.outbound
+                    .send(report)
+                    .map_err(|_| "Device link is down".to_string())?;
+            }
+            Ok(())
+        })
+        .unwrap_or_else(|| Err("No device open".to_string()))
 }
 
-#[tauri::command]
-fn rynk_close(state: State<'_, LinkState>) {
-    if let Some(link) = state.0.lock().unwrap().take() {
-        link.stop();
-    }
+/// `async` for the same reason as `rynk_open`: closing joins the reader
+/// thread, which can take up to one `IO_POLL`.
+#[tauri::command(async)]
+async fn rynk_close(state: State<'_, LinkState>) -> Result<(), String> {
+    state.take_and_stop().await;
+    Ok(())
 }
 
 fn main() {

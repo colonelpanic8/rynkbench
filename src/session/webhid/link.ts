@@ -1,6 +1,6 @@
-// WebHID byte link for the Rynk raw-HID interface (usage page 0xFF60 /
-// usage 0x61). Framing (header-based trimming, 32-byte report split) lives in
-// the shared rynk-link module; this file is only the WebHID plumbing.
+// WebHID byte link for the Rynk raw-HID interface (RYNK_USAGE_PAGES /
+// RYNK_USAGE). The 32-byte report split lives in the shared rynk-link module;
+// this file is only the WebHID plumbing.
 
 import {
   RYNK_USAGE,

@@ -1,16 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  GLOVE80_BATTERY_BARS,
-  GLOVE80_CONNECTION_KEYS,
+  batteryBarLevels,
   batteryBarRules,
   bleStatusRules,
   connectionKeyAction,
+  detectBarOrder,
+  glove80BatteryBars,
+  glove80ConnectionKeys,
   installGlove80StatusRules,
+  orderBatteryBar,
   replaceBatteryBar,
   replaceBleStatus,
   usbStatusRules,
   writeGlove80StatusSetup,
 } from "./statusPresets";
+
+const GLOVE80_BATTERY_BARS = glove80BatteryBars();
+const GLOVE80_CONNECTION_KEYS = glove80ConnectionKeys();
 
 describe("status lighting presets", () => {
   it("builds the ordered five-segment battery treatment from the config", () => {
@@ -23,6 +29,45 @@ describe("status lighting presets", () => {
     expect(rules.slice(5, 8).map((rule) => rule.cell.led_id)).toEqual([39, 38, 39]);
     expect(rules.slice(8).every((rule) => rule.cell.conditions.battery?.charge === "Charging"))
       .toBe(true);
+  });
+
+  it("spaces segments as equal bands, or as MoErgo's 0…100 steps", () => {
+    expect(batteryBarLevels(5)).toEqual([1, 21, 41, 61, 81]);
+    expect(batteryBarLevels(6)).toEqual([1, 17, 34, 51, 67, 84]);
+    expect(batteryBarLevels(6, "stock")).toEqual([1, 20, 40, 60, 80, 100]);
+  });
+
+  it("builds a six-segment stock bar colored as a whole", () => {
+    const leds = [36, 30, 24, 18, 12, 7];
+    const rules = batteryBarRules({ layer: 2, node: 0, leds, style: "stock" });
+    const levelled = rules.filter((rule) => rule.cell.conditions.battery?.charge === "Any");
+    const at = (level: number) =>
+      levelled
+        .filter(({ cell }) => {
+          const { min_level = 0, max_level = 100 } = cell.conditions.battery!;
+          return level >= min_level && level <= max_level;
+        })
+        .reduce((lit, rule) => lit.set(rule.cell.led_id, rule.cell.effect), new Map());
+
+    expect(rules).toHaveLength(6 + 2 + 1 + 6);
+    expect([...at(100).keys()]).toEqual(leds);
+    expect([...at(55).keys()]).toEqual([36, 30, 24]);
+    expect([...new Set(at(55).values())]).toEqual([{ Solid: { color: { r: 0, g: 128, b: 0 } } }]);
+    expect([...at(25).keys()]).toEqual([36, 30]);
+    expect([...new Set(at(25).values())]).toEqual([{ Solid: { color: { r: 160, g: 128, b: 0 } } }]);
+    expect([...at(5).keys()]).toEqual([36]);
+    expect(at(5).get(36)).toEqual({ Solid: { color: { r: 160, g: 0, b: 0 } } });
+  });
+
+  it("draws the stock Glove80 layout across the left half", () => {
+    const bars = glove80BatteryBars(11, "stock");
+    expect(bars.map((bar) => bar.leds)).toEqual([
+      [36, 30, 24, 18, 12, 7],
+      [37, 31, 25, 19, 13, 8],
+    ]);
+    const rules = installGlove80StatusRules([], 11, "stock");
+    expect(rules).toHaveLength(2 * 15 + 3 * 6 + 3);
+    expect(rules.every((rule) => rule.cell.conditions.layer?.layer === 11)).toBe(true);
   });
 
   it("orders Bluetooth states so active transport wins last", () => {
@@ -56,6 +101,40 @@ describe("status lighting presets", () => {
     expect(twice).toEqual(once);
     expect(GLOVE80_BATTERY_BARS[0].leds).toEqual([39, 38, 37, 36, 35]);
     expect(GLOVE80_BATTERY_BARS[1].leds).toEqual([79, 78, 77, 76, 75]);
+  });
+
+  it("installs the complete Glove80 setup on the chosen layer", () => {
+    const rules = installGlove80StatusRules([], 11);
+
+    expect(rules).toHaveLength(47);
+    expect(rules.every((rule) => rule.cell.conditions.layer?.layer === 11)).toBe(true);
+    expect(glove80ConnectionKeys(11).every((key) => key.layer === 11)).toBe(true);
+  });
+
+  it("orders a bar along its longer axis, tolerating column stagger", () => {
+    // A staggered row: y drifts per column, as on the Glove80's finger columns.
+    const row = [
+      { ledId: 30, x: 4, y: 3.2 },
+      { ledId: 33, x: 1, y: 3.0 },
+      { ledId: 31, x: 3, y: 3.4 },
+      { ledId: 34, x: 0, y: 2.8 },
+      { ledId: 32, x: 2, y: 3.3 },
+    ];
+    expect(detectBarOrder(row)).toBe("left-right");
+    expect(orderBatteryBar(row, "left-right")).toEqual([34, 33, 32, 31, 30]);
+    expect(orderBatteryBar(row, "right-left")).toEqual([30, 31, 32, 33, 34]);
+    expect(orderBatteryBar(row, "selection")).toEqual([30, 33, 31, 34, 32]);
+
+    const column = [
+      { ledId: 35, x: 5, y: 0 },
+      { ledId: 36, x: 5, y: 1 },
+      { ledId: 39, x: 5, y: 4 },
+      { ledId: 37, x: 5, y: 2 },
+      { ledId: 38, x: 5, y: 3 },
+    ];
+    expect(detectBarOrder(column)).toBe("bottom-up");
+    expect(orderBatteryBar(column, "bottom-up")).toEqual([39, 38, 37, 36, 35]);
+    expect(orderBatteryBar(column, "top-down")).toEqual([35, 36, 37, 38, 39]);
   });
 
   it("replaces only matching status rules and preserves unrelated entries", () => {

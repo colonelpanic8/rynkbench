@@ -43,7 +43,7 @@
       "flake": false,
       "locked": {
         "lastModified": 1787171048,
-        "narHash": "sha256-sAvLPk7DDox+W5kSVt8UPIRM1x+W6mJq4xCf7iuDfuY=",
+        "narHash": "sha256-XvH+H7UpxLlmGDFezNtsLfS2cCNbkWQ2gDSi4aA65/I=",
         "owner": "colonelpanic8",
         "repo": "moergo-rmk",
         "rev": "0fd8e8d365b22fa66d9c880b87678a8f0fd9ae0f",
