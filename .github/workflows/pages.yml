@@ -44,6 +44,15 @@ jobs:
       - name: Build Rynk WASM client
         run: npm run wasm
 
+      - name: Typecheck
+        run: npm exec tsc -b
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
       - name: Build static site
         run: npm exec vite build -- --base "${{ steps.pages.outputs.base_path }}/"
 

@@ -18,7 +18,6 @@
 // keyboard in use is not advertising, so a scan would not find the one case
 // that matters. This mirrors `rynk-ble` in the rmk fork.
 
-use std::sync::Mutex;
 use std::time::Duration;
 
 use bluest::{Adapter, Characteristic, Device, Uuid};
@@ -27,6 +26,8 @@ use serde::Serialize;
 use tauri::async_runtime::{self, JoinHandle};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc::{self, UnboundedSender};
+
+use crate::transport::{emit_disconnect, Link, LinkSlot};
 
 // Source of truth: `rmk_types::protocol::rynk` in the pinned rmk fork. Copied
 // rather than imported for the same reason the HID usage page is copied — the
@@ -44,23 +45,37 @@ const GATT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Adapter enumeration hangs rather than erroring when Bluetooth is off or
 /// permission is denied, so bound it and report that as a plain failure.
 const ADAPTER_TIMEOUT: Duration = Duration::from_secs(5);
+/// How long a closing link may keep writing what is already queued. A close
+/// usually follows the last request by microseconds, and aborting outright
+/// dropped those bytes on the floor.
+const DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// The webview listens for this on the BLE transport.
+const DISCONNECT_EVENT: &str = "rynk-ble-disconnect";
 
 pub struct BleLink {
     outbound: UnboundedSender<Vec<u8>>,
     task: JoinHandle<()>,
 }
 
-impl BleLink {
-    /// Dropping the sender ends the task's receive loop; the abort is only a
-    /// backstop for a task parked in a GATT call that never returns.
-    fn stop(self) {
-        drop(self.outbound);
-        self.task.abort();
+impl Link for BleLink {
+    /// Dropping the sender ends the task's receive loop — but only after it
+    /// has written everything already queued, so the wait is the point. The
+    /// abort is the backstop for a task parked in a GATT call that never
+    /// returns.
+    async fn stop(self) {
+        let BleLink { outbound, mut task } = self;
+        drop(outbound);
+        if tokio::time::timeout(DRAIN_TIMEOUT, &mut task)
+            .await
+            .is_err()
+        {
+            task.abort();
+        }
     }
 }
 
-#[derive(Default)]
-pub struct BleState(Mutex<Option<BleLink>>);
+pub type BleState = LinkSlot<BleLink>;
 
 #[derive(Serialize)]
 pub struct BleOpenResult {
@@ -179,7 +194,7 @@ async fn run_io(
                     // reliably, and skipping the ATT ack saves a full connection
                     // interval per chunk.
                     if output.write_without_response(chunk).await.is_err() {
-                        emit_disconnect(&app);
+                        emit_disconnect(&app, DISCONNECT_EVENT);
                         return;
                     }
                 }
@@ -191,17 +206,13 @@ async fn run_io(
                     }
                     // An unsubscribe or a dropped link both end the stream.
                     Some(Err(_)) | None => {
-                        emit_disconnect(&app);
+                        emit_disconnect(&app, DISCONNECT_EVENT);
                         return;
                     }
                 }
             }
         }
     }
-}
-
-fn emit_disconnect(app: &AppHandle) {
-    let _ = app.emit("rynk-ble-disconnect", ());
 }
 
 /// Enumerate connected Rynk keyboards. Presence of the service is the only
@@ -225,9 +236,7 @@ pub async fn rynk_ble_open(
     state: State<'_, BleState>,
     id: Option<String>,
 ) -> Result<BleOpenResult, String> {
-    if let Some(previous) = state.0.lock().unwrap().take() {
-        previous.stop();
-    }
+    state.take_and_stop().await;
 
     let adapter = adapter().await?;
     let device = connected_devices(&adapter)
@@ -275,22 +284,29 @@ pub async fn rynk_ble_open(
     .await
     .map_err(|_| format!("Timed out attaching to {label}"))??;
 
-    *state.0.lock().unwrap() = Some(BleLink { outbound: tx, task });
+    // Another open may have raced in during the GATT handshake; whatever it
+    // installed is displaced here, and stopped rather than leaked.
+    let displaced = state.replace(BleLink { outbound: tx, task });
+    if let Some(previous) = displaced {
+        previous.stop().await;
+    }
     Ok(BleOpenResult { label })
 }
 
 #[tauri::command]
 pub fn rynk_ble_send(state: State<'_, BleState>, bytes: Vec<u8>) -> Result<(), String> {
-    let slot = state.0.lock().unwrap();
-    let link = slot.as_ref().ok_or("No Bluetooth device open")?;
-    link.outbound
-        .send(bytes)
-        .map_err(|_| "Bluetooth link is down".to_string())
+    state
+        .with(|link| {
+            link.outbound
+                .send(bytes)
+                .map_err(|_| "Bluetooth link is down".to_string())
+        })
+        .unwrap_or_else(|| Err("No Bluetooth device open".to_string()))
 }
 
+/// Async because closing drains: see `BleLink::stop`.
 #[tauri::command]
-pub fn rynk_ble_close(state: State<'_, BleState>) {
-    if let Some(link) = state.0.lock().unwrap().take() {
-        link.stop();
-    }
+pub async fn rynk_ble_close(state: State<'_, BleState>) -> Result<(), String> {
+    state.take_and_stop().await;
+    Ok(())
 }

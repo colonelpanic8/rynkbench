@@ -48,6 +48,10 @@ preview-mocks port=random_port:
     VITE_ENABLE_MOCKS=1 npm run build
     npm run preview -- --host 0.0.0.0 --port {{port}} --strictPort
 
+# Clippy the desktop shell (needs the devshell for libudev and GTK/WebKit).
+check-rust:
+    cd src-tauri && cargo clippy --all-targets -- -D warnings
+
 # Build all flake checks.
 nix-check:
     nix flake check
