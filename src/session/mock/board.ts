@@ -456,7 +456,7 @@ class MockSession implements RynkSession {
     buildInfo: () => latency(() => this.spec.build),
     layout: () => latency(() => this.spec.layout),
     battery: () => latency(() => this.battery),
-    connectionStatus: () => latency(() => this.spec.connection),
+    connectionStatus: () => latency(() => this.connectionStatus()),
     // Bootloader entry drops the link, same as the real device would.
     rebootToBootloader: () =>
       latency(() => {
@@ -474,6 +474,7 @@ class MockSession implements RynkSession {
         this.checkBleProfile(slot);
         // Selecting a slot drops any live link and re-advertises on it.
         this.ble = { profile: slot, state: "Advertising" };
+        this.emit({ ConnectionChange: this.connectionStatus() });
       }),
     peripheralStatus: (slot) =>
       latency(() => {
@@ -862,6 +863,10 @@ class MockSession implements RynkSession {
     this.ttlTimer = null;
     if (this.matrixTimer !== null) clearInterval(this.matrixTimer);
     this.matrixTimer = null;
+  }
+
+  private connectionStatus(): ConnectionStatus {
+    return { ...this.spec.connection, ble: { ...this.ble } };
   }
 
   private emit(event: TopicEvent): void {

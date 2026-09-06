@@ -13,6 +13,7 @@ import type { RynkSession } from "../session/types";
 import { isUnsupportedError } from "../session/unsupported";
 import type { ConnectedBundle, WorkbenchAction, WorkbenchState } from "../ui/state";
 import { errorMessage } from "../ui/state";
+import { same } from "../ui/deep-equal";
 import type { ComboDefinition, Fork, Morse } from "../vendor/rynk-wasm/rynk_wasm";
 import { normalizePointingConfig, pointingConfigsEqual } from "../ui/pointing";
 import {
@@ -36,10 +37,6 @@ export interface ImportResult {
   /** What the document asked for that this seam has no way to write. Reported
    *  rather than dropped: silence would read as success. */
   skipped: string[];
-}
-
-function same(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 interface ImportArgs {

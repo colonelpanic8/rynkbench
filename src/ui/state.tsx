@@ -2,6 +2,7 @@
 // writes both funnel through dispatch; components read via useWorkbench().
 
 import { createContext, useContext } from "react";
+import { same } from "./deep-equal";
 import type { Dispatch } from "react";
 import type {
   AutoMouseLayerConfig,
@@ -728,7 +729,7 @@ export function makeWorkbenchReducer(cols: number) {
         const before =
           state.stagedKeys[id]?.before ?? state.layers[act.layer][act.row * cols + act.col];
         const layers = setLayerKey(state.layers, cols, act.layer, act.row, act.col, act.action);
-        if (JSON.stringify(before) === JSON.stringify(act.action)) {
+        if (same(before, act.action)) {
           // Edited back to what the device holds: nothing left to apply.
           const { [id]: _gone, ...stagedKeys } = state.stagedKeys;
           return { ...state, layers, stagedKeys };
@@ -752,7 +753,7 @@ export function makeWorkbenchReducer(cols: number) {
         const key = `${act.layer}:${act.id}`;
         const before = id in state.stagedEncoders ? state.stagedEncoders[id].before : state.encoders[key];
         const encoders = { ...state.encoders, [key]: act.action };
-        if (JSON.stringify(before) === JSON.stringify(act.action)) {
+        if (same(before, act.action)) {
           const { [id]: _gone, ...stagedEncoders } = state.stagedEncoders;
           return { ...state, encoders, stagedEncoders };
         }
@@ -1223,7 +1224,7 @@ export function overlaysEqual(
   for (const k of ak) {
     const ka = Number(k);
     if (!(ka in b)) return false;
-    if (JSON.stringify(a[ka]) !== JSON.stringify(b[ka])) return false;
+    if (!same(a[ka], b[ka])) return false;
   }
   return true;
 }
@@ -1236,7 +1237,7 @@ export function conditionalTablesEqual(
   b: LightingExtendedConditionalSceneCell[],
 ): boolean {
   if (a.length !== b.length) return false;
-  return a.every((cell, index) => JSON.stringify(cell) === JSON.stringify(b[index]));
+  return a.every((cell, index) => same(cell, b[index]));
 }
 
 /** LED ids where `draft` diverges from its `base` (staged, unapplied edits). */
@@ -1248,7 +1249,7 @@ export function stagedBetween(
   for (const k of Object.keys(draft)) {
     const id = Number(k);
     const b = base[id];
-    if (!b || JSON.stringify(b) !== JSON.stringify(draft[id])) out.add(id);
+    if (!b || !same(b, draft[id])) out.add(id);
   }
   for (const k of Object.keys(base)) {
     const id = Number(k);
@@ -1577,7 +1578,7 @@ function assertLayerRewriteReadback(expected: LayerRewriteSnapshot, actual: Laye
       ? { ...snapshot.pointing, revision: 0 }
       : null,
   });
-  if (JSON.stringify(comparable(expected)) !== JSON.stringify(comparable(actual))) {
+  if (!same(comparable(expected), comparable(actual))) {
     throw new Error("layer transaction read-back did not match the requested rewrite");
   }
 }
@@ -1667,6 +1668,7 @@ export function makeIo(
     }
     dispatch({ type: "layerOperationStart" });
     let original: LayerRewriteSnapshot | null = null;
+    let writing = false;
     try {
       original = await readLayerRewriteSnapshot(session, getState(), features);
       let plan: LayerRewrite;
@@ -1688,6 +1690,7 @@ export function makeIo(
       } else {
         plan = planLayerRewrite(original, operation);
       }
+      writing = true;
       await writeLayerRewriteSnapshot(session, plan, features);
       const readback = await readLayerRewriteSnapshot(session, getState(), features);
       assertLayerRewriteReadback(plan, readback);
@@ -1696,7 +1699,7 @@ export function makeIo(
       return { ok: true };
     } catch (error) {
       let message = errorMessage(error);
-      if (original) {
+      if (original && writing) {
         try {
           await writeLayerRewriteSnapshot(session, original, features);
         } catch (rollbackError) {
@@ -1835,9 +1838,11 @@ export function makeIo(
       if (keys.length === 0 && encoders.length === 0) return { ok: true };
       dispatch({ type: "batchApplyStart" });
       const failures: string[] = [];
+      let appliedKeys = 0;
       for (const edit of keys) {
         try {
           await session.keymap.setKey(edit.layer, edit.row, edit.col, edit.action);
+          appliedKeys += 1;
           dispatch({ type: "keyStageApplied", layer: edit.layer, row: edit.row, col: edit.col });
         } catch (error) {
           failures.push(
@@ -1854,7 +1859,7 @@ export function makeIo(
         }
       }
       // A batch apply is a bulk write outside per-key history, like an import.
-      if (keys.length > failures.length) dispatch({ type: "keyHistoryClear" });
+      if (appliedKeys > 0) dispatch({ type: "keyHistoryClear" });
       const message =
         failures.length > 0
           ? `${failures.length} of ${keys.length + encoders.length} staged write(s) failed ` +

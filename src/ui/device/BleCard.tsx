@@ -1,10 +1,11 @@
 // BLE profile slots and split-peripheral status.
 
 import { useEffect, useState } from "react";
-import type { PeripheralStatus } from "../../vendor/rynk-wasm/rynk_wasm";
+import type { BleStatus, PeripheralStatus } from "../../vendor/rynk-wasm/rynk_wasm";
 import { errorMessage, useWorkbench } from "../state";
 import { Button, Chip, Panel, SectionLabel, cx } from "../kit";
 import { BatteryGlyph, BleIcon } from "../icons";
+import { readBleStatus } from "./ble-status";
 
 const BLE_STATE_LABEL: Record<string, string> = {
   Advertising: "Advertising",
@@ -20,10 +21,25 @@ export function BleCard() {
   const [clearing, setClearing] = useState<number | null>(null);
   const [switching, setSwitching] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fallback, setFallback] = useState<BleStatus | null>(null);
 
   // The connection topic carries BLE state, so the card reads what the rest of
   // the workbench already has instead of keeping a second, staler copy.
-  const status = state.connection?.ble ?? null;
+  const status = state.connection?.ble ?? fallback;
+
+  useEffect(() => {
+    if (state.connection !== null) return;
+    let cancelled = false;
+    readBleStatus(session).then(
+      (result) => {
+        if (cancelled) return;
+        if (result.connection) dispatch({ type: "topicConnection", connection: result.connection });
+        else setFallback(result.ble);
+      },
+      (error) => { if (!cancelled) setError(errorMessage(error)); },
+    );
+    return () => { cancelled = true; };
+  }, [session, state.connection, dispatch]);
 
   useEffect(() => {
     if (!caps.is_split || caps.num_split_peripherals === 0) return;
@@ -44,14 +60,10 @@ export function BleCard() {
     };
   }, [session, caps.is_split, caps.num_split_peripherals]);
 
-  /** Not every firmware pushes a ConnectionChange after a profile write, so
-   *  one read-back keeps the card honest on the ones that don't. */
-  const refreshConnection = async () => {
-    try {
-      dispatch({ type: "topicConnection", connection: await session.device.connectionStatus() });
-    } catch {
-      // The topic push, if there is one, remains the source of truth.
-    }
+  const refreshConnection = async (expectedProfile?: number) => {
+    const result = await readBleStatus(session, expectedProfile);
+    if (result.connection) dispatch({ type: "topicConnection", connection: result.connection });
+    else setFallback(result.ble);
   };
 
   const busy = switching !== null || clearing !== null;
@@ -61,7 +73,7 @@ export function BleCard() {
     setError(null);
     try {
       await session.device.switchBleProfile(slot);
-      await refreshConnection();
+      await refreshConnection(slot);
     } catch (err) {
       setError(errorMessage(err));
     } finally {

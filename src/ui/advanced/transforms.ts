@@ -247,6 +247,8 @@ function mapFork(spec: TransformSpec, fork: Fork): Fork {
     trigger: mapKeyAction(spec, fork.trigger),
     negative_output: mapKeyAction(spec, fork.negative_output),
     positive_output: mapKeyAction(spec, fork.positive_output),
+    match_any: { ...fork.match_any, modifiers: mapModifiers(spec, fork.match_any.modifiers) },
+    match_none: { ...fork.match_none, modifiers: mapModifiers(spec, fork.match_none.modifiers) },
     kept_modifiers: mapModifiers(spec, fork.kept_modifiers),
   };
 }

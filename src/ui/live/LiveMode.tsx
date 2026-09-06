@@ -4,7 +4,7 @@
 // backed by the firmware's complete active-layer snapshot.
 
 import { useMemo } from "react";
-import type { LightingEffect, ModifierCombination } from "../../vendor/rynk-wasm/rynk_wasm";
+import type { ModifierCombination } from "../../vendor/rynk-wasm/rynk_wasm";
 import type { KeyView } from "../../model/keyboard";
 import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
@@ -17,24 +17,7 @@ import { keyActionHoldsShift, liveKeyActionGlyph, reportedShiftState } from "./c
 import { LockIndicators } from "./LockIndicators";
 import { useMatrixPoll } from "../matrix-poll";
 import { layersInMask } from "../lighting/wakeLayers";
-
-function effectColor(effect: LightingEffect): string {
-  if ("Solid" in effect) return cssEmissiveRgb(effect.Solid.color);
-  if ("Blink" in effect) return cssEmissiveRgb(effect.Blink.color);
-  return cssEmissiveRgb(effect.Breathe.color);
-}
-
-function effectAnim(effect: LightingEffect): KeyDecor["fillAnim"] {
-  if ("Blink" in effect)
-    return { name: "led-blink", periodMs: effect.Blink.period_ms, delayMs: effect.Blink.phase_ms };
-  if ("Breathe" in effect)
-    return {
-      name: "led-breathe",
-      periodMs: effect.Breathe.period_ms,
-      delayMs: effect.Breathe.phase_ms,
-    };
-  return undefined;
-}
+import { effectAnim, effectColor } from "../lighting/decor";
 
 /** Wire HSV (0–255 each) → CSS color. */
 function wireHsvCss(hue: number, saturation: number, value: number): string {

@@ -1284,3 +1284,21 @@ describe("providers", () => {
     }
   });
 });
+
+describe("mock BLE connection state", () => {
+  it("reports profile switches through both reads and topics without changing the board defaults", async () => {
+    const initial = structuredClone(glove80Board.connection);
+    await withSession(glove80Board, async (session) => {
+      const topics: TopicEvent[] = [];
+      session.onTopic((event) => topics.push(event));
+      await session.device.switchBleProfile(1);
+      const connection = await session.device.connectionStatus();
+      expect(connection.ble).toEqual({ profile: 1, state: "Advertising" });
+      expect(await session.device.bleStatus()).toEqual(connection.ble);
+      expect(topics).toContainEqual({ ConnectionChange: connection });
+      connection.ble.profile = 2;
+      expect((await session.device.connectionStatus()).ble.profile).toBe(1);
+    });
+    expect(glove80Board.connection).toEqual(initial);
+  });
+});

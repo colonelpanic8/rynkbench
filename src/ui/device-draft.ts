@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { same } from "./deep-equal";
 
 export interface DeviceDraft<T> {
@@ -14,25 +14,23 @@ export interface DeviceDraft<T> {
  * A local draft of a device-owned value that follows device pushes only while
  * it is clean.
  *
- * The device value can move under the editor at any time — a topic push, a
- * rollback after a failed write, another panel's write. An untouched draft
- * should track it; staged edits must never be clobbered by it. Every panel
- * used to hand-roll this with a ref and an effect that lied about its deps.
+ * Pending optimistic values are not a confirmed baseline for staged edits.
  */
-export function useDeviceDraft<T>(device: T): DeviceDraft<T> {
-  const [draft, setDraft] = useState(device);
-  // The device value this draft was last aligned with. Comparing against it
-  // (not against `device`) is what tells "user edited" from "device moved".
-  const followed = useRef(device);
-  if (followed.current !== device) {
-    const wasClean = same(draft, followed.current);
-    followed.current = device;
-    if (wasClean) setDraft(device);
+export function useDeviceDraft<T>(device: T, pending = false): DeviceDraft<T> {
+  const [state, setState] = useState(() => ({ draft: device, followed: device }));
+  let current = state;
+  if (!pending && !Object.is(state.followed, device)) {
+    current = {
+      draft: same(state.draft, state.followed) ? device : state.draft,
+      followed: device,
+    };
+    setState(current);
   }
+  const setDraft = useCallback((draft: T) => setState((prev) => ({ ...prev, draft })), []);
   return {
-    draft,
+    draft: current.draft,
     setDraft,
-    dirty: !same(draft, device),
-    reset: () => setDraft(device),
+    dirty: !same(current.draft, current.followed),
+    reset: () => setDraft(current.followed),
   };
 }

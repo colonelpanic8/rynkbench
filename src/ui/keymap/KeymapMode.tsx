@@ -199,7 +199,7 @@ export function KeymapCenter() {
   const { bundle, state, dispatch, io } = useWorkbench();
   const cols = bundle.caps.num_cols;
   const layer = state.layers[state.uiLayer];
-  const scenesSupported = bundle.sceneStatus !== null;
+  const layerLightingAvailable = bundle.sceneStatus !== null || bundle.compiledSceneStatus !== null;
   const [showLighting, setShowLighting] = useState(true);
   const [drag, setDrag] = useState<{
     source: KeyView;
@@ -425,7 +425,7 @@ export function KeymapCenter() {
 
   // The layer's staged scene, previewed under the legends so bindings and
   // lighting can be judged together. Lighting mode remains the place to paint.
-  const lit = scenesSupported && showLighting;
+  const lit = layerLightingAvailable && showLighting;
   // The compiled firmware cells are part of what the layer shows, so the
   // canvas previews the same composition Lighting mode does.
   const sceneEffects = useMemo(
@@ -501,7 +501,7 @@ export function KeymapCenter() {
       <LayerTabs />
       <div className="flex min-h-5 items-center justify-between gap-4 px-1 text-[11.5px] text-faint">
         <span className="flex items-center gap-3">
-          {scenesSupported && (
+          {layerLightingAvailable && (
             <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap">
               <input
                 type="checkbox"

@@ -61,11 +61,11 @@ const FIELDS: Array<{
 export function BehaviorTab({ nav }: { nav: ReactNode }) {
   const { state, io } = useWorkbench();
   const saved = state.behavior;
-  const { draft, setDraft, dirty, reset } = useDeviceDraft(saved);
+  const pending = state.pending.behavior;
+  const { draft, setDraft, dirty, reset } = useDeviceDraft(saved, pending?.status === "pending");
   const [justSaved, setJustSaved] = useState(false);
 
   // Flash "Saved" once the write settles.
-  const pending = state.pending.behavior;
   const wasPending = useRef(false);
   useEffect(() => {
     const fired = wasPending.current && !pending;

@@ -77,7 +77,24 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ledId, layer]);
 
-  if (sceneStatus === null) return null;
+  if (sceneStatus === null) {
+    if (current === undefined) return null;
+    return (
+      <div className="border-t border-line-soft pt-4">
+        <SectionLabel>Layer lighting</SectionLabel>
+        <div className="mt-2 flex items-center gap-2 text-[12px] text-mute">
+          <span
+            className="size-3 rounded-sm border border-cap-edge"
+            style={{ background: effectColor(current) }}
+          />
+          {effectKind(current)} · firmware default
+        </div>
+        <p className="mt-1.5 text-[11.5px] text-faint">
+          This firmware exposes layer lighting for viewing only.
+        </p>
+      </div>
+    );
+  }
 
   const effect = buildEffect(brush.kind, hsvToRgb(brush.hsv), brush.timing);
 

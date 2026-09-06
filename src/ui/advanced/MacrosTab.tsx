@@ -18,7 +18,7 @@ import {
   macroByteCost,
   macroPreview,
 } from "../macros";
-import { Button, InspectorShell, SectionLabel, TextInput, cx } from "../kit";
+import { Button, InspectorShell, SectionLabel, Segmented, TextInput, cx } from "../kit";
 import { CloseIcon, PlusIcon, TrashIcon } from "../icons";
 import { CenterScroll, SlotCard } from "./bits";
 
@@ -55,21 +55,15 @@ function AddStep({ onAdd }: { onAdd: (step: MacroStep) => void }) {
 
   return (
     <div className="flex flex-col gap-2.5 rounded-lg border border-line-soft bg-well/60 p-2.5">
-      <div className="flex gap-0.5 rounded-lg border border-line-soft bg-well p-0.5">
-        {(["text", "tap", "press", "release", "delay"] as const).map((k) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => setKind(k)}
-            className={cx(
-              "flex-1 cursor-pointer rounded-md px-1 py-1 text-[11px] font-medium capitalize transition-colors duration-120",
-              kind === k ? "bg-raised text-ink shadow-sm" : "text-faint hover:text-mute",
-            )}
-          >
-            {k}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        items={(["text", "tap", "press", "release", "delay"] as const).map((value) => ({
+          value, label: value,
+        }))}
+        value={kind}
+        onChange={setKind}
+        size="sm"
+        className="capitalize"
+      />
 
       {kind === "text" && (
         <div className="flex flex-col gap-1.5">
@@ -136,10 +130,9 @@ export function MacrosTab({ nav }: { nav: ReactNode }) {
   const capacity = bundle.caps.macro_space_size;
 
   const savedMacros = useMemo(() => decodeMacros(state.macroBytes), [state.macroBytes]);
-  const { draft: drafts, setDraft: setDrafts, dirty, reset } = useDeviceDraft(savedMacros);
-  const [sel, setSel] = useState<number | null>(null);
-
   const pending = state.pending.macros?.status === "pending";
+  const { draft: drafts, setDraft: setDrafts, dirty, reset } = useDeviceDraft(savedMacros, pending);
+  const [sel, setSel] = useState<number | null>(null);
 
   const usedBytes = drafts.reduce((n, m) => n + macroByteCost(m), 0);
   const overCapacity = usedBytes > capacity;

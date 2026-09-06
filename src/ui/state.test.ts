@@ -1394,6 +1394,20 @@ describe("batch mode", () => {
     expect(state().keyEditHistory.past).toEqual([]);
   });
 
+  it("clears history after a successful key write even when an encoder fails", async () => {
+    const entry = { sequence: 1, layer: 0, row: 0, col: 0, before: "No" as const, after: key("C") };
+    const { io, state } = batchHarness(
+      { keyEditHistory: { ...initialKeyEditHistory(), past: [entry] } },
+      { setEncoder: async () => { throw new Error("encoder failed"); } },
+    );
+    await io.setKey(0, 0, 0, key("A"));
+    io.setEncoder(0, 0, enc("A"));
+
+    expect((await io.applyBatch()).ok).toBe(false);
+    expect(state().keyEditHistory.past).toEqual([]);
+    expect(state().stagedEncoders["e:0:0"]).toBeDefined();
+  });
+
   it("keeps failed writes staged and reports them, ready for a retry", async () => {
     const { io, state } = batchHarness(
       {},

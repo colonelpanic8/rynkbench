@@ -29,6 +29,7 @@ export default function App() {
   const [providers, setProviders] = useState<SessionProvider[] | null>(null);
   const [attempt, setAttempt] = useState<ConnectAttempt | null>(null);
   const [bundle, setBundle] = useState<ConnectedBundle | null>(null);
+  const [connectionId, setConnectionId] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [offlineBusy, setOfflineBusy] = useState(false);
   const [reconnectAttempt, setReconnectAttempt] = useState<{ attempt: number; total: number } | null>(
@@ -60,6 +61,9 @@ export default function App() {
     bundleRef.current = loaded;
     providerIndexRef.current = providerIndex;
     setBundle(loaded);
+    setConnectionId((id) => id + 1);
+    reconnectingSessionRef.current = null;
+    setReconnectAttempt(null);
     setAttempt(null);
   }, []);
 
@@ -91,6 +95,7 @@ export default function App() {
   );
 
   const close = useCallback(() => {
+    reconnectingSessionRef.current = null;
     bundleRef.current?.session.close().catch(() => {});
     bundleRef.current = null;
     providerIndexRef.current = null;
@@ -161,7 +166,12 @@ export default function App() {
               }
             },
             {
-              onAttempt: (attempt, total) => setReconnectAttempt({ attempt, total }),
+              onAttempt: (attempt, total) => {
+                if (reconnectingSessionRef.current !== droppedSession) {
+                  throw new Error("Reconnect cancelled");
+                }
+                setReconnectAttempt({ attempt, total });
+              },
             },
           );
 
@@ -193,7 +203,7 @@ export default function App() {
     return (
       <div className="relative h-full">
         <Workbench
-          key={bundle.session.label}
+          key={connectionId}
           bundle={bundle}
           onClose={close}
           onUnexpectedDisconnect={unexpectedDisconnect}

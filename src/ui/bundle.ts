@@ -93,16 +93,11 @@ export async function openBundle(session: RynkSession): Promise<ConnectedBundle>
   let extensionEffectNames: string[] = [];
   let extensionPaletteNames: string[] = [];
   if (caps.lighting_enabled) {
-    try {
-      [topology, lightingCaps, lightingState] = await Promise.all([
-        session.lighting.topology(),
-        session.lighting.capabilities(),
-        session.lighting.state(),
-      ]);
-    } catch (error) {
-      incompleteReads.push(`lighting state: ${errorMessage(error)}`);
-      topology = EMPTY_TOPOLOGY;
-    }
+    [topology, lightingCaps, lightingState] = await Promise.all([
+      requiredRead("lighting topology", session.lighting.topology(), EMPTY_TOPOLOGY),
+      requiredRead("lighting capabilities", session.lighting.capabilities(), null),
+      requiredRead("lighting state", session.lighting.state(), null),
+    ]);
     lightingOutputMode = await optionalRead(
       "lighting output mode",
       session.lighting.outputMode(),
@@ -110,11 +105,11 @@ export async function openBundle(session: RynkSession): Promise<ConnectedBundle>
     );
     try {
       overlay = await session.lighting.readOverlay();
-    } catch {
-      overlayReadSupported = false;
+    } catch (error) {
+      if (isUnsupportedError(error)) overlayReadSupported = false;
+      else incompleteReads.push(`lighting overlay: ${errorMessage(error)}`);
     }
-    // Layer scenes are a newer firmware feature; a rejected status read just
-    // means this device falls back to browser-local layer presets.
+    // Firmware without layer scenes falls back to browser-local presets.
     try {
       const status = await session.lighting.scenes.sceneStatus();
       if (status.capacity > 0) {
@@ -129,20 +124,24 @@ export async function openBundle(session: RynkSession): Promise<ConnectedBundle>
     }
     // Compiled scenes are an immutable, independently composited source. Old
     // firmware simply rejects discovery and continues with an empty source.
-    try {
-      compiledSceneStatus = await session.lighting.scenes.compiledStatus();
-      compiledScenes = await session.lighting.scenes.readCompiledScenes();
-    } catch {
-      compiledSceneStatus = null;
+    compiledSceneStatus = await optionalRead(
+      "compiled lighting scene status", session.lighting.scenes.compiledStatus(), null,
+    );
+    if (compiledSceneStatus !== null) {
+      compiledScenes = await requiredRead(
+        "compiled lighting scenes", session.lighting.scenes.readCompiledScenes(), [],
+      );
     }
     // Conditional rules and board-level lighting controls are compiled from
     // keyboard.toml and exposed as another immutable firmware source.
-    try {
-      const status = await session.lighting.scenes.conditionalStatus();
+    const status = await optionalRead(
+      "compiled conditional lighting status", session.lighting.scenes.conditionalStatus(), null,
+    );
+    if (status !== null) {
       lightingControls = status.controls;
-      conditionalScenes = await session.lighting.scenes.readConditionalScenes();
-    } catch {
-      conditionalScenes = [];
+      conditionalScenes = await requiredRead(
+        "compiled conditional lighting scenes", session.lighting.scenes.readConditionalScenes(), [],
+      );
     }
     // The mutable ordered conditional table is a newer, additive surface.
     // Firmware without it reports no table at all, and the editor is hidden

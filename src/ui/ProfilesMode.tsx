@@ -10,7 +10,6 @@ import {
   type MatrixPosition,
 } from "./profiles";
 import { morseProfilePendingId, useWorkbench } from "./state";
-import { same } from "./deep-equal";
 import { useDeviceDraft } from "./device-draft";
 import { emptyMorseProfile } from "../model/slots";
 import { MORSE_MODES } from "./morse-profile";
@@ -58,14 +57,12 @@ function HoldTriggerPositionsPanel({
         .map(({ row, col }) => ({ row, col })),
     [profile, state.morseHoldTriggerPositions],
   );
-  // A failed write rolls the device value back; the selection that produced it
-  // has to survive that so it can be retried.
-  const { draft, setDraft, dirty, reset } = useDeviceDraft(saved);
+  const pending = state.pending.morseHoldTriggerPositions;
+  const { draft, setDraft, dirty, reset } = useDeviceDraft(saved, pending?.status === "pending");
 
   const selected = useMemo(() => new Set(draft.map(positionKey)), [draft]);
   const otherCount = state.morseHoldTriggerPositions.length - saved.length;
   const full = capacity !== null && otherCount + draft.length >= capacity;
-  const pending = state.pending.morseHoldTriggerPositions;
 
   const toggle = useCallback(
     (key: KeyView) => {
@@ -168,10 +165,10 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
   onDelete: () => void;
 }) {
   const { state, io } = useWorkbench();
-  const [draft, setDraft] = useState<MorseProfileEntry>(() => structuredClone(entry));
   const pendingId = morseProfilePendingId(entry.index);
   const pending = state.pending[pendingId];
-  const dirty = isNew || !same(entry, draft);
+  const { draft, setDraft, dirty: edited, reset } = useDeviceDraft(entry, pending?.status === "pending");
+  const dirty = isNew || edited;
   const duplicateName = state.morseProfiles.some(
     (item) => item.index !== entry.index && item.name === draft.name.trim(),
   );
@@ -309,7 +306,7 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
         saveDisabled={!validName}
         saveLabel={isNew ? "Create profile" : "Save profile"}
         onSave={save}
-        onReset={() => setDraft(structuredClone(entry))}
+        onReset={reset}
       />
     </Panel>
   );
@@ -456,7 +453,7 @@ export function ProfilesMode() {
           <div className="mx-auto flex max-w-5xl flex-col gap-4 pb-8">
           {editorEntry && activeSelection.kind !== "default" && (
             <ProfileEditor
-              key={`${activeSelection.kind}:${activeSelection.index}:${editorEntry.name}`}
+              key={`${activeSelection.kind}:${activeSelection.index}`}
               entry={editorEntry}
               isNew={activeSelection.kind === "new"}
               onSaved={() => setSelection({ kind: "saved", index: activeSelection.index })}

@@ -145,7 +145,6 @@ export function useDocumentTransfer(): DocumentTransfer {
       link.download = `${stem}-rynkbench.${FORMAT_EXTENSION[format]}`;
       link.click();
       URL.revokeObjectURL(url);
-      if (offline) imported.current = text;
       setReport({
         outcome: "ok",
         headline: `${offline ? "Downloaded" : "Exported"} ${FORMAT_LABEL[format]}`,

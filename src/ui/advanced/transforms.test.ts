@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { KeyAction, ModifierCombination } from "../../vendor/rynk-wasm/rynk_wasm";
 import { decodeMacros, encodeMacros } from "../macros";
-import { noStateBits } from "../../model/slots";
+import { emptyFork, noStateBits } from "../../model/slots";
 import {
   CTRL_GUI_SWAP,
   layoutSpec,
@@ -105,6 +105,21 @@ describe("CTRL_GUI_SWAP", () => {
     const plan = planOsSwap(baseInput({ layers: [[key("A"), key("LShift")]] }));
     expect(plan.keys).toHaveLength(0);
     expect(plan.macroBytes).toBeNull();
+  });
+
+  it("swaps fork modifier conditions along with their outputs", () => {
+    const fork = emptyFork();
+    fork.trigger = key("A");
+    fork.match_any.modifiers.left_ctrl = true;
+    fork.match_any.modifiers.right_alt = true;
+    fork.match_none.modifiers.right_gui = true;
+    fork.match_none.leds.caps_lock = true;
+    const { after } = planOsSwap(baseInput({ forks: [fork] })).forks[0];
+
+    expect(after.match_any.modifiers).toEqual({ ...NO_MODS, left_gui: true, right_alt: true });
+    expect(after.match_none.modifiers).toEqual({ ...NO_MODS, right_ctrl: true });
+    expect(after.match_none.leds).toEqual(fork.match_none.leds);
+    expect(planOsSwap(baseInput({ forks: [after] })).forks[0].after).toEqual(fork);
   });
 });
 
