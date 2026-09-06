@@ -11,10 +11,15 @@ export function lightingKeyLegend(
   activeLayers: number[],
   defaultLayer: number,
 ): string {
-  return keyActionGlyph(effectiveAction(
-    layers,
-    target === "overlay" ? activeLayers : [target],
-    defaultLayer,
-    key.row * cols + key.col,
-  )).text;
+  const index = key.row * cols + key.col;
+  if (target === "overlay") {
+    return keyActionGlyph(effectiveAction(layers, activeLayers, defaultLayer, index)).text;
+  }
+
+  const action = layers[target]?.[index];
+  return keyActionGlyph(
+    action === undefined || action === "Transparent"
+      ? effectiveAction(layers, [], defaultLayer, index)
+      : action,
+  ).text;
 }
