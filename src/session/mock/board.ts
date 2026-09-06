@@ -47,13 +47,10 @@ import type {
   LightingState,
   LightingZone,
   LightingZoneId,
-  ModifierCombination,
   Morse,
   MorseHoldTriggerPosition,
   MorseHoldTriggerPositionState,
-  MorseProfile,
   MorseProfileEntry,
-  MouseButtons,
   PointingCapabilities,
   PointingConfig,
   ProtocolVersion,
@@ -78,6 +75,25 @@ import type {
   SessionProvider,
   LightingTopology,
 } from "../types";
+import {
+  COMPILED_CONDITIONAL_SCENES,
+  COMPILED_LAYER_SCENES,
+  EXTENSION_EFFECTS,
+  EXTENSION_LAYERING,
+  LAYER_SCENES,
+  OUTPUT_MODE,
+  RUNTIME_CONDITIONAL_SCENES,
+  RUNTIME_CONNECTION_CONDITIONS,
+  RUNTIME_EFFECTS_CONDITIONS,
+} from "../lighting-features";
+import { unsupported } from "../unsupported";
+import {
+  emptyCombo,
+  emptyFork,
+  emptyMorse,
+  emptyMorseProfile,
+  noModifiers,
+} from "../../model/slots";
 
 export interface BoardSpec {
   title: string;
@@ -183,80 +199,6 @@ export function layerOn(layer: number): KeyAction {
   return { Single: { LayerOn: layer } };
 }
 
-export function noModifiers(): ModifierCombination {
-  return {
-    left_ctrl: false,
-    left_shift: false,
-    left_alt: false,
-    left_gui: false,
-    right_ctrl: false,
-    right_shift: false,
-    right_alt: false,
-    right_gui: false,
-  };
-}
-
-export function noLeds(): LedIndicator {
-  return { num_lock: false, caps_lock: false, scroll_lock: false, compose: false, kana: false };
-}
-
-function noMouse(): MouseButtons {
-  return {
-    button1: false,
-    button2: false,
-    button3: false,
-    button4: false,
-    button5: false,
-    button6: false,
-    button7: false,
-    button8: false,
-  };
-}
-
-/** Zero state bits: match nothing (the wire default for fork conditions). */
-export function noStateBits(): StateBits {
-  return { modifiers: noModifiers(), leds: noLeds(), mouse: noMouse() };
-}
-
-// Empty slots mirror what real firmware reports for unprogrammed entries.
-export function emptyCombo(): ComboDefinition {
-  return { Actions: { actions: [], output: "No", layer: undefined } };
-}
-
-export function emptyMorse(): Morse {
-  return {
-    profile: {
-      unilateral_tap: undefined,
-      opposite_hand_hold: undefined,
-      enable_flow_tap: undefined,
-      mode: undefined,
-      hold_timeout_ms: undefined,
-      gap_timeout_ms: undefined,
-      quick_tap_timeout_ms: undefined,
-      retro_tap: undefined,
-      prior_idle_time_ms: undefined,
-      hold_trigger_on_release: undefined,
-    },
-    actions: [],
-  };
-}
-
-export function emptyMorseProfile(): MorseProfile {
-  return { ...emptyMorse().profile };
-}
-
-export function emptyFork(): Fork {
-  return {
-    trigger: "No",
-    negative_output: "No",
-    positive_output: "No",
-    match_any: noStateBits(),
-    match_none: noStateBits(),
-    kept_modifiers: noModifiers(),
-    bindable: true,
-  };
-}
-
 // Slot values cross the session boundary in both directions, so every read
 // and write clones — callers can never alias the mock's internal state.
 const cloneStateBits = (bits: StateBits): StateBits => ({
@@ -330,17 +272,6 @@ export function buildTopology(
   return { revision, keys, physicalKeys, leds, routes, zones, zoneMemberships };
 }
 
-// LightingFeatureFlags::LAYER_SCENES (rmk-types); the generated .d.ts erases
-// the bitflag constants to a plain number, so the value is mirrored here.
-export const LAYER_SCENES = 1 << 6;
-export const COMPILED_LAYER_SCENES = 1 << 8;
-export const COMPILED_CONDITIONAL_SCENES = 1 << 9;
-export const OUTPUT_MODE = 1 << 10;
-export const EXTENSION_EFFECTS = 1 << 11;
-export const RUNTIME_CONDITIONAL_SCENES = 1 << 12;
-export const EXTENSION_LAYERING = 1 << 13;
-export const RUNTIME_CONNECTION_CONDITIONS = 1 << 14;
-export const RUNTIME_EFFECTS_CONDITIONS = 1 << 15;
 const SCENE_CHUNK_CAPACITY = 16;
 // Conditional cells are much wider on the wire than scene cells, so the
 // firmware pages them far more coarsely (LIGHTING_CONDITIONAL_SCENE_CHUNK_SIZE).
@@ -434,6 +365,11 @@ class MockSession implements RynkSession {
     this.label = spec.info.product_name;
     this.layers = spec.defaultLayers.map((actions) => [...actions]);
     const names = spec.layerNames ?? spec.defaultLayers.map((_, layer) => `Layer ${layer}`);
+    if (names.length > spec.defaultLayers.length) {
+      throw new Error(
+        `layer names cover ${names.length} layers, capacity ${spec.defaultLayers.length}`,
+      );
+    }
     this.layerMetadata = spec.defaultLayers.map((_, layer) =>
       layer < names.length
         ? { occupied: true, name: names[layer] }
@@ -450,8 +386,9 @@ class MockSession implements RynkSession {
       this.sceneTable.set(sceneKey(cell), cloneScene(cell));
     }
     for (const cell of spec.compiledScenes ?? []) this.checkSceneCell(cell);
-    this.runtimeConditional = (spec.seedRuntimeConditionalScenes ?? []).map((cell) => {
-      this.checkExtendedConditionalCell(cell);
+    for (const cell of spec.conditionalScenes ?? []) this.checkConditionalCell(cell);
+    this.runtimeConditional = (spec.seedRuntimeConditionalScenes ?? []).map((cell, index) => {
+      this.checkExtendedConditionalCell(cell, index);
       return structuredClone(cell);
     });
     this.battery = spec.battery;
@@ -616,14 +553,14 @@ class MockSession implements RynkSession {
     outputMode: () =>
       latency(() => {
         if (this.outputModeState === null) {
-          throw new Error("this firmware does not support lighting output-mode readback");
+          throw unsupported("lighting output-mode readback");
         }
         return structuredClone(this.outputModeState);
       }),
     setWakeLayers: (layers) =>
       latency(() => {
         if (this.outputModeState === null) {
-          throw new Error("this firmware does not support lighting wake-layer configuration");
+          throw unsupported("lighting wake-layer configuration");
         }
         const maxMask = 2 ** this.spec.capabilities.num_layers;
         if (!Number.isSafeInteger(layers) || layers < 0 || layers >= maxMask) {
@@ -754,8 +691,8 @@ class MockSession implements RynkSession {
           }
           // Validate the whole batch before mutating, like the transactional
           // commit on real firmware: a bad cell leaves the table untouched.
-          const next = cells.map((cell) => {
-            this.checkExtendedConditionalCell(cell);
+          const next = cells.map((cell, index) => {
+            this.checkExtendedConditionalCell(cell, index);
             return structuredClone(cell);
           });
           // Order is the meaning — the batch is stored exactly as given.
@@ -852,7 +789,7 @@ class MockSession implements RynkSession {
       latency(
         (): MorseHoldTriggerPositionState => {
           if (this.spec.holdTriggerPositionCapacity === undefined) {
-            throw new Error("this firmware has no runtime hold trigger positions");
+            throw unsupported("runtime hold trigger positions");
           }
           return {
             capacity: this.spec.holdTriggerPositionCapacity,
@@ -863,7 +800,7 @@ class MockSession implements RynkSession {
     setHoldTriggerPositions: (positions) =>
       latency(() => {
         if (this.spec.holdTriggerPositionCapacity === undefined) {
-          throw new Error("this firmware has no runtime hold trigger positions");
+          throw unsupported("runtime hold trigger positions");
         }
         this.checkHoldTriggerPositions(positions);
         this.holdTriggerPositions = structuredClone(positions);
@@ -893,14 +830,14 @@ class MockSession implements RynkSession {
     get: () =>
       latency(() => {
         if (this.pointingConfig === null) {
-          throw new Error("this firmware has no runtime pointing configuration");
+          throw unsupported("runtime pointing configuration");
         }
         return structuredClone(this.pointingConfig);
       }),
     set: (config) =>
       latency(() => {
         if (this.pointingConfig === null) {
-          throw new Error("this firmware has no runtime pointing configuration");
+          throw unsupported("runtime pointing configuration");
         }
         if (config.revision !== this.pointingConfig.revision) {
           throw new Error("pointing configuration revision changed");
@@ -1027,7 +964,7 @@ class MockSession implements RynkSession {
   private requireExtensionEffects(): NonNullable<BoardSpec["extensionEffects"]> {
     const pack = this.spec.extensionEffects;
     if (pack === undefined) {
-      throw new Error("this firmware does not support extension effects");
+      throw unsupported("extension effects");
     }
     return pack;
   }
@@ -1045,7 +982,7 @@ class MockSession implements RynkSession {
   private readExtensionLayers(): LightingExtensionLayers {
     const pack = this.requireExtensionEffects();
     if (pack.overlay === undefined) {
-      throw new Error("this firmware does not support extension effect layering");
+      throw unsupported("extension effect layering");
     }
     return { revision: this.revision, overlay: this.extensionOverlay };
   }
@@ -1055,7 +992,7 @@ class MockSession implements RynkSession {
   private effectParamSpecs(effect: number): ExtensionParamSpec[] {
     const pack = this.requireExtensionEffects();
     if (pack.params === undefined) {
-      throw new Error("this firmware does not support extension effect parameters");
+      throw unsupported("extension effect parameters");
     }
     if (!Number.isInteger(effect) || effect < 0 || effect >= pack.effects.length) {
       throw new Error(`extension effect ${effect} out of range`);
@@ -1073,71 +1010,67 @@ class MockSession implements RynkSession {
     }));
   }
 
-  private async setExtensionParamValue(
-    effect: number,
-    index: number,
-    value: number,
+  /** Match the live backend: discover the current revision, perform a guarded
+   *  write, and retry that handshake once if another lighting mutation wins the
+   *  race. `prepare` validates the request and returns the mutation to commit,
+   *  so an invalid request is rejected on its own terms rather than as a
+   *  conflict. */
+  private async guardedLightingWrite(
+    what: string,
+    prepare: () => () => void,
   ): Promise<LightingState> {
-    // Same guarded-write-then-one-retry handshake as setExtensionSelection.
     for (let attempt = 0; attempt < 2; attempt++) {
       const current = await latency(() => this.revision);
       try {
         return await latency(() => {
-          const specs = this.effectParamSpecs(effect);
-          const spec = specs[index];
-          if (spec === undefined) {
-            throw new Error(`extension effect ${effect} has no parameter ${index}`);
-          }
-          if (!Number.isInteger(value) || value < spec.min || value > spec.max) {
-            throw new Error(
-              `extension parameter ${spec.name} ${value} is outside ${spec.min}..=${spec.max}`,
-            );
-          }
+          const commit = prepare();
           if (this.revision !== current) {
             throw new Error(
               `StateRevisionConflict: lighting revision moved ` +
                 `(expected ${current}, now ${this.revision})`,
             );
           }
-          this.extensionParamValues.set(`${effect}:${index}`, value);
+          commit();
           return this.touchLighting();
         });
       } catch (error) {
         if (attempt !== 0 || !String(error).includes("RevisionConflict")) throw error;
       }
     }
-    throw new Error("extension parameter revision retry exhausted");
+    throw new Error(`${what} revision retry exhausted`);
   }
 
-  private async setExtensionSelection(state: LightingExtensionState): Promise<LightingState> {
-    // Match the live backend: discover the current revision, perform a
-    // guarded write, and retry that handshake once if another lighting
-    // mutation wins the race.
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const current = await latency(() => this.readExtension());
-      try {
-        return await latency(() => {
-          const pack = this.requireExtensionEffects();
-          this.checkExtensionState(pack, state);
-          if (this.revision !== current.revision) {
-            throw new Error(
-              `StateRevisionConflict: lighting revision moved ` +
-                `(expected ${current.revision}, now ${this.revision})`,
-            );
-          }
-          this.extensionState = { ...state };
-          return this.touchLighting();
-        });
-      } catch (error) {
-        if (attempt !== 0 || !String(error).includes("RevisionConflict")) throw error;
+  private setExtensionParamValue(
+    effect: number,
+    index: number,
+    value: number,
+  ): Promise<LightingState> {
+    return this.guardedLightingWrite("extension parameter", () => {
+      const spec = this.effectParamSpecs(effect)[index];
+      if (spec === undefined) {
+        throw new Error(`extension effect ${effect} has no parameter ${index}`);
       }
-    }
-    throw new Error("extension revision retry exhausted");
+      if (!Number.isInteger(value) || value < spec.min || value > spec.max) {
+        throw new Error(
+          `extension parameter ${spec.name} ${value} is outside ${spec.min}..=${spec.max}`,
+        );
+      }
+      return () => this.extensionParamValues.set(`${effect}:${index}`, value);
+    });
   }
 
-  private async setExtensionLayerSelection(overlay: number | undefined): Promise<LightingState> {
-    return latency(() => {
-      const current = this.readExtensionLayers();
+  private setExtensionSelection(state: LightingExtensionState): Promise<LightingState> {
+    return this.guardedLightingWrite("extension", () => {
+      this.checkExtensionState(this.requireExtensionEffects(), state);
+      return () => {
+        this.extensionState = { ...state };
+      };
+    });
+  }
+
+  private setExtensionLayerSelection(overlay: number | undefined): Promise<LightingState> {
+    return this.guardedLightingWrite("extension layering", () => {
+      this.readExtensionLayers(); // rejects when this firmware cannot layer
       const pack = this.requireExtensionEffects();
       if (
         overlay !== undefined &&
@@ -1145,9 +1078,9 @@ class MockSession implements RynkSession {
       ) {
         throw new Error(`extension overlay effect ${overlay} out of range`);
       }
-      if (current.revision !== this.revision) throw new Error("StateRevisionConflict");
-      this.extensionOverlay = overlay;
-      return this.touchLighting();
+      return () => {
+        this.extensionOverlay = overlay;
+      };
     });
   }
 
@@ -1177,7 +1110,7 @@ class MockSession implements RynkSession {
 
   private requireScenes(): void {
     if ((this.spec.sceneCapacity ?? 0) === 0) {
-      throw new Error("this firmware does not support on-device layer scenes");
+      throw unsupported("on-device layer scenes");
     }
   }
 
@@ -1194,7 +1127,7 @@ class MockSession implements RynkSession {
 
   private requireCompiledScenes(): void {
     if (this.spec.compiledScenes === undefined) {
-      throw new Error("this firmware does not support compiled layer-scene readback");
+      throw unsupported("compiled layer-scene readback");
     }
   }
 
@@ -1210,7 +1143,7 @@ class MockSession implements RynkSession {
 
   private requireConditionalScenes(): void {
     if (this.spec.conditionalScenes === undefined && this.spec.lightingControls === undefined) {
-      throw new Error("this firmware does not support conditional-scene readback");
+      throw unsupported("conditional-scene readback");
     }
   }
 
@@ -1233,7 +1166,7 @@ class MockSession implements RynkSession {
 
   private requireRuntimeConditional(): void {
     if ((this.spec.runtimeConditionalCapacity ?? 0) === 0) {
-      throw new Error("this firmware does not support runtime conditional scenes");
+      throw unsupported("runtime conditional scenes");
     }
   }
 
@@ -1249,18 +1182,22 @@ class MockSession implements RynkSession {
     };
   }
 
-  /** The firmware's per-cell bounds (handlers/lighting.rs): a real LED, a layer
-   *  inside the keymap, a battery node that some output actually reports for,
-   *  and sane percentage bounds. */
   /** The extended cell's own bounds, on top of the base cell's. Firmware that
    *  does not advertise the extended encoding cannot store these predicates,
    *  and silently dropping them would leave the rule matching unconditionally,
-   *  so this rejects instead. */
-  private checkExtendedConditionalCell(cell: LightingExtendedConditionalSceneCell): void {
+   *  so this rejects instead — with the live backend's wording, since this is a
+   *  document the user can fix rather than a missing command. */
+  private checkExtendedConditionalCell(
+    cell: LightingExtendedConditionalSceneCell,
+    index: number,
+  ): void {
     this.checkConditionalCell(cell.cell);
     const gated = cell.connection !== undefined || cell.effects !== undefined;
     if (gated && !this.spec.runtimeConditionalPredicates) {
-      throw new Error("this firmware cannot store connection or effects conditions");
+      throw new Error(
+        `rule ${index + 1} names a connection or effects condition, which this ` +
+          `firmware cannot store; update the firmware or remove the condition`,
+      );
     }
     const { connection } = cell;
     if (connection === undefined) return;
@@ -1281,6 +1218,9 @@ class MockSession implements RynkSession {
     }
   }
 
+  /** The firmware's per-cell bounds (handlers/lighting.rs): a real LED, a layer
+   *  inside the keymap, a battery node that some output actually reports for,
+   *  and sane percentage bounds. */
   private checkConditionalCell(cell: LightingConditionalSceneCell): void {
     if (!this.knownLeds.has(cell.led_id)) throw new Error(`unknown LED ${cell.led_id}`);
     const { layer, battery } = cell.conditions;
@@ -1311,12 +1251,12 @@ class MockSession implements RynkSession {
   }
 
   private readSplitLatency(): SplitCentralLatencyState {
-    if (!this.splitLatency) throw new Error("this firmware has no split central latency policy");
+    if (!this.splitLatency) throw unsupported("split central latency policy");
     return structuredClone(this.splitLatency);
   }
 
   private writeSplitLatency(policy: SplitCentralLatencyPolicy): SplitCentralLatencyState {
-    if (!this.splitLatency) throw new Error("this firmware has no split central latency policy");
+    if (!this.splitLatency) throw unsupported("split central latency policy");
     for (const value of [policy.powered, policy.battery, policy.override_latency]) {
       if (value !== undefined && (!Number.isInteger(value) || value < 0 || value > 499)) {
         throw new Error("split central latency values must be integers from 0 to 499");

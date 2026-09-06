@@ -98,9 +98,10 @@ export function buildKeyboardModel(
   const ledByMatrix = new Map<string, { ledId: LightingLedId; zoneIds: number[] }>();
   for (const led of topology.leds) {
     if (!led.key) continue;
-    const zoneIds = topology.zoneMemberships
-      .slice(led.zone_start, led.zone_start + led.zone_len)
-      .map((z) => z);
+    const zoneIds = topology.zoneMemberships.slice(
+      led.zone_start,
+      led.zone_start + led.zone_len,
+    );
     ledByMatrix.set(`${led.key.row},${led.key.col}`, { ledId: led.id, zoneIds });
   }
 

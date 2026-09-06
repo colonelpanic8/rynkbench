@@ -592,5 +592,23 @@ export function exportDocument(
       `Cannot export an incomplete device snapshot. Reconnect and try again.\n\nFailed reads:\n- ${incompleteReads.join("\n- ")}`,
     );
   }
-  return renderDocument(snapshotFromState(state), catalog, format, previous);
+  return renderDocument(
+    snapshotFromState(state, bluetoothNameOf(previous, catalog)),
+    catalog,
+    format,
+    previous,
+  );
+}
+
+/** The BLE advertising name the document being replaced carries. The keyboard
+ *  does not report it over this seam and the renderer does not take it from
+ *  `previous`, so without this an export drops the name a file arrived with.
+ *  A `previous` that no longer parses is ignored, as the renderer ignores it. */
+function bluetoothNameOf(previous: string | undefined, catalog: ExtensionCatalog): string | undefined {
+  if (previous === undefined) return undefined;
+  try {
+    return parseDocument(previous, catalog).snapshot.bluetooth_name;
+  } catch {
+    return undefined;
+  }
 }

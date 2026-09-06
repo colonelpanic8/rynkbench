@@ -12,14 +12,8 @@ import type {
   KeyAction,
   LightingZone,
 } from "../../vendor/rynk-wasm/rynk_wasm";
-import {
-  buildTopology,
-  emptyMorseProfile,
-  hid,
-  layerOn,
-  type BoardSpec,
-  type SimLed,
-} from "./board";
+import { emptyMorseProfile } from "../../model/slots";
+import { buildTopology, hid, layerOn, type BoardSpec, type SimLed } from "./board";
 
 const ROWS = 5;
 const COLS = 12;
@@ -144,7 +138,7 @@ export const ortho60Board: BoardSpec = {
   },
   topology: buildTopology(1, zones, simLeds),
   defaultLayers,
-  layerNames: ["Base", "Navigation", "Symbols", "Media"],
+  layerNames: ["Base", "Navigation", "Symbols"],
   pointingConfig: {
     revision: 1,
     device_count: 2,

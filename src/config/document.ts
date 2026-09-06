@@ -20,6 +20,7 @@ import type {
   ParsedConfig,
   RuntimeSnapshot,
 } from "../vendor/moergo-config-wasm/moergo_config_wasm";
+import { boardForMatrixCells } from "../model/boards/transfer";
 import type { RynkSession } from "../session/types";
 import { normalizePointingConfig } from "../ui/pointing";
 import type { WorkbenchState } from "../ui/state";
@@ -67,14 +68,17 @@ export async function loadCatalog(
  *  Lighting is present only when the device has the durable surfaces a file
  *  describes. A device without them still exports a keymap, which is the whole
  *  of a MoErgo document anyway. */
-export function snapshotFromState(state: WorkbenchState): RuntimeSnapshot {
+export function snapshotFromState(
+  state: WorkbenchState,
+  bluetoothName?: string,
+): RuntimeSnapshot {
   const layerSize = state.layers[0]?.length;
-  const rows = layerSize === 84 ? 6 : layerSize === 70 ? 5 : 0;
-  if (rows === 0 || state.layers.some((layer) => layer.length !== layerSize)) {
+  const board = layerSize === undefined ? undefined : boardForMatrixCells(layerSize);
+  if (board === undefined || state.layers.some((layer) => layer.length !== layerSize)) {
     throw new Error(`Cannot export unsupported or inconsistent matrix size ${layerSize ?? 0}.`);
   }
   const lightingState = state.lightingState;
-  const wakeMask = state.lightingOutputMode?.wake_layers ?? state.lightingControls?.wake_layers ?? 0;
+  const wakeMask = state.lightingOutputMode?.wake_layers ?? state.lightingControls.wake_layers;
   const lighting =
     lightingState === null || state.scenePolicy === null
       ? undefined
@@ -98,8 +102,12 @@ export function snapshotFromState(state: WorkbenchState): RuntimeSnapshot {
           conditional_scenes: state.runtimeConditionalScenes,
         };
   return {
-    rows,
-    cols: 14,
+    // The device reports no BLE advertising name and the renderer does not fall
+    // back to the file being replaced, so a round-trip only keeps one a caller
+    // carries over from the document it parsed.
+    bluetooth_name: bluetoothName,
+    rows: board.rows,
+    cols: board.cols,
     default_layer: state.defaultLayer,
     layers: state.layers,
     // Firmware without the metadata endpoints reads as `undefined`, which

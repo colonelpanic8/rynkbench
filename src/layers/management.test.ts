@@ -161,6 +161,24 @@ describe("layer rewrite planning", () => {
     expect(plan.wakeLayers).toBe(0);
   });
 
+  it("refuses to delete a layer whose painted lighting would be lost", () => {
+    const input = snapshot();
+    input.layers[0] = ["No"];
+    input.layers[2] = ["No"];
+    input.encoders[2] = [{ clockwise: "No", counter_clockwise: "No" }];
+    input.combos = [];
+    input.morse = [];
+    input.forks = [];
+    input.behaviorOptions = behavior();
+    input.runtimeConditionalScenes = [];
+    input.autoMouseLayers = [];
+    input.pointing = null;
+
+    expect(() => planLayerRewrite(input, { type: "delete", layer: 1 })).toThrow(
+      /layer 1 still has painted lighting/,
+    );
+  });
+
   it("rejects moves of firmware-compiled layer references", () => {
     const input = snapshot();
     input.compiledScenes = [{ layer: 1, led_id: 0, effect: {} as never }];

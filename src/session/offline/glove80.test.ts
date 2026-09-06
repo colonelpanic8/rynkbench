@@ -95,6 +95,9 @@ describe("offline Glove80 workspace", () => {
 
     const session = openOfflineGlove80(snapshot);
     expect(session.kind).toBe("offline");
+    // The document chose no overlay effect; the workspace still offers the
+    // surface, which `overlay: undefined` on the spec would have withdrawn.
+    expect(await session.lighting.extensionLayers()).toMatchObject({ overlay: undefined });
     expect(await session.behavior.profiles()).toEqual({
       capacity: 24,
       total: 1,
