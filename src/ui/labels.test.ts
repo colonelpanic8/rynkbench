@@ -2,16 +2,16 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { ModifierCombination } from "../vendor/rynk-wasm/rynk_wasm";
 import {
   actionLabel,
-  EMPTY_MODS,
   hidLabel,
   keyActionDescription,
   modifierSymbols,
 } from "./labels";
 import { DEFAULT_LOCALE_ID, setLocaleId } from "./locale";
 import { DEFAULT_TAP_HOLD_PROFILE } from "./morse";
+import { noModifiers } from "../model/slots";
 
 function mods(fields: Partial<ModifierCombination>): ModifierCombination {
-  return { ...EMPTY_MODS, ...fields };
+  return { ...noModifiers(), ...fields };
 }
 
 describe("modifier labels", () => {

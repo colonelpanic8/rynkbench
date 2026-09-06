@@ -12,12 +12,12 @@ import type {
   StateBits,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import { comboIsEmpty as definitionIsEmpty } from "../combos";
-import { EMPTY_MODS, keyActionGlyph } from "../labels";
+import { keyActionGlyph } from "../labels";
 import { ModGrid } from "../keymap/ActionEditor";
-import type { PendingInfo, SlotKind } from "../state";
-import { slotPendingId, useWorkbench } from "../state";
+import type { SlotKind } from "../state";
+import { slotPendingId } from "../state";
+import { WriteStatus } from "../write-status";
 import { cx } from "../kit";
-import { WarningIcon } from "../icons";
 
 /* ------------------------------------------------------------------ */
 /* Empty-slot semantics (mirror what fresh firmware reports)           */
@@ -35,29 +35,6 @@ export function forkIsEmpty(fork: Fork): boolean {
   return fork.trigger === "No";
 }
 
-export const EMPTY_LEDS: LedIndicator = {
-  num_lock: false,
-  caps_lock: false,
-  scroll_lock: false,
-  compose: false,
-  kana: false,
-};
-
-export const EMPTY_MOUSE: MouseButtons = {
-  button1: false,
-  button2: false,
-  button3: false,
-  button4: false,
-  button5: false,
-  button6: false,
-  button7: false,
-  button8: false,
-};
-
-export function emptyStateBits(): StateBits {
-  return { modifiers: { ...EMPTY_MODS }, leds: { ...EMPTY_LEDS }, mouse: { ...EMPTY_MOUSE } };
-}
-
 export function anyStateBits(bits: StateBits): boolean {
   return (
     Object.values(bits.modifiers).some(Boolean) ||
@@ -71,27 +48,7 @@ export function anyStateBits(bits: StateBits): boolean {
 /* ------------------------------------------------------------------ */
 
 export function SlotStatus({ kind, index }: { kind: SlotKind; index: number }) {
-  const { state, dispatch } = useWorkbench();
-  const pending: PendingInfo | undefined = state.pending[slotPendingId(kind, index)];
-  if (!pending) return null;
-  if (pending.status === "pending") {
-    return <div className="text-[11.5px] text-accent">Writing to device…</div>;
-  }
-  return (
-    <div className="flex items-start gap-2 rounded-lg border border-danger/40 bg-danger-dim/25 px-3 py-2 text-[12px] text-danger">
-      <WarningIcon size={14} className="mt-0.5 shrink-0" />
-      <div className="min-w-0 flex-1">
-        <div>Write failed: {pending.message}</div>
-        <button
-          type="button"
-          className="mt-1 cursor-pointer text-mute underline underline-offset-2"
-          onClick={() => dispatch({ type: "slotErrDismiss", kind, index })}
-        >
-          Dismiss
-        </button>
-      </div>
-    </div>
-  );
+  return <WriteStatus id={slotPendingId(kind, index)} />;
 }
 
 /* ------------------------------------------------------------------ */

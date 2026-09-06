@@ -13,6 +13,7 @@ import type {
   Morse,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import { decodeMacros, encodeMacros } from "../macros";
+import { same } from "../deep-equal";
 
 /** Identifier-level HID keycode substitution. */
 export type HidMap = Partial<Record<HidKeyCode, HidKeyCode>>;
@@ -144,8 +145,6 @@ export function mapKeyAction(spec: TransformSpec, keyAction: KeyAction): KeyActi
   return keyAction;
 }
 
-const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
-
 export interface KeyEdit {
   layer: number;
   row: number;
@@ -167,14 +166,36 @@ export interface TransformPlan {
   macroBytes: Uint8Array | null;
 }
 
+/** Every write the plan will issue: keys, slot tables, and the macro region. */
 export function planSize(plan: TransformPlan): number {
   return (
-    plan.keys.length +
+    planKeyCount(plan) +
     plan.combos.length +
     plan.morse.length +
     plan.forks.length +
     (plan.macroBytes ? 1 : 0)
   );
+}
+
+/** Why a transform may not run right now, or null when it may.
+ *
+ *  A transform writes key cells through `io.setKey`, which batch mode stages
+ *  instead of sending, while its combo/morse/fork/macro writes go straight to
+ *  the device. Running under staged edits would put half the plan on the
+ *  keyboard and leave the other half in a local buffer. */
+export function transformBlockedReason(
+  batchMode: boolean,
+  stagedEdits: number,
+): string | null {
+  return batchMode || stagedEdits > 0
+    ? "Apply or discard staged edits before running a transform."
+    : null;
+}
+
+/** Just the keymap cells. The layout switch reports these separately because
+ *  its non-key writes follow from them rather than being chosen. */
+export function planKeyCount(plan: TransformPlan): number {
+  return plan.keys.length;
 }
 
 export interface TransformInput {

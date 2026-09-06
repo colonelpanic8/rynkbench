@@ -6,7 +6,8 @@ import type { ReactNode } from "react";
 import type { Fork } from "../../vendor/rynk-wasm/rynk_wasm";
 import { keyActionGlyph, modifierSymbols, anyModifier } from "../labels";
 import { ActionEditor, ModGrid } from "../keymap/ActionEditor";
-import { slotPendingId, useWorkbench } from "../state";
+import { useWorkbench } from "../state";
+import { emptyFork } from "../../model/slots";
 import { Button, Chip, InspectorShell, SectionLabel } from "../kit";
 import { PlusIcon, TrashIcon } from "../icons";
 import {
@@ -16,32 +17,9 @@ import {
   SlotStatus,
   StateBitsEditor,
   anyStateBits,
-  emptyStateBits,
   forkIsEmpty,
 } from "./bits";
-
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-
-function newFork(): Fork {
-  return {
-    trigger: "No",
-    negative_output: "No",
-    positive_output: "No",
-    match_any: emptyStateBits(),
-    match_none: emptyStateBits(),
-    kept_modifiers: {
-      left_ctrl: false,
-      left_shift: false,
-      left_alt: false,
-      left_gui: false,
-      right_ctrl: false,
-      right_shift: false,
-      right_alt: false,
-      right_gui: false,
-    },
-    bindable: true,
-  };
-}
+import { useSlotEditor } from "./use-slot-editor";
 
 function bitsSummary(fork: Fork): string {
   const mods = modifierSymbols(fork.match_any.modifiers);
@@ -59,41 +37,13 @@ export function ForksTab({ nav }: { nav: ReactNode }) {
   const { bundle, state, io } = useWorkbench();
   const caps = bundle.caps;
 
-  const [sel, setSel] = useState<number | null>(null);
-  const [draft, setDraft] = useState<Fork | null>(null);
   const [slot, setSlot] = useState<ForkSlot>("trigger");
   const [advanced, setAdvanced] = useState(false);
-
-  const editing = sel !== null && draft !== null;
-  const saved = sel !== null ? state.forks[sel] : null;
-  const dirty = editing && !same(draft, saved);
-  const pending = sel !== null && state.pending[slotPendingId("forks", sel)]?.status === "pending";
-
-  const open = (index: number) => {
-    setSel(index);
-    setDraft(JSON.parse(JSON.stringify(state.forks[index])) as Fork);
-    setSlot("trigger");
-    setAdvanced(false);
-  };
-
-  const close = () => {
-    setSel(null);
-    setDraft(null);
-  };
-
-  const addNew = () => {
-    const free = state.forks.findIndex(forkIsEmpty);
-    if (free === -1) return;
-    setSel(free);
-    setDraft(newFork());
-    setSlot("trigger");
-    setAdvanced(false);
-  };
-
-  const nonEmpty = state.forks
-    .map((fork, index) => ({ fork, index }))
-    .filter(({ fork, index }) => !forkIsEmpty(fork) || index === sel);
-  const hasFree = state.forks.some(forkIsEmpty);
+  const { sel, draft, setDraft, saved, editing, dirty, pending, open, close, addNew, entries, hasFree } =
+    useSlotEditor("forks", state.forks, forkIsEmpty, emptyFork, () => {
+      setSlot("trigger");
+      setAdvanced(false);
+    });
 
   const slotValue = (which: ForkSlot) =>
     which === "trigger"
@@ -123,12 +73,12 @@ export function ForksTab({ nav }: { nav: ReactNode }) {
               {state.forks.filter((f) => !forkIsEmpty(f)).length} / {caps.max_forks} slots
             </span>
           </div>
-          {nonEmpty.length === 0 && (
+          {entries.length === 0 && (
             <div className="rounded-xl border border-line-soft bg-panel px-4 py-8 text-center text-[12.5px] text-faint">
               No forks configured yet.
             </div>
           )}
-          {nonEmpty.map(({ fork, index }) => {
+          {entries.map(({ value: fork, index }) => {
             const shown = index === sel && draft ? draft : fork;
             return (
               <SlotCard key={index} selected={index === sel} onClick={() => open(index)}>
@@ -293,7 +243,7 @@ export function ForksTab({ nav }: { nav: ReactNode }) {
                 title="Delete this fork (frees the slot)"
                 disabled={pending || (saved !== null && forkIsEmpty(saved))}
                 onClick={() => {
-                  io.setSlot("forks", sel, newFork());
+                  io.setSlot("forks", sel, emptyFork());
                   close();
                 }}
               >

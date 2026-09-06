@@ -6,10 +6,6 @@ import type {
   PositionCombo,
 } from "../vendor/rynk-wasm/rynk_wasm";
 
-export function emptyComboDefinition(): ComboDefinition {
-  return { Actions: { actions: [], output: "No", layer: undefined } };
-}
-
 export function comboIsActions(definition: ComboDefinition): definition is { Actions: Combo } {
   return "Actions" in definition;
 }

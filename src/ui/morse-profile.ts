@@ -1,4 +1,4 @@
-import type { MorseProfile } from "../vendor/rynk-wasm/rynk_wasm";
+import type { MorseMode, MorseProfile } from "../vendor/rynk-wasm/rynk_wasm";
 
 export function morseProfileSummary(profile: MorseProfile): string {
   const parts: string[] = [];
@@ -10,3 +10,11 @@ export function morseProfileSummary(profile: MorseProfile): string {
   if (profile.enable_flow_tap === true) parts.push("flow tap");
   return parts.join(" · ") || "inherits global defaults";
 }
+
+/** Every morse decision mode, with the label the editors show. */
+export const MORSE_MODES: Array<{ id: MorseMode; label: string }> = [
+  { id: "Normal", label: "Normal" },
+  { id: "PermissiveHold", label: "Permissive hold" },
+  { id: "HoldOnOtherPress", label: "Hold on other press" },
+  { id: "TapUnlessInterrupted", label: "Tap unless interrupted" },
+];

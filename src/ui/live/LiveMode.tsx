@@ -3,7 +3,7 @@
 // effective key bindings) from the last-known state, and a layer-stack view
 // backed by the firmware's complete active-layer snapshot.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import type { LightingEffect, ModifierCombination } from "../../vendor/rynk-wasm/rynk_wasm";
 import type { KeyView } from "../../model/keyboard";
 import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
@@ -13,15 +13,10 @@ import { cssEmissiveRgb, hsvToRgb } from "../color";
 import { InspectorShell, Panel, Row, SectionLabel, cx } from "../kit";
 import { KIND_LABEL } from "../session-labels";
 import { compositeScenes, effectiveAction } from "./compositor";
-import {
-  keyActionHoldsShift,
-  liveKeyActionGlyph,
-  pressedMatrixIndices,
-  reportedShiftState,
-} from "./characters";
+import { keyActionHoldsShift, liveKeyActionGlyph, reportedShiftState } from "./characters";
+import { LockIndicators } from "./LockIndicators";
+import { useMatrixPoll } from "../matrix-poll";
 import { layersInMask } from "../lighting/wakeLayers";
-
-const MATRIX_POLL_MS = 100;
 
 function effectColor(effect: LightingEffect): string {
   if ("Solid" in effect) return cssEmissiveRgb(effect.Solid.color);
@@ -45,33 +40,6 @@ function effectAnim(effect: LightingEffect): KeyDecor["fillAnim"] {
 function wireHsvCss(hue: number, saturation: number, value: number): string {
   return cssEmissiveRgb(
     hsvToRgb({ h: (hue / 255) * 360, s: saturation / 255, v: value / 255 }),
-  );
-}
-
-function IndicatorRow() {
-  const { state } = useWorkbench();
-  const ind = state.ledIndicator;
-  if (!ind) return null;
-  const items: Array<{ label: string; on: boolean }> = [
-    { label: "Num", on: ind.num_lock },
-    { label: "Caps", on: ind.caps_lock },
-    { label: "Scroll", on: ind.scroll_lock },
-  ];
-  return (
-    <span className="flex items-center gap-1.5" title="Host lock indicators, live from the device">
-      {items.map((i) => (
-        <span
-          key={i.label}
-          className={cx(
-            "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-medium",
-            i.on ? "border-accent-deep/60 bg-accent-dim/30 text-accent" : "border-line text-faint",
-          )}
-        >
-          <span className={cx("size-1.5 rounded-full", i.on ? "bg-accent" : "bg-line-strong")} />
-          {i.label}
-        </span>
-      ))}
-    </span>
   );
 }
 
@@ -187,8 +155,9 @@ function LayerStack() {
 export function LiveMode() {
   const { bundle, state } = useWorkbench();
   const cols = bundle.caps.num_cols;
-  const [pressedIndices, setPressedIndices] = useState<number[]>([]);
-  const matrixPollInFlight = useRef(false);
+  // Only a firmware that cannot report resolved modifiers needs the matrix
+  // fallback; on everything else the poll stays off.
+  const pressedIndices = useMatrixPoll(state.modifierState === null);
   const lighting = state.lightingState;
   const outputOn = state.lightingOutputMode?.effective_enabled ?? lighting?.output_enabled ?? false;
   const wakeLayers = state.lightingOutputMode
@@ -200,37 +169,6 @@ export function LiveMode() {
   const bgColor = bg && bgOn && !extensionActive
     ? wireHsvCss(bg.hue, bg.saturation, bg.value)
     : null;
-
-  useEffect(() => {
-    if (state.modifierState !== null) return;
-    let cancelled = false;
-    const poll = async () => {
-      if (matrixPollInFlight.current) return;
-      matrixPollInFlight.current = true;
-      try {
-        const matrix = await bundle.session.device.matrixState();
-        if (!cancelled) {
-          setPressedIndices(
-            pressedMatrixIndices(
-              matrix.pressed_bitmap,
-              bundle.caps.num_rows,
-              bundle.caps.num_cols,
-            ),
-          );
-        }
-      } catch {
-        // Legacy/transient read failure: retain the last matrix-derived state.
-      } finally {
-        matrixPollInFlight.current = false;
-      }
-    };
-    void poll();
-    const timer = setInterval(poll, MATRIX_POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [bundle.caps.num_cols, bundle.caps.num_rows, bundle.session, state.modifierState]);
 
   const shiftActive = useMemo(
     () => {
@@ -455,7 +393,7 @@ export function LiveMode() {
           <Panel className="p-4">
             <div className="flex items-center justify-between">
               <SectionLabel>Device</SectionLabel>
-              <IndicatorRow />
+              <LockIndicators title="Host lock indicators, live from the device" />
             </div>
             <div className="mt-2 flex flex-col divide-y divide-line-soft">
               <Row label="Product">{bundle.info.product_name}</Row>

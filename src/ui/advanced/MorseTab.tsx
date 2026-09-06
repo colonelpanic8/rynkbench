@@ -6,34 +6,15 @@ import type { ReactNode } from "react";
 import type { Action, Morse, MorseMode, MorseProfile } from "../../vendor/rynk-wasm/rynk_wasm";
 import { actionLabel } from "../labels";
 import { SlotPicker } from "../keymap/ActionEditor";
-import { slotPendingId, useWorkbench } from "../state";
+import { useWorkbench } from "../state";
+import { emptyMorse } from "../../model/slots";
+import { MORSE_MODES } from "../morse-profile";
 import type { MorseElement } from "../morse";
 import { MAX_MORSE_ELEMENTS, elementsToPattern, morsePatternGlyph } from "../morse";
 import { Button, InspectorShell, SectionLabel, TextInput, cx } from "../kit";
 import { CloseIcon, PlusIcon, TrashIcon } from "../icons";
 import { CenterScroll, SlotCard, SlotStatus, morseIsEmpty } from "./bits";
-
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-
-const EMPTY_PROFILE: MorseProfile = {
-  unilateral_tap: undefined,
-  opposite_hand_hold: undefined,
-  enable_flow_tap: undefined,
-  mode: undefined,
-  hold_timeout_ms: undefined,
-  gap_timeout_ms: undefined,
-  quick_tap_timeout_ms: undefined,
-  retro_tap: undefined,
-  prior_idle_time_ms: undefined,
-  hold_trigger_on_release: undefined,
-};
-
-const MODES: Array<{ id: MorseMode; label: string }> = [
-  { id: "Normal", label: "Normal" },
-  { id: "PermissiveHold", label: "Permissive hold" },
-  { id: "HoldOnOtherPress", label: "Hold on other press" },
-  { id: "TapUnlessInterrupted", label: "Tap unless interrupted" },
-];
+import { useSlotEditor } from "./use-slot-editor";
 
 function PatternBuilder({
   onAdd,
@@ -184,7 +165,7 @@ function ProfileEditor({
           className="rounded-lg border border-line bg-well px-2 py-1 text-[12.5px] text-ink"
         >
           <option value="default">Default</option>
-          {MODES.map((m) => (
+          {MORSE_MODES.map((m) => (
             <option key={m.id} value={m.id}>
               {m.label}
             </option>
@@ -209,35 +190,8 @@ export function MorseTab({ nav }: { nav: ReactNode }) {
   const { bundle, state, io } = useWorkbench();
   const caps = bundle.caps;
 
-  const [sel, setSel] = useState<number | null>(null);
-  const [draft, setDraft] = useState<Morse | null>(null);
-
-  const editing = sel !== null && draft !== null;
-  const saved = sel !== null ? state.morse[sel] : null;
-  const dirty = editing && !same(draft, saved);
-  const pending = sel !== null && state.pending[slotPendingId("morse", sel)]?.status === "pending";
-
-  const open = (index: number) => {
-    setSel(index);
-    setDraft(JSON.parse(JSON.stringify(state.morse[index])) as Morse);
-  };
-
-  const close = () => {
-    setSel(null);
-    setDraft(null);
-  };
-
-  const addNew = () => {
-    const free = state.morse.findIndex(morseIsEmpty);
-    if (free === -1) return;
-    setSel(free);
-    setDraft({ profile: { ...EMPTY_PROFILE }, actions: [] });
-  };
-
-  const nonEmpty = state.morse
-    .map((morse, index) => ({ morse, index }))
-    .filter(({ morse, index }) => !morseIsEmpty(morse) || index === sel);
-  const hasFree = state.morse.some(morseIsEmpty);
+  const { sel, draft, setDraft, saved, editing, dirty, pending, open, close, addNew, entries, hasFree } =
+    useSlotEditor("morse", state.morse, morseIsEmpty, emptyMorse);
   const patternsFull = editing && draft.actions.length >= caps.max_patterns_per_key;
 
   return (
@@ -254,12 +208,12 @@ export function MorseTab({ nav }: { nav: ReactNode }) {
               {state.morse.filter((m) => !morseIsEmpty(m)).length} / {caps.max_morse} slots
             </span>
           </div>
-          {nonEmpty.length === 0 && (
+          {entries.length === 0 && (
             <div className="rounded-xl border border-line-soft bg-panel px-4 py-8 text-center text-[12.5px] text-faint">
               No morse slots configured yet.
             </div>
           )}
-          {nonEmpty.map(({ morse, index }) => {
+          {entries.map(({ value: morse, index }) => {
             const shown = index === sel && draft ? draft : morse;
             return (
               <SlotCard key={index} selected={index === sel} onClick={() => open(index)}>
@@ -388,7 +342,7 @@ export function MorseTab({ nav }: { nav: ReactNode }) {
                 title="Delete this morse key (frees the slot)"
                 disabled={pending || (saved !== null && morseIsEmpty(saved))}
                 onClick={() => {
-                  io.setSlot("morse", sel, { profile: { ...EMPTY_PROFILE }, actions: [] });
+                  io.setSlot("morse", sel, emptyMorse());
                   close();
                 }}
               >

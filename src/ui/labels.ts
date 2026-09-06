@@ -165,17 +165,6 @@ export function anyModifier(mods: ModifierCombination): boolean {
   );
 }
 
-export const EMPTY_MODS: ModifierCombination = {
-  left_ctrl: false,
-  left_shift: false,
-  left_alt: false,
-  left_gui: false,
-  right_ctrl: false,
-  right_shift: false,
-  right_alt: false,
-  right_gui: false,
-};
-
 function keyCodeLabel(code: KeyCode): string {
   if (typeof code === "object") {
     if ("Hid" in code) return hidLabel(code.Hid);

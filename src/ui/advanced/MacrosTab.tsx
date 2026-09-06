@@ -2,11 +2,13 @@
 // op sequences (text / tap / press / release / delay). All macros share one
 // region, so saving writes the whole thing back.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { hidLabel } from "../labels";
 import { KeycodeBrowser } from "../keymap/ActionEditor";
 import { useWorkbench } from "../state";
+import { useDeviceDraft } from "../device-draft";
+import { SaveBar, WriteStatus } from "../write-status";
 import type { DecodedMacro, MacroStep } from "../macros";
 import {
   clampDelay,
@@ -17,10 +19,8 @@ import {
   macroPreview,
 } from "../macros";
 import { Button, InspectorShell, SectionLabel, TextInput, cx } from "../kit";
-import { CloseIcon, PlusIcon, TrashIcon, WarningIcon } from "../icons";
+import { CloseIcon, PlusIcon, TrashIcon } from "../icons";
 import { CenterScroll, SlotCard } from "./bits";
-
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 function stepSummary(step: MacroStep): { tag: string; body: string } {
   switch (step.kind) {
@@ -136,20 +136,10 @@ export function MacrosTab({ nav }: { nav: ReactNode }) {
   const capacity = bundle.caps.macro_space_size;
 
   const savedMacros = useMemo(() => decodeMacros(state.macroBytes), [state.macroBytes]);
-  const [drafts, setDrafts] = useState<DecodedMacro[]>(savedMacros);
+  const { draft: drafts, setDraft: setDrafts, dirty, reset } = useDeviceDraft(savedMacros);
   const [sel, setSel] = useState<number | null>(null);
 
-  // When the on-device region changes under a clean draft, follow it.
-  const savedRef = useRef(savedMacros);
-  useEffect(() => {
-    if (same(drafts, savedRef.current)) setDrafts(savedMacros);
-    savedRef.current = savedMacros;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedMacros]);
-
-  const dirty = !same(drafts, savedMacros);
-  const macroPending = state.pending.macros;
-  const pending = macroPending?.status === "pending";
+  const pending = state.pending.macros?.status === "pending";
 
   const usedBytes = drafts.reduce((n, m) => n + macroByteCost(m), 0);
   const overCapacity = usedBytes > capacity;
@@ -230,35 +220,28 @@ export function MacrosTab({ nav }: { nav: ReactNode }) {
             Add macro
           </Button>
 
-          {/* save bar */}
-          <div className="flex items-center gap-2 rounded-xl border border-line-soft bg-panel px-4 py-3">
-            <Button
-              variant="primary"
-              disabled={!dirty || pending || overCapacity}
-              onClick={() => io.writeMacros(encodeMacros(drafts))}
-            >
-              {pending ? "Writing…" : "Write macros to keyboard"}
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={!dirty || pending}
-              onClick={() => {
-                setDrafts(savedMacros);
-                setSel(null);
-              }}
-            >
-              Discard changes
-            </Button>
+          <SaveBar
+            className="flex items-center gap-2 rounded-xl border border-line-soft bg-panel px-4 py-3"
+            dirty={dirty}
+            writing={pending}
+            saveDisabled={overCapacity}
+            saveLabel="Write macros to keyboard"
+            resetLabel="Discard changes"
+            onSave={() => io.writeMacros(encodeMacros(drafts))}
+            onReset={() => {
+              reset();
+              setSel(null);
+            }}
+          >
             {overCapacity && (
               <span className="text-[12px] text-danger">Over capacity — trim some steps.</span>
             )}
-            {macroPending?.status === "error" && (
-              <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-danger">
-                <WarningIcon size={13} className="shrink-0" />
-                <span className="truncate">{macroPending.message}</span>
-              </span>
-            )}
-          </div>
+            <WriteStatus
+              id="macros"
+              compact
+              onRetry={() => io.writeMacros(encodeMacros(drafts))}
+            />
+          </SaveBar>
         </CenterScroll>
       </div>
 
