@@ -2,10 +2,8 @@
 // native BLE backend speaks, reached from Chromium directly — including Chrome
 // for Android, where no other Rynk transport exists.
 
-import { connect } from "../../vendor/rynk-wasm/rynk_wasm";
-import { LinkSession, REQUEST_TIMEOUT_MS } from "../link-session";
+import { openLinkSession } from "../open-link";
 import type { SessionProvider, SessionTarget } from "../types";
-import { initWasm } from "../wasm";
 import { bluetoothByteLink, grantedRynkDevices, requestRynkBluetoothDevice } from "./link";
 
 let lastDevice: BluetoothDevice | null = null;
@@ -65,46 +63,23 @@ async function rememberedSession(device: BluetoothDevice) {
 
 async function session(device: BluetoothDevice) {
   const link = await bluetoothByteLink(device);
-  try {
-    await initWasm();
-    const client = await handshake(link);
-    return new LinkSession(client, link, {
+  return openLinkSession(
+    link,
+    {
       kind: "webbluetooth",
       watchDisconnect(onUnplug) {
         const handler = () => onUnplug();
         device.addEventListener("gattserverdisconnected", handler);
         return () => device.removeEventListener("gattserverdisconnected", handler);
       },
-    });
-  } catch (error) {
-    await link.close().catch(() => undefined);
-    throw error;
-  }
-}
-
-/** The firmware silently ignores Rynk traffic on an unencrypted link, so a
- * device that paired without bonding hangs rather than erroring — bound the
- * handshake and say what to check. */
-async function handshake(link: Awaited<ReturnType<typeof bluetoothByteLink>>) {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      connect(link),
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => {
-          link.end();
-          reject(
-            new Error(
-              `No Rynk response over Bluetooth within ${REQUEST_TIMEOUT_MS}ms — ` +
-                "the keyboard only answers on an encrypted link, so make sure it is " +
-                "paired (bonded) with this device, on the Bluetooth profile for this " +
-                "device, and try again",
-            ),
-          );
-        }, REQUEST_TIMEOUT_MS);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
+    },
+    {
+      // The firmware silently ignores Rynk traffic on an unencrypted link, so a
+      // device that paired without bonding hangs rather than erroring.
+      handshakeHint:
+        "the keyboard only answers on an encrypted link, so make sure it is " +
+        "paired (bonded) with this device, on the Bluetooth profile for this " +
+        "device, and try again",
+    },
+  );
 }

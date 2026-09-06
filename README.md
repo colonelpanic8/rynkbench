@@ -147,12 +147,20 @@ production bundle. Enable them only for a particular build/startup with
 - **Vite + React + TypeScript + Tailwind v4.** UI under `src/ui`, keyboard/board
   models under `src/model`.
 - **The session seam** (`src/session/types.ts`) is the one interface the UI talks
-  to. It is backed by a local-file workspace, a `mock` backend with demo boards,
-  `webserial` and `webhid` backends that drive real hardware in the browser, and
-  a `native` backend that drives the Tauri app's hidapi transport. The UI never
-  imports a transport or WASM directly — only *types* from the generated client
-  and the seam. All USB backends share one protocol core
-  (`src/session/link-session.ts`); only their byte plumbing differs.
+  to. It is backed by the in-memory `mock` engine (demo boards, and the
+  local-file `offline` workspace built on it), the `webhid`, `webserial` and
+  `webbluetooth` backends that drive real hardware in the browser, and the
+  `native` / `native-ble` backends that drive the Tauri app's hidapi and
+  bluest transports. The UI never imports a transport or WASM directly — only
+  *types* from the generated client and the seam. Every real transport is a
+  byte link handed to one protocol core (`src/session/link-session.ts`)
+  through one opener (`src/session/open-link.ts`); only the byte plumbing
+  differs. A backend reports a surface the firmware lacks by rejecting with an
+  error `isUnsupportedError` recognizes (`src/session/unsupported.ts`) — the
+  UI relies on that to tell "not supported" from "read failed".
+- **Connect-time snapshot.** `src/ui/bundle.ts` reads everything the workbench
+  needs off a fresh session in one pass; `src/ui/state.tsx` is the single
+  reducer + `io` facade the UI mutates through afterwards.
 - **`src/vendor/rynk-wasm`** is an ignored build output containing the Rynk
   protocol client compiled to WASM with `wasm-pack`. The browser owns transports
   (Web Serial/WebHID choosers, stream locks, hot-plug); the WASM owns
