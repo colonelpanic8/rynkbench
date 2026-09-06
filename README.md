@@ -51,6 +51,21 @@ count outer-to-inner as `T1` onward; the Glove80 numbers its upper three-key fan
 before its lower fan, while the Go60 has one three-key fan. Hover text and the
 key inspector retain the raw matrix row and column for diagnostics.
 
+### RGB controls and painted layer colors
+
+In **Lighting**, **All RGB lighting** controls the composed output, including
+painted layer scenes and indicators. Change the checkbox and press its **Apply**
+button. For a keyboard shortcut, assign **Output toggle** (`BacklightToggle`)
+in Keymap. `RgbTog` toggles the background/effect source; layer scenes remain
+visible. Layers marked **MoErgo Magic Layer** can temporarily wake lighting even
+when output is off; disable that option on each wake layer for darkness on every
+layer. Turning output off preserves the stored color scheme.
+
+Background/effect hue, saturation, and speed controls do not transform painted
+layer colors. Select the layer in Lighting and use the color brush to edit its
+scene. Layer key legends follow the selected layer's bindings (including
+transparent fallthrough to the default layer); Overlay follows the live layers.
+
 ## Behavior and indicator notes
 
 - **Undo/redo currently covers direct matrix-key assignments only.** Each undo

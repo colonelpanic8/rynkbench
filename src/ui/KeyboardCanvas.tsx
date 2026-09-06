@@ -421,6 +421,8 @@ function KeyShapeImpl({
   const clickable = interactive && !decor.disabled;
   const keyboardInteractive = clickable && onKeyboardActivate !== undefined;
 
+  const hoverTitle = keyHoverTitle({ ...view, label: decor.glyph?.text ?? view.label });
+
   const capFill = decor.fill ?? decor.backgroundFill ?? "var(--color-cap)";
 
   const anim = decor.fillAnim;
@@ -447,7 +449,7 @@ function KeyShapeImpl({
       opacity={decor.disabled ? 0.38 : 1}
       role={keyboardInteractive ? "button" : undefined}
       tabIndex={keyboardInteractive ? 0 : undefined}
-      aria-label={decor.ariaLabel ?? keyHoverTitle(view)}
+      aria-label={decor.ariaLabel ?? hoverTitle}
       aria-keyshortcuts={clickable ? decor.ariaKeyShortcuts : undefined}
       onPointerDown={clickable ? (ev) => onPointerDown?.(view, ev) : undefined}
       onPointerEnter={
@@ -465,7 +467,7 @@ function KeyShapeImpl({
           : undefined
       }
     >
-      <title>{keyHoverTitle(view)}</title>
+      <title>{hoverTitle}</title>
       <g
         className="key-lift"
         style={{

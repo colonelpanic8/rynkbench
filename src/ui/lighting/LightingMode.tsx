@@ -6,7 +6,7 @@ import type { KeyView } from "../../model/keyboard";
 import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
 import { keyAddressLabel } from "../key-address";
-import { keyActionGlyph } from "../labels";
+import { lightingKeyLegend } from "./keyLegend";
 import { layerName } from "../layer-names";
 import {
   activeLightingBase,
@@ -25,7 +25,6 @@ import type { Hsv } from "../color";
 import { cssEmissiveRgb, cssRgb, hsvToRgb } from "../color";
 import { ApplyBar, Button, ErrorBanner, InspectorShell, SectionLabel, Segmented, cx } from "../kit";
 import { EraserIcon, MarqueeIcon, SparkleIcon } from "../icons";
-import { effectiveAction } from "../live/compositor";
 import {
   BLACK_EFFECT,
   composePreviewEffects,
@@ -199,23 +198,13 @@ export function LightingMode() {
     }
   };
 
-  // Legends follow the scene target the same way the preview composites it:
-  // the target layer over the default layer, or the live stack for the
-  // overlay. Enrichment labels fill any gap. They stay dimmed so the paint
-  // color remains the loudest thing.
-  const cols = bundle.caps.num_cols;
-  const legendLayers = isLayerTarget ? [target] : state.activeLayers;
-  const legendFor = (key: KeyView): KeyDecor["glyph"] => {
-    const action = effectiveAction(
-      state.layers,
-      legendLayers,
-      state.defaultLayer,
-      key.row * cols + key.col,
-    );
-    const text = keyActionGlyph(action).text;
-    if (text) return { text, dim: true };
-    return key.label ? { text: key.label, dim: true } : undefined;
-  };
+  const legendFor = (key: KeyView): KeyDecor["glyph"] => ({
+    text: lightingKeyLegend(
+      key, state.layers, bundle.caps.num_cols,
+      target, state.activeLayers, state.defaultLayer,
+    ),
+    dim: true,
+  });
 
   const decorFor = (key: KeyView): KeyDecor => {
     if (key.ledId === undefined) {
@@ -317,6 +306,9 @@ export function LightingMode() {
 
       <InspectorShell>
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+          <div className="border-b border-line-soft pb-4">
+            <BackgroundPanel />
+          </div>
           {/* Brush */}
           <div>
             <SectionLabel>Brush</SectionLabel>
@@ -523,10 +515,6 @@ export function LightingMode() {
               </div>
             </>
           )}
-
-          <div className="border-t border-line-soft pt-4">
-            <BackgroundPanel />
-          </div>
 
           {/* The effect pack is configured in its own mode; this is only a
               signpost so the lighting inspector still says where it went. */}

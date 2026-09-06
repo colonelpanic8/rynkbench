@@ -10,6 +10,7 @@ import { effectColor } from "./decor";
 import { firmwareRuleGroups } from "./firmwareRules";
 import { previewActiveLayers } from "./preview";
 import { layersInMask } from "./wakeLayers";
+import { lightingKeyLegend } from "./keyLegend";
 
 export function FirmwareRulesPanel() {
   const { bundle, state } = useWorkbench();
@@ -25,10 +26,16 @@ export function FirmwareRulesPanel() {
   const labels = useMemo(() => {
     const result = new Map<number, string>();
     for (const key of bundle.model.keys) {
-      if (key.ledId !== undefined) result.set(key.ledId, keyAddressWithLegend(key));
+      if (key.ledId !== undefined) {
+        const label = lightingKeyLegend(
+          key, state.layers, bundle.caps.num_cols,
+          state.lightingTarget, state.activeLayers, state.defaultLayer,
+        );
+        result.set(key.ledId, keyAddressWithLegend({ ...key, label }));
+      }
     }
     return result;
-  }, [bundle.model]);
+  }, [bundle.model, bundle.caps.num_cols, state.layers, state.lightingTarget, state.activeLayers, state.defaultLayer]);
   const nameOf = useCallback(
     (layer: number) => layerName(state.layerMetadata, layer),
     [state.layerMetadata],
