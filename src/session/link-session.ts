@@ -129,15 +129,22 @@ export function watchdogClient<T extends object>(
     timeoutMs,
     onTimeout,
     log,
-  }: { timeoutMs: number; onTimeout: (op: string) => void; log?: SessionLog },
+    assertOpen,
+  }: {
+    timeoutMs: number;
+    onTimeout: (op: string) => void;
+    log?: SessionLog;
+    assertOpen?: () => void;
+  },
 ): T {
-  if (timeoutMs <= 0 && !log) return client;
+  if (timeoutMs <= 0 && !log && !assertOpen) return client;
   return new Proxy(client, {
     get(target, prop, receiver) {
       const value = Reflect.get(target, prop, receiver) as unknown;
       if (typeof value !== "function" || UNWATCHED_CALLS.has(String(prop))) return value;
       const op = String(prop);
       return (...args: unknown[]) => {
+        assertOpen?.();
         const result = (value as (...a: unknown[]) => unknown).apply(target, args);
         if (!(result instanceof Promise)) return result;
         const started = performance.now();
@@ -150,9 +157,11 @@ export function watchdogClient<T extends object>(
             detail: detail === undefined ? undefined : errorText(detail),
           });
         return new Promise((resolve, reject) => {
+          let finished = false;
           const timer =
             timeoutMs > 0
               ? setTimeout(() => {
+                  finished = true;
                   const failure = new RequestTimeout(op, timeoutMs);
                   record("timeout", failure);
                   onTimeout(op);
@@ -161,11 +170,15 @@ export function watchdogClient<T extends object>(
               : undefined;
           result.then(
             (settled) => {
+              if (finished) return;
+              finished = true;
               clearTimeout(timer);
               if (!QUIET_CALLS.has(op)) record("ok");
               resolve(settled);
             },
             (error: unknown) => {
+              if (finished) return;
+              finished = true;
               clearTimeout(timer);
               record("error", error);
               reject(error);
@@ -579,6 +592,7 @@ export class LinkSession implements RynkSession {
   private readonly pumpDone: Promise<void>;
   private queue: Promise<unknown> = Promise.resolve();
   private closed = false;
+  private closing: Promise<void> | null = null;
   // Both capability records are fixed for the life of the firmware build, so
   // one read serves the session. (The lighting record's topology_revision is
   // the one field that can move; readers that pin on it fetch it fresh.)
@@ -594,6 +608,7 @@ export class LinkSession implements RynkSession {
       timeoutMs: hooks.requestTimeoutMs ?? REQUEST_TIMEOUT_MS,
       onTimeout: () => this.failLink(),
       log: hooks.log ?? sessionLog,
+      assertOpen: () => this.assertOpen(),
     });
     this.log = hooks.log ?? sessionLog;
     this.log.event(`session opened on ${hooks.kind} (${link.label})`);
@@ -604,8 +619,7 @@ export class LinkSession implements RynkSession {
 
     this.unwatchDisconnect = hooks.watchDisconnect(() => {
       this.log.event("device unplugged");
-      this.link.end();
-      if (!this.closed) this.disconnectHandler?.();
+      this.endDisconnected();
     });
     this.pumpDone = this.pumpTopics();
 
@@ -772,17 +786,25 @@ export class LinkSession implements RynkSession {
     this.disconnectHandler = handler;
   }
 
-  async close(): Promise<void> {
-    if (this.closed) return;
+  close(): Promise<void> {
+    this.closing ??= this.finishClose();
+    return this.closing;
+  }
+
+  private async finishClose(): Promise<void> {
     this.closed = true;
     this.log.event("session closed");
     this.unwatchDisconnect();
     // Ending the link rejects the parked next_topic and any in-flight
     // request; only free the wasm handle once both have settled.
-    await this.link.close();
-    await this.queue;
-    await this.pumpDone;
-    this.client.free();
+    this.link.end();
+    try {
+      await this.link.close();
+    } finally {
+      await this.queue;
+      await this.pumpDone;
+      this.client.free();
+    }
   }
 
   /** Tear down a link we can no longer trust: ending it rejects the parked
@@ -790,13 +812,27 @@ export class LinkSession implements RynkSession {
    *  gone so it can offer a reconnect. */
   private failLink(): void {
     this.log.event("link ended after a request timed out — the device stopped answering");
+    this.endDisconnected();
+  }
+
+  private endDisconnected(): void {
+    if (this.closed) return;
+    this.closed = true;
     this.link.end();
-    if (!this.closed) this.disconnectHandler?.();
+    this.disconnectHandler?.();
+  }
+
+  private assertOpen(): void {
+    if (this.closed) throw new Error("Session is closed");
   }
 
   /** Serialize ops: the protocol allows a single request in flight. */
   private run<T>(op: () => Promise<T>): Promise<T> {
-    const next = this.queue.then(op, op);
+    if (this.closed) return Promise.reject(new Error("Session is closed"));
+    const next = this.queue.then(() => {
+      this.assertOpen();
+      return op();
+    });
     this.queue = next.then(
       () => undefined,
       () => undefined,

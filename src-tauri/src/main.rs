@@ -143,8 +143,8 @@ fn candidates(api: &HidApi) -> Vec<Candidate> {
 /// Enumerate every Rynk interface. Two keyboards of the same model are
 /// indistinguishable by label alone, so the serial number rides along and
 /// only the handshake proves which one is usable.
-#[tauri::command]
-fn rynk_list() -> Result<Vec<Candidate>, String> {
+#[tauri::command(async)]
+async fn rynk_list() -> Result<Vec<Candidate>, String> {
     let api = HidApi::new().map_err(|e| format!("HID subsystem unavailable: {e}"))?;
     Ok(candidates(&api))
 }
@@ -157,56 +157,55 @@ async fn rynk_open(
     state: State<'_, LinkState>,
     path: Option<String>,
 ) -> Result<OpenResult, String> {
-    state.take_and_stop().await;
+    state
+        .open(|| async {
+            let api = HidApi::new().map_err(|e| format!("HID subsystem unavailable: {e}"))?;
+            let info = api
+                .device_list()
+                .filter(|d| carries_rynk(d))
+                .find(|d| match &path {
+                    Some(wanted) => d.path().to_string_lossy() == wanted.as_str(),
+                    None => true,
+                })
+                .ok_or_else(|| match &path {
+                    Some(wanted) => format!("Rynk interface {wanted} is no longer present"),
+                    None => {
+                        let pages: Vec<String> = RYNK_USAGE_PAGES
+                            .iter()
+                            .map(|page| format!("{page:#06x}"))
+                            .collect();
+                        format!(
+                            "No Rynk keyboard found (raw-HID usage {}/{RYNK_USAGE:#04x})",
+                            pages.join(" or ")
+                        )
+                    }
+                })?;
+            let label = info
+                .product_string()
+                .filter(|s| !s.is_empty())
+                .unwrap_or("Rynk (native)")
+                .to_string();
+            let device = info
+                .open_device(&api)
+                .map_err(|e| format!("Could not open {label}: {e}"))?;
 
-    let api = HidApi::new().map_err(|e| format!("HID subsystem unavailable: {e}"))?;
-    let info = api
-        .device_list()
-        .filter(|d| carries_rynk(d))
-        .find(|d| match &path {
-            Some(wanted) => d.path().to_string_lossy() == wanted.as_str(),
-            None => true,
+            let (tx, rx) = std::sync::mpsc::channel();
+            let shutdown = Arc::new(AtomicBool::new(false));
+            let reader = std::thread::spawn({
+                let app = app.clone();
+                let shutdown = shutdown.clone();
+                move || run_io(app, device, rx, shutdown)
+            });
+            Ok((
+                HidLink {
+                    outbound: tx,
+                    shutdown,
+                    reader: Some(reader),
+                },
+                OpenResult { label },
+            ))
         })
-        .ok_or_else(|| match &path {
-            Some(wanted) => format!("Rynk interface {wanted} is no longer present"),
-            None => {
-                let pages: Vec<String> = RYNK_USAGE_PAGES
-                    .iter()
-                    .map(|page| format!("{page:#06x}"))
-                    .collect();
-                format!(
-                    "No Rynk keyboard found (raw-HID usage {}/{RYNK_USAGE:#04x})",
-                    pages.join(" or ")
-                )
-            }
-        })?;
-    let label = info
-        .product_string()
-        .filter(|s| !s.is_empty())
-        .unwrap_or("Rynk (native)")
-        .to_string();
-    let device = info
-        .open_device(&api)
-        .map_err(|e| format!("Could not open {label}: {e}"))?;
-
-    let (tx, rx) = std::sync::mpsc::channel();
-    let shutdown = Arc::new(AtomicBool::new(false));
-    let reader = std::thread::spawn({
-        let app = app.clone();
-        let shutdown = shutdown.clone();
-        move || run_io(app, device, rx, shutdown)
-    });
-    // Another open may have raced in while this one was enumerating; whatever
-    // it installed is displaced here, and stopped rather than leaked.
-    let displaced = state.replace(HidLink {
-        outbound: tx,
-        shutdown,
-        reader: Some(reader),
-    });
-    if let Some(previous) = displaced {
-        previous.stop().await;
-    }
-    Ok(OpenResult { label })
+        .await
 }
 
 #[tauri::command]

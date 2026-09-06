@@ -42,10 +42,16 @@ export async function openTauriLink(
   const unlistenChunk = await t.event.listen<number[]>(wire.chunk, (event) => {
     buffer.push(Uint8Array.from(event.payload));
   });
-  const unlistenDisconnect = await t.event.listen<void>(wire.disconnect, () => {
-    buffer.end();
-    onDrop?.();
-  });
+  let unlistenDisconnect: () => void;
+  try {
+    unlistenDisconnect = await t.event.listen<void>(wire.disconnect, () => {
+      buffer.end();
+      onDrop?.();
+    });
+  } catch (error) {
+    unlistenChunk();
+    throw error;
+  }
   const unlisten = () => {
     unlistenChunk();
     unlistenDisconnect();

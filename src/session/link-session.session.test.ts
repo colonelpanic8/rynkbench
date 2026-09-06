@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   DeviceCapabilities,
   LightingCapabilities,
@@ -7,7 +7,7 @@ import type {
   RynkClient,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import { SessionLog } from "./diagnostics";
-import { LinkSession } from "./link-session";
+import { LinkSession, watchdogClient } from "./link-session";
 import { EXTENSION_EFFECTS, LAYER_SCENES } from "./lighting-features";
 import type { RynkByteLink } from "./rynk-link";
 import { isUnsupportedError } from "./unsupported";
@@ -58,13 +58,17 @@ function harness(methods: Record<string, (...args: never[]) => unknown>, log?: S
     close: async () => endTopics?.(),
     end: () => endTopics?.(),
   };
+  let unplug = () => {};
   const session = new LinkSession(client, link, {
     kind: "webhid",
-    watchDisconnect: () => () => undefined,
+    watchDisconnect: (handler) => {
+      unplug = handler;
+      return () => undefined;
+    },
     requestTimeoutMs: 200,
     log: log ?? new SessionLog(),
   });
-  return { session, spies };
+  return { session, spies, client, link, unplug: () => unplug() };
 }
 
 describe("LinkSession", () => {
@@ -197,5 +201,115 @@ describe("LinkSession", () => {
       "get_battery_status",
     ]);
     await session.close();
+  });
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+describe("session lifecycle", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("serializes whole multi-request reads before the next operation", async () => {
+    const firstKey = deferred<string>();
+    const { session, spies } = harness({
+      get_capabilities: async () => caps,
+      get_key: () => firstKey.promise,
+      get_battery_status: async () => "Unavailable",
+    });
+    const read = session.keymap.readAll();
+    const battery = session.device.battery();
+    await vi.waitFor(() => expect(spies.get_key).toHaveBeenCalledOnce());
+    expect(spies.get_battery_status).not.toHaveBeenCalled();
+    firstKey.resolve("No");
+    await read;
+    await battery;
+    expect(spies.get_key).toHaveBeenCalledTimes(2);
+    expect(spies.get_battery_status).toHaveBeenCalledOnce();
+    await session.close();
+  });
+
+  it("rejects queued work, cached reads, and remaining pages after close", async () => {
+    const key = deferred<string>();
+    const { session, spies, client, link } = harness({
+      get_capabilities: async () => caps,
+      get_key: () => key.promise,
+      set_key: async () => {},
+    });
+    await session.device.capabilities();
+    const read = session.keymap.readAll();
+    const readFailed = expect(read).rejects.toThrow("Session is closed");
+    const write = session.keymap.setKey(0, 0, 1, "No");
+    const writeFailed = expect(write).rejects.toThrow("Session is closed");
+    await vi.waitFor(() => expect(spies.get_key).toHaveBeenCalledOnce());
+    const transportClosed = deferred<void>();
+    vi.spyOn(link, "close").mockReturnValue(transportClosed.promise);
+    const closing = session.close();
+    expect(session.close()).toBe(closing);
+    await expect(session.device.capabilities()).rejects.toThrow("Session is closed");
+    expect(client.free).not.toHaveBeenCalled();
+    key.resolve("No");
+    await Promise.all([readFailed, writeFailed]);
+    transportClosed.resolve();
+    await closing;
+    expect(spies.get_key).toHaveBeenCalledOnce();
+    expect(spies.set_key).not.toHaveBeenCalled();
+    expect(client.free).toHaveBeenCalledOnce();
+    expect(link.close).toHaveBeenCalledOnce();
+  });
+
+  it("treats unplug as terminal even before the UI calls close", async () => {
+    const { session, spies, unplug } = harness({ get_capabilities: async () => caps });
+    await session.device.capabilities();
+    const disconnected = vi.fn();
+    session.onDisconnect(disconnected);
+    unplug();
+    unplug();
+    await expect(session.device.capabilities()).rejects.toThrow("Session is closed");
+    expect(spies.get_capabilities).toHaveBeenCalledOnce();
+    expect(disconnected).toHaveBeenCalledOnce();
+    await session.close();
+  });
+
+  it("stops queued traffic on a quiet request timeout and logs no late success", async () => {
+    vi.useFakeTimers();
+    const matrix = deferred<unknown>();
+    const log = new SessionLog();
+    const { session, spies } = harness({
+      get_matrix_state: () => matrix.promise,
+      get_battery_status: async () => "Unavailable",
+    }, log);
+    const disconnected = vi.fn();
+    session.onDisconnect(disconnected);
+    const timedOut = expect(session.device.matrixState()).rejects.toThrow("did not answer");
+    const skipped = expect(session.device.battery()).rejects.toThrow("Session is closed");
+    await vi.advanceTimersByTimeAsync(200);
+    await Promise.all([timedOut, skipped]);
+    matrix.resolve({ rows: 1, cols: 2, bitmap: [0] });
+    await session.close();
+    expect(spies.get_battery_status).not.toHaveBeenCalled();
+    expect(disconnected).toHaveBeenCalledOnce();
+    expect(log.entries().filter((entry) => "op" in entry)).toEqual([
+      expect.objectContaining({ op: "get_matrix_state", outcome: "timeout" }),
+    ]);
+  });
+
+  it.each(["resolve", "reject"] as const)("logs only one result after a timed-out request later %ss", async (settle) => {
+    vi.useFakeTimers();
+    const request = deferred<unknown>();
+    const log = new SessionLog();
+    const client = watchdogClient({ get_state: () => request.promise }, {
+      timeoutMs: 10, onTimeout: () => {}, log,
+    });
+    const timedOut = expect(client.get_state()).rejects.toThrow("did not answer");
+    await vi.advanceTimersByTimeAsync(10);
+    await timedOut;
+    request[settle](new Error("late"));
+    await Promise.resolve();
+    expect(log.entries()).toEqual([expect.objectContaining({ outcome: "timeout" })]);
   });
 });

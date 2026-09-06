@@ -71,6 +71,7 @@ impl Link for BleLink {
             .is_err()
         {
             task.abort();
+            let _ = task.await;
         }
     }
 }
@@ -236,61 +237,71 @@ pub async fn rynk_ble_open(
     state: State<'_, BleState>,
     id: Option<String>,
 ) -> Result<BleOpenResult, String> {
-    state.take_and_stop().await;
+    state
+        .open(|| async {
+            let adapter = adapter().await?;
+            let device = connected_devices(&adapter)
+                .await?
+                .into_iter()
+                .find(|device| match &id {
+                    Some(wanted) => device_key(device) == *wanted,
+                    None => true,
+                })
+                .ok_or_else(|| match &id {
+                    Some(wanted) => format!("Rynk device {wanted} is no longer connected"),
+                    None => "No connected Rynk keyboard found over Bluetooth".to_string(),
+                })?;
+            let label = label_of(&device).await;
 
-    let adapter = adapter().await?;
-    let device = connected_devices(&adapter)
-        .await?
-        .into_iter()
-        .find(|device| match &id {
-            Some(wanted) => device_key(device) == *wanted,
-            None => true,
+            let (tx, rx) = mpsc::unbounded_channel();
+            let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+            let mut task = None;
+            let ready = tokio::time::timeout(GATT_TIMEOUT, async {
+                adapter
+                    .connect_device(&device)
+                    .await
+                    .map_err(|e| format!("Could not connect to {label}: {e}"))?;
+                let (input, output) = characteristics(&device).await?;
+                // Cap writes to what the characteristic will accept.
+                let write_chunk = output
+                    .max_write_len_async()
+                    .await
+                    .unwrap_or(BLE_SAFE_WRITE)
+                    .clamp(BLE_SAFE_WRITE, RYNK_BLE_CHUNK_SIZE);
+
+                task = Some(async_runtime::spawn(run_io(
+                    app.clone(),
+                    input,
+                    output,
+                    write_chunk,
+                    rx,
+                    ready_tx,
+                )));
+                match ready_rx.await {
+                    Ok(Ok(())) => Ok(()),
+                    Ok(Err(error)) => Err(error),
+                    Err(_) => Err("Rynk input subscription ended before it was live".to_string()),
+                }
+            })
+            .await
+            .unwrap_or_else(|_| Err(format!("Timed out attaching to {label}")));
+            if let Err(error) = ready {
+                if let Some(task) = task {
+                    task.abort();
+                    let _ = task.await;
+                }
+                return Err(error);
+            }
+
+            Ok((
+                BleLink {
+                    outbound: tx,
+                    task: task.unwrap(),
+                },
+                BleOpenResult { label },
+            ))
         })
-        .ok_or_else(|| match &id {
-            Some(wanted) => format!("Rynk device {wanted} is no longer connected"),
-            None => "No connected Rynk keyboard found over Bluetooth".to_string(),
-        })?;
-    let label = label_of(&device).await;
-
-    let (tx, rx) = mpsc::unbounded_channel();
-    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
-    let task = tokio::time::timeout(GATT_TIMEOUT, async {
-        adapter
-            .connect_device(&device)
-            .await
-            .map_err(|e| format!("Could not connect to {label}: {e}"))?;
-        let (input, output) = characteristics(&device).await?;
-        // Cap writes to what the characteristic will accept.
-        let write_chunk = output
-            .max_write_len_async()
-            .await
-            .unwrap_or(BLE_SAFE_WRITE)
-            .clamp(BLE_SAFE_WRITE, RYNK_BLE_CHUNK_SIZE);
-
-        let task = async_runtime::spawn(run_io(
-            app.clone(),
-            input,
-            output,
-            write_chunk,
-            rx,
-            ready_tx,
-        ));
-        match ready_rx.await {
-            Ok(Ok(())) => Ok(task),
-            Ok(Err(error)) => Err(error),
-            Err(_) => Err("Rynk input subscription ended before it was live".to_string()),
-        }
-    })
-    .await
-    .map_err(|_| format!("Timed out attaching to {label}"))??;
-
-    // Another open may have raced in during the GATT handshake; whatever it
-    // installed is displaced here, and stopped rather than leaked.
-    let displaced = state.replace(BleLink { outbound: tx, task });
-    if let Some(previous) = displaced {
-        previous.stop().await;
-    }
-    Ok(BleOpenResult { label })
+        .await
 }
 
 #[tauri::command]
@@ -309,4 +320,49 @@ pub fn rynk_ble_send(state: State<'_, BleState>, bytes: Vec<u8>) -> Result<(), S
 pub async fn rynk_ble_close(state: State<'_, BleState>) -> Result<(), String> {
     state.take_and_stop().await;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+    use tokio::sync::oneshot;
+
+    #[tokio::test]
+    async fn close_drains_queued_frames() {
+        let (outbound, mut frames) = mpsc::unbounded_channel();
+        let written = Arc::new(Mutex::new(Vec::new()));
+        let received = written.clone();
+        let task = JoinHandle::Tokio(tokio::spawn(async move {
+            while let Some(frame) = frames.recv().await {
+                received.lock().unwrap().push(frame);
+            }
+        }));
+        outbound.send(vec![1, 2]).unwrap();
+        outbound.send(vec![3]).unwrap();
+        BleLink { outbound, task }.stop().await;
+        assert_eq!(*written.lock().unwrap(), [vec![1, 2], vec![3]]);
+    }
+
+    #[tokio::test]
+    async fn close_waits_for_a_stuck_worker_to_be_cancelled() {
+        struct Stopped(Option<oneshot::Sender<()>>);
+        impl Drop for Stopped {
+            fn drop(&mut self) {
+                let _ = self.0.take().unwrap().send(());
+            }
+        }
+
+        let (outbound, _frames) = mpsc::unbounded_channel();
+        let (started, running) = oneshot::channel();
+        let (stopped, mut ended) = oneshot::channel();
+        let task = JoinHandle::Tokio(tokio::spawn(async move {
+            let _stopped = Stopped(Some(stopped));
+            started.send(()).unwrap();
+            std::future::pending::<()>().await;
+        }));
+        running.await.unwrap();
+        BleLink { outbound, task }.stop().await;
+        assert_eq!(ended.try_recv(), Ok(()));
+    }
 }
