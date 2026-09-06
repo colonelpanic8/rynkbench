@@ -9,6 +9,7 @@
 //
 // Hidden entirely on firmware without RUNTIME_CONDITIONAL_SCENES.
 
+import { lightingKeyLegend } from "./keyLegend";
 import { useMemo, useState } from "react";
 import type {
   BleState,
@@ -97,11 +98,15 @@ export function ConditionalRulesPanel() {
     const labels = new Map<number, string>();
     for (const key of bundle.model.keys) {
       if (key.ledId !== undefined) {
-        labels.set(key.ledId, keyAddressWithLegend(key));
+        const label = lightingKeyLegend(
+          key, state.layers, bundle.caps.num_cols,
+          state.lightingTarget, state.activeLayers, state.defaultLayer,
+        );
+        labels.set(key.ledId, keyAddressWithLegend({ ...key, label }));
       }
     }
     return labels;
-  }, [bundle.model]);
+  }, [bundle.model, bundle.caps.num_cols, state.layers, state.lightingTarget, state.activeLayers, state.defaultLayer]);
 
   const ledOptions = useMemo(
     () => [...ledLabels.keys()].sort((a, b) => a - b),

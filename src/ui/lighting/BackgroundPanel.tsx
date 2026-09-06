@@ -111,7 +111,7 @@ export function BackgroundPanel() {
 
       <div className="mt-2 flex flex-col gap-2">
         <label className="flex cursor-pointer items-center justify-between text-[12.5px] text-mute">
-          <span>Lighting output</span>
+          <span>All RGB lighting</span>
           <input
             type="checkbox"
             checked={draft.output_enabled}
@@ -119,6 +119,11 @@ export function BackgroundPanel() {
             className="accent-(--color-accent)"
           />
         </label>
+        <p className="text-[11.5px] leading-relaxed text-faint">
+          Applies to layer colors, effects, and indicators. To toggle from a key,
+          assign Output toggle (BacklightToggle) in Keymap.
+          {state.lightingOutputMode?.wake_layers ? " Wake layers can temporarily turn lighting back on; disable MoErgo Magic Layer for those layers below to keep it off on every layer." : ""}
+        </p>
         <Slider
           label="Brightness"
           value={draft.output_brightness}
@@ -146,6 +151,10 @@ export function BackgroundPanel() {
           />
         </label>
 
+        <p className="text-[11.5px] leading-relaxed text-faint">
+          Background hue, saturation, and speed do not change painted layer colors.
+          Edit those colors with the layer brush. RGB toggle controls the background/effect only.
+        </p>
         {bg.enabled && (
           <>
             <div className="flex gap-0.5 rounded-lg border border-line-soft bg-well p-0.5">
