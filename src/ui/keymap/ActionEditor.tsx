@@ -13,12 +13,13 @@ import type {
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import { searchKeycodes } from "../hid";
 import { getLocaleId, subscribeLocale } from "../locale";
-import { EMPTY_MODS, actionLabel, anyModifier, hidName, modifierSymbols } from "../labels";
+import { actionLabel, anyModifier, hidName, modifierSymbols } from "../labels";
+import { noModifiers } from "../../model/slots";
 import { decodeMacros, macroPreview } from "../macros";
 import { DEFAULT_TAP_HOLD_PROFILE, morsePatternGlyph } from "../morse";
 import { useWorkbench } from "../state";
 import { morseProfileSummary } from "../morse-profile";
-import { Button, SectionLabel, TextInput, cx } from "../kit";
+import { Button, SectionLabel, Segmented, TextInput, cx } from "../kit";
 import { mergeModifiers, pickedHidAction } from "./actions";
 
 type Tab =
@@ -238,7 +239,7 @@ export function SlotPicker({
 }) {
   const [tab, setTab] = useState<"keys" | "mods" | "layers">("keys");
   const [query, setQuery] = useState("");
-  const [mods, setMods] = useState<ModifierCombination>(EMPTY_MODS);
+  const [mods, setMods] = useState<ModifierCombination>(noModifiers);
   return (
     <div className="flex flex-col gap-2.5 rounded-lg border border-line-soft bg-well/60 p-2.5">
       <div className="flex gap-1">
@@ -557,7 +558,7 @@ export function ActionEditor({
   const { bundle, state } = useWorkbench();
   const [tab, setTab] = useState<Tab>("keys");
   const [query, setQuery] = useState("");
-  const [keyMods, setKeyMods] = useState<ModifierCombination>(EMPTY_MODS);
+  const [keyMods, setKeyMods] = useState<ModifierCombination>(noModifiers);
   const [oneShot, setOneShot] = useState(false);
 
   const tabs = useMemo(() => {
@@ -591,21 +592,13 @@ export function ActionEditor({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex flex-wrap gap-0.5 rounded-lg border border-line-soft bg-well p-0.5">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={cx(
-              "flex-1 cursor-pointer whitespace-nowrap rounded-md px-1.5 py-1.5 text-[11.5px] font-medium transition-colors duration-120",
-              tab === t.id ? "bg-raised text-ink shadow-sm" : "text-faint hover:text-mute",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        className="flex-wrap"
+        size="sm"
+        items={tabs.map((t) => ({ value: t.id, label: t.label }))}
+        value={tab}
+        onChange={setTab}
+      />
 
       {tab === "keys" && (
         <div className="flex min-h-0 flex-1 flex-col gap-3">

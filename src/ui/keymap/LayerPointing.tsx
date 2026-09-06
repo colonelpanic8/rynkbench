@@ -6,12 +6,11 @@ import type {
   PointingConfig,
   PointingMode,
 } from "../../vendor/rynk-wasm/rynk_wasm";
-import { Button, SectionLabel, TextInput, cx } from "../kit";
+import { ApplyBar, Button, SectionLabel, Segmented, TextInput, cx } from "../kit";
 import { NumberField } from "../lighting/EffectEditor";
 import {
   ChevronRightIcon,
   PlusIcon,
-  SpinnerIcon,
   TrashIcon,
   WarningIcon,
 } from "../icons";
@@ -32,6 +31,7 @@ import {
   updatePointingDeviceMode,
   type PointingModeKind,
 } from "../pointing";
+import { layerName } from "../layer-names";
 import { useWorkbench } from "../state";
 import { KeycodeBrowser } from "./ActionEditor";
 
@@ -190,21 +190,16 @@ function PointingModeEditor({ value, allowKeypad, allowCursorRemap, onChange }: 
   ];
   return (
     <div className="flex flex-col gap-2.5">
-      <div className="grid grid-cols-3 gap-1 rounded-lg border border-line-soft bg-well p-0.5">
-        {modeKinds.map((candidate) => (
-          <button
-            key={candidate}
-            type="button"
-            onClick={() => onChange(defaultPointingMode(candidate))}
-            className={cx(
-              "cursor-pointer rounded-md px-1 py-1 text-[10.5px] font-medium",
-              candidate === kind ? "bg-raised text-ink shadow-sm" : "text-faint hover:text-mute",
-            )}
-          >
-            {MODE_LABELS[candidate] ?? candidate}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        layout="grid3"
+        size="sm"
+        items={modeKinds.map((candidate) => ({
+          value: candidate,
+          label: MODE_LABELS[candidate] ?? candidate,
+        }))}
+        value={kind}
+        onChange={(candidate) => onChange(defaultPointingMode(candidate))}
+      />
 
       {"Cursor" in value && <CursorFields value={value.Cursor} onChange={(Cursor) => onChange({ Cursor })} />}
       {"Scroll" in value && (
@@ -286,8 +281,9 @@ export function LayerPointing({ selectedDeviceId }: { selectedDeviceId?: number 
     () => allOverrides.filter((entry) => entry.layer === state.uiLayer),
     [allOverrides, state.uiLayer],
   );
-  const availableDevices = devices.filter(
-    (device) => !overrides.some((entry) => entry.device_id === device.device_id),
+  const availableDevices = useMemo(
+    () => devices.filter((device) => !overrides.some((entry) => entry.device_id === device.device_id)),
+    [devices, overrides],
   );
   const selectedHasOverride =
     selectedDeviceId !== undefined &&
@@ -308,11 +304,13 @@ export function LayerPointing({ selectedDeviceId }: { selectedDeviceId?: number 
     return () => cancelAnimationFrame(frame);
   }, [open, selectedDeviceId, state.uiLayer]);
 
-  useEffect(() => {
-    if (!availableDevices.some((device) => String(device.device_id) === overrideDeviceId)) {
-      setOverrideDeviceId(availableDevices[0] ? String(availableDevices[0].device_id) : "");
-    }
-  }, [availableDevices, overrideDeviceId]);
+  // The chosen device is only a preference: it falls back to the first device
+  // still available whenever the picked one gains an override or disappears.
+  const effectiveOverrideDevice = availableDevices.some(
+    (device) => String(device.device_id) === overrideDeviceId,
+  )
+    ? overrideDeviceId
+    : (availableDevices[0] === undefined ? "" : String(availableDevices[0].device_id));
 
   if (!draft || !applied) return null;
 
@@ -323,7 +321,7 @@ export function LayerPointing({ selectedDeviceId }: { selectedDeviceId?: number 
     allOverrides.some((entry) => pointingModeKind(entry.mode) === kind);
   const keypadSupported = modeSupported(POINTING_MODE_KEYPAD, "Keypad");
   const cursorRemapSupported = modeSupported(POINTING_MODE_CURSOR_REMAP, "CursorRemap");
-  const layerName = state.layerMetadata?.[state.uiLayer]?.name ?? `Layer ${state.uiLayer}`;
+  const name = layerName(state.layerMetadata, state.uiLayer);
   const edit = (change: () => PointingConfig): boolean => {
     try {
       dispatch({ type: "pointingDraftSet", config: change() });
@@ -357,7 +355,7 @@ export function LayerPointing({ selectedDeviceId }: { selectedDeviceId?: number 
       {open && (
         <div className="mt-3 flex flex-col gap-4">
           <p className="text-[11.5px] leading-relaxed text-faint">
-            Base modes apply everywhere. {layerName} overrides replace them while this layer is on top.
+            Base modes apply everywhere. {name} overrides replace them while this layer is on top.
           </p>
 
           <div>
@@ -407,7 +405,7 @@ export function LayerPointing({ selectedDeviceId }: { selectedDeviceId?: number 
 
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <SectionLabel>{layerName} overrides</SectionLabel>
+              <SectionLabel>{name} overrides</SectionLabel>
               <span className="text-[10.5px] text-faint">{overrides.length} on layer</span>
             </div>
             <div className="flex flex-col gap-2">
@@ -436,14 +434,14 @@ export function LayerPointing({ selectedDeviceId }: { selectedDeviceId?: number 
             <div className="mt-2 flex items-center gap-2">
               <select
                 aria-label="Pointing device for new layer override"
-                value={overrideDeviceId}
+                value={effectiveOverrideDevice}
                 onChange={(event) => setOverrideDeviceId(event.target.value)}
                 disabled={availableDevices.length === 0}
                 className="min-w-0 flex-1 rounded-lg border border-line bg-well px-2 py-1.5 text-[12px] text-ink disabled:opacity-40"
               >
                 {availableDevices.map((device) => <option key={device.device_id} value={device.device_id}>{deviceLabel(device.device_id)} · {pointingModeKind(device.mode)}</option>)}
               </select>
-              <Button variant="outline" className="py-1" disabled={overrideDeviceId === "" || draft.override_count >= POINTING_OVERRIDE_CAPACITY} onClick={() => edit(() => setPointingOverride(draft, state.uiLayer, Number(overrideDeviceId)))}>
+              <Button variant="outline" className="py-1" disabled={effectiveOverrideDevice === "" || draft.override_count >= POINTING_OVERRIDE_CAPACITY} onClick={() => edit(() => setPointingOverride(draft, state.uiLayer, Number(effectiveOverrideDevice)))}>
                 <PlusIcon size={11} /> Override
               </Button>
             </div>
@@ -456,12 +454,19 @@ export function LayerPointing({ selectedDeviceId }: { selectedDeviceId?: number 
             </div>
           )}
 
-          <div className="flex items-center gap-2">
-            <Button variant="primary" className="flex-1" disabled={!staged || state.pointingBusy} onClick={() => void io.applyPointingConfig()}>
-              {state.pointingBusy && <SpinnerIcon size={13} />} Apply
-            </Button>
-            <Button variant="ghost" disabled={!staged || state.pointingBusy} onClick={() => dispatch({ type: "pointingDraftReset" })}>Discard</Button>
-          </div>
+          <ApplyBar
+            busy={state.pointingBusy}
+            apply={{
+              label: "Apply",
+              disabled: !staged || state.pointingBusy,
+              onClick: () => void io.applyPointingConfig(),
+            }}
+            discard={{
+              label: "Discard",
+              disabled: !staged || state.pointingBusy,
+              onClick: () => dispatch({ type: "pointingDraftReset" }),
+            }}
+          />
           {state.pointingError && (
             <Button variant="ghost" disabled={state.pointingBusy} onClick={() => void io.reloadPointingConfig()}>Reload from keyboard</Button>
           )}

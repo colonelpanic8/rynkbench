@@ -3,6 +3,7 @@ import type {
   ConnectionStatus,
   ConnectionType,
   LightingConditionalSceneCell,
+  LightingEffect,
   LightingExtendedConditionalSceneCell,
   LightingOverlayCell,
   LightingOutputMode,
@@ -139,6 +140,48 @@ export function firmwarePreviewCells(
     }
   }
   return result;
+}
+
+export interface FirmwareRuleGroup {
+  /** Stable within one grouping pass — the shared condition + effect. */
+  id: string;
+  description: string;
+  effect: LightingEffect;
+  leds: number[];
+  active: boolean;
+}
+
+/** The compiled sources as the rule list shows them: one entry per distinct
+ *  condition + effect, carrying every LED it claims. Compiled layer cells and
+ *  conditional cells never share a group, since their conditions differ in
+ *  kind. */
+export function firmwareRuleGroups(
+  layerScenes: LightingSceneCell[],
+  conditionalScenes: LightingConditionalSceneCell[],
+  preview: FirmwareLightingPreview,
+  layerLabel: (layer: number) => string,
+): FirmwareRuleGroup[] {
+  const result = new Map<string, FirmwareRuleGroup>();
+  const push = (id: string, ledId: number, group: () => Omit<FirmwareRuleGroup, "id" | "leds">) => {
+    const existing = result.get(id) ?? { id, leds: [], ...group() };
+    existing.leds.push(ledId);
+    result.set(id, existing);
+  };
+  for (const cell of layerScenes) {
+    push(JSON.stringify({ layer: cell.layer, effect: cell.effect }), cell.led_id, () => ({
+      description: `${layerLabel(cell.layer)} active`,
+      effect: cell.effect,
+      active: preview.activeLayers.has(cell.layer),
+    }));
+  }
+  for (const cell of conditionalScenes) {
+    push(JSON.stringify({ conditions: cell.conditions, effect: cell.effect }), cell.led_id, () => ({
+      description: describeConditions(cell, layerLabel),
+      effect: cell.effect,
+      active: conditionalRuleMatches(cell, preview),
+    }));
+  }
+  return [...result.values()];
 }
 
 /** Human summary of a runtime rule, including the predicates only the

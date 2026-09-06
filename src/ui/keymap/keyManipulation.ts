@@ -1,4 +1,7 @@
 import type { KeyAction } from "../../vendor/rynk-wasm/rynk_wasm";
+import type { PendingInfo, Selection } from "../state";
+import { keyPendingId } from "../state";
+import { same } from "../deep-equal";
 
 const CLIPBOARD_KIND = "rynkbench/key-action";
 const CLIPBOARD_VERSION = 1;
@@ -169,4 +172,65 @@ export function keyClipboardShortcut(
   if (event.key.toLowerCase() === "c" && !event.shiftKey) return "copy";
   if (event.key.toLowerCase() === "v" && !event.shiftKey) return "paste";
   return null;
+}
+
+/** The board state a copy/paste keystroke is judged against. */
+export interface ClipboardBoard {
+  layers: KeyAction[][];
+  cols: number;
+  pending: Record<string, PendingInfo>;
+}
+
+export interface ClipboardTarget {
+  layer: number;
+  row: number;
+  col: number;
+  /** What the key held when the keystroke arrived. */
+  action: KeyAction;
+}
+
+export type ClipboardPlan =
+  | { kind: "ignore" }
+  | { kind: "blocked"; message: string }
+  | { kind: "copy"; target: ClipboardTarget }
+  | { kind: "paste"; target: ClipboardTarget };
+
+function actionAt(board: ClipboardBoard, target: Omit<ClipboardTarget, "action">) {
+  return board.layers[target.layer]?.[target.row * board.cols + target.col];
+}
+
+function writeInFlight(board: ClipboardBoard, target: Omit<ClipboardTarget, "action">): boolean {
+  return board.pending[keyPendingId(target.layer, target.row, target.col)]?.status === "pending";
+}
+
+/** What a copy/paste keystroke should do, given the board as it is now. A key
+ *  with a write in flight is not pasted over: the optimistic value would race
+ *  the device's answer. */
+export function planClipboardAction(
+  shortcut: "copy" | "paste" | null,
+  selection: Selection | null,
+  layer: number,
+  board: ClipboardBoard,
+): ClipboardPlan {
+  if (shortcut === null || selection?.type !== "key") return { kind: "ignore" };
+  const at = { layer, row: selection.row, col: selection.col };
+  const action = actionAt(board, at);
+  if (action === undefined) return { kind: "ignore" };
+  const target = { ...at, action };
+  if (shortcut === "copy") return { kind: "copy", target };
+  if (writeInFlight(board, target)) {
+    return {
+      kind: "blocked",
+      message: "Wait for the selected key's current write to finish before pasting.",
+    };
+  }
+  return { kind: "paste", target };
+}
+
+/** Whether a paste may still be applied once the clipboard has been read.
+ *  Reading is asynchronous, so the key may have been rebound, or a write
+ *  started on it, while the browser was deciding. */
+export function pasteStillTargets(target: ClipboardTarget, board: ClipboardBoard): boolean {
+  if (writeInFlight(board, target)) return false;
+  return same(actionAt(board, target), target.action);
 }

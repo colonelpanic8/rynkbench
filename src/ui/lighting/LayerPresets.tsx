@@ -18,7 +18,7 @@ import type {
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import { layerName } from "../layer-names";
 import { useWorkbench } from "../state";
-import { Button, SectionLabel, TextInput, cx } from "../kit";
+import { Button, SectionLabel, Segmented, TextInput, cx } from "../kit";
 import { TrashIcon } from "../icons";
 import { maskHasLayer, setLayerInMask } from "./wakeLayers";
 
@@ -142,25 +142,17 @@ function DeviceScenes({ status }: { status: LightingSceneStatus }) {
 
         <div>
           <div className="text-[11px] text-faint">When several layers are active</div>
-          <div className="mt-1 flex gap-0.5 rounded-lg border border-line-soft bg-well p-0.5">
-            {POLICIES.map((policy) => (
-              <button
-                key={policy.id}
-                type="button"
-                title={policy.hint}
-                disabled={state.lightingBusy}
-                onClick={() => io.setScenePolicy(policy.id)}
-                className={cx(
-                  "flex-1 cursor-pointer rounded-md py-1.5 text-[11.5px] font-medium transition-colors duration-120",
-                  state.scenePolicy === policy.id
-                    ? "bg-raised text-ink shadow-sm"
-                    : "text-faint hover:text-mute",
-                )}
-              >
-                {policy.label}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            className="mt-1"
+            items={POLICIES.map((policy) => ({
+              value: policy.id,
+              label: policy.label,
+              title: policy.hint,
+              disabled: state.lightingBusy,
+            }))}
+            value={state.scenePolicy}
+            onChange={(policy) => io.setScenePolicy(policy)}
+          />
         </div>
 
         {state.lightingOutputMode !== null && (

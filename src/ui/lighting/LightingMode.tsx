@@ -1,18 +1,13 @@
 // Lighting mode: drag-paint overlay cells on the canvas, stage vs apply.
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type {
-  LightingEffect,
-  LightingOverlayCell,
-  LightingSceneCell,
-} from "../../vendor/rynk-wasm/rynk_wasm";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { LightingOverlayCell } from "../../vendor/rynk-wasm/rynk_wasm";
 import type { KeyView } from "../../model/keyboard";
 import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
-import { keyAddressLabel, keyAddressWithLegend } from "../key-address";
+import { keyAddressLabel } from "../key-address";
 import { keyActionGlyph } from "../labels";
 import { layerName } from "../layer-names";
-import type { LightingTarget } from "../state";
 import {
   activeLightingBase,
   activeLightingDraft,
@@ -21,30 +16,35 @@ import {
 } from "../state";
 import { ColorPicker } from "./ColorPicker";
 import { BackgroundPanel } from "./BackgroundPanel";
+import { FirmwareRulesPanel } from "./FirmwareRulesPanel";
+import { LightingTargets } from "./LightingTargets";
 import { ConditionalRulesPanel } from "./ConditionalRulesPanel";
 import { StatusPresetsPanel } from "./StatusPresetsPanel";
 import { LayerPresets } from "./LayerPresets";
 import type { Hsv } from "../color";
 import { cssEmissiveRgb, cssRgb, hsvToRgb } from "../color";
-import { Button, InspectorShell, SectionLabel, cx } from "../kit";
-import { EraserIcon, MarqueeIcon, SparkleIcon, SpinnerIcon, WarningIcon } from "../icons";
+import { ApplyBar, Button, ErrorBanner, InspectorShell, SectionLabel, Segmented, cx } from "../kit";
+import { EraserIcon, MarqueeIcon, SparkleIcon } from "../icons";
 import { effectiveAction } from "../live/compositor";
-import { targetPreviewEffects } from "./preview";
-import { layersInMask, maskHasLayer } from "./wakeLayers";
-import { conditionalRuleMatches, describeConditions, firmwarePreviewCells } from "./firmwareRules";
+import {
+  BLACK_EFFECT,
+  composePreviewEffects,
+  conditionalPreviewCells,
+  indicatorPreviewCell,
+  previewActiveLayers,
+  sceneTableWithLayer,
+  targetPreviewEffects,
+} from "./preview";
 import { effectAnim, effectColor } from "./decor";
-import { NumberField } from "./EffectEditor";
-
-type EffectKind = "Solid" | "Blink" | "Breathe";
+import { EffectShapeEditor, NumberField } from "./EffectEditor";
+import { DEFAULT_TIMING, buildEffect } from "./effect";
+import type { EffectKind, EffectTiming } from "./effect";
 
 interface Brush {
   mode: "paint" | "erase" | "select";
   hsv: Hsv;
   kind: EffectKind;
-  periodMs: number;
-  duty: number;
-  phaseMs: number;
-  stepMs: number;
+  timing: EffectTiming;
   ttlOn: boolean;
   ttlMs: number;
 }
@@ -53,289 +53,17 @@ const DEFAULT_BRUSH: Brush = {
   mode: "paint",
   hsv: { h: 195, s: 0.85, v: 1 },
   kind: "Solid",
-  periodMs: 1000,
-  duty: 128,
-  phaseMs: 0,
-  stepMs: 16,
+  timing: DEFAULT_TIMING,
   ttlOn: false,
   ttlMs: 5000,
 };
 
-const BLACK_EFFECT: LightingEffect = { Solid: { color: { r: 0, g: 0, b: 0 } } };
-
-function sceneLayerMap(
-  scenes: LightingSceneCell[],
-  layer: number,
-): Record<number, LightingOverlayCell> {
-  const cells: Record<number, LightingOverlayCell> = {};
-  for (const cell of scenes) {
-    if (cell.layer === layer)
-      cells[cell.led_id] = { led_id: cell.led_id, effect: cell.effect, ttl_ms: undefined };
-  }
-  return cells;
-}
-
-function brushEffect(brush: Brush): LightingEffect {
-  const color = hsvToRgb(brush.hsv);
-  switch (brush.kind) {
-    case "Solid":
-      return { Solid: { color } };
-    case "Blink":
-      return {
-        Blink: {
-          color,
-          period_ms: brush.periodMs,
-          phase_ms: brush.phaseMs,
-          duty: brush.duty,
-        },
-      };
-    case "Breathe":
-      return {
-        Breathe: {
-          color,
-          period_ms: brush.periodMs,
-          phase_ms: brush.phaseMs,
-          step_ms: brush.stepMs,
-        },
-      };
-  }
-}
-
 function brushCell(brush: Brush, ledId: number, allowTtl: boolean): LightingOverlayCell {
   return {
     led_id: ledId,
-    effect: brushEffect(brush),
+    effect: buildEffect(brush.kind, hsvToRgb(brush.hsv), brush.timing),
     ttl_ms: allowTtl && brush.ttlOn ? brush.ttlMs : undefined,
   };
-}
-
-/** Overlay + per-layer edit targets, styled like Keymap mode's layer tabs.
- *  Only rendered when the firmware supports on-device scenes. */
-function LightingTargets() {
-  const { bundle, state, dispatch } = useWorkbench();
-  const numLayers = bundle.caps.num_layers;
-  const target = state.lightingTarget;
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [underline, setUnderline] = useState({ left: 0, width: 0 });
-
-  const layersWithCells = useMemo(() => {
-    const set = new Set<number>();
-    for (const cell of state.compiledScenes) set.add(cell.layer);
-    for (const cell of state.scenes) set.add(cell.layer);
-    return set;
-  }, [state.compiledScenes, state.scenes]);
-
-  const key = (t: LightingTarget) => (t === "overlay" ? "overlay" : `L${t}`);
-
-  // Mirror Keymap mode's tabs: occupied layers by name, plus any layer that
-  // already carries scene cells so nothing lit is hidden.
-  const layers = useMemo(() => {
-    const set = new Set(layersWithCells);
-    if (state.layerMetadata) {
-      state.layerMetadata.forEach((metadata, layer) => {
-        if (metadata.occupied) set.add(layer);
-      });
-    } else {
-      for (let layer = 0; layer < numLayers; layer++) set.add(layer);
-    }
-    if (target !== "overlay") set.add(target);
-    return [...set].filter((layer) => layer < numLayers).sort((a, b) => a - b);
-  }, [layersWithCells, state.layerMetadata, numLayers, target]);
-
-  useLayoutEffect(() => {
-    const wrap = wrapRef.current;
-    if (!wrap) return;
-    const btn = wrap.querySelector<HTMLButtonElement>(`[data-target="${key(target)}"]`);
-    if (btn) setUnderline({ left: btn.offsetLeft, width: btn.offsetWidth });
-  }, [target, layers.length]);
-
-  const targets: LightingTarget[] = ["overlay", ...layers];
-
-  return (
-    <div className="flex items-center gap-3 px-1">
-      <div ref={wrapRef} className="relative flex items-center gap-1">
-        {targets.map((t) => {
-          const selected = t === target;
-          const isLayer = t !== "overlay";
-          const live = isLayer && t === state.currentLayer;
-          const hasContent = isLayer && layersWithCells.has(t);
-          const title = isLayer
-            ? `${layerName(state.layerMetadata, t)} · physical layer ${t} · scene ${
-                hasContent ? "lit" : "unlit"
-              }${live ? " · effective layer" : ""}`
-            : "Transient overlay — cleared on reboot";
-          return (
-            <button
-              key={key(t)}
-              type="button"
-              data-target={key(t)}
-              onClick={() => dispatch({ type: "lightingTarget", target: t })}
-              title={title}
-              className={cx(
-                "relative flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors duration-150",
-                selected ? "text-ink" : "text-faint hover:text-mute",
-              )}
-            >
-              <span>{t === "overlay" ? "Overlay" : layerName(state.layerMetadata, t)}</span>
-              {hasContent && <span className="size-1 rounded-full bg-accent" />}
-              {live && (
-                <span title="Effective layer" className="size-1.5 rounded-full bg-ok" />
-              )}
-            </button>
-          );
-        })}
-        <div
-          className="absolute -bottom-px h-0.5 rounded-full bg-accent transition-all duration-180"
-          style={{
-            left: underline.left,
-            width: underline.width,
-            transitionTimingFunction: "cubic-bezier(0.25,0.8,0.35,1)",
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function FirmwareRulesPanel() {
-  const { bundle, state } = useWorkbench();
-  const total = state.compiledScenes.length + state.conditionalScenes.length;
-  const activeLayers = useMemo(
-    () =>
-      state.lightingTarget === "overlay"
-        ? new Set(state.activeLayers)
-        : new Set([state.defaultLayer, state.lightingTarget]),
-    [state.activeLayers, state.defaultLayer, state.lightingTarget],
-  );
-  const batteries = useMemo(
-    () => new Map([[0, state.battery], [1, state.peripheralBattery]]),
-    [state.battery, state.peripheralBattery],
-  );
-  const labels = useMemo(() => {
-    const result = new Map<number, string>();
-    for (const key of bundle.model.keys) {
-      if (key.ledId !== undefined) result.set(key.ledId, keyAddressWithLegend(key));
-    }
-    return result;
-  }, [bundle.model]);
-  const nameOf = useCallback(
-    (layer: number) => layerName(state.layerMetadata, layer),
-    [state.layerMetadata],
-  );
-  const groups = useMemo(() => {
-    const result = new Map<
-      string,
-      { description: string; color: string; leds: number[]; active: boolean }
-    >();
-    for (const cell of state.compiledScenes) {
-      const key = JSON.stringify({ layer: cell.layer, effect: cell.effect });
-      const group = result.get(key) ?? {
-        description: `${nameOf(cell.layer)} active`,
-        color: effectColor(cell.effect),
-        leds: [],
-        active: activeLayers.has(cell.layer),
-      };
-      group.leds.push(cell.led_id);
-      result.set(key, group);
-    }
-    for (const cell of state.conditionalScenes) {
-      const key = JSON.stringify({ conditions: cell.conditions, effect: cell.effect });
-      const group = result.get(key) ?? {
-        description: describeConditions(cell, nameOf),
-        color: effectColor(cell.effect),
-        leds: [],
-        active: conditionalRuleMatches(cell, {
-          activeLayers,
-          batteries,
-          outputMode: state.lightingOutputMode?.mode,
-        }),
-      };
-      group.leds.push(cell.led_id);
-      result.set(key, group);
-    }
-    return [...result.entries()].map(([id, group]) => ({ id, ...group }));
-  }, [
-    activeLayers,
-    batteries,
-    state.compiledScenes,
-    state.conditionalScenes,
-    state.lightingOutputMode,
-    nameOf,
-  ]);
-
-  const activeCount = groups.reduce(
-    (count, group) => count + (group.active ? group.leds.length : 0),
-    0,
-  );
-
-  const outputMode = state.lightingOutputMode;
-  if (total === 0 && outputMode === null) return null;
-  const { output_toggle_user_action: toggleAction } = state.lightingControls;
-  const wakeLayers = state.lightingOutputMode?.wake_layers ?? state.lightingControls.wake_layers;
-  const wakeLayerList = layersInMask(wakeLayers, bundle.caps.num_layers);
-  return (
-    <div>
-      <SectionLabel>Configured firmware rules</SectionLabel>
-      <p className="mt-1 text-[11.5px] leading-relaxed text-faint">
-        Read-only from keyboard.toml · {total} cells · {activeCount} active in this preview
-      </p>
-      {(toggleAction !== undefined || wakeLayerList.length > 0) && (
-        <p className="mt-1 text-[11.5px] leading-relaxed text-mute">
-          {toggleAction !== undefined && `User${toggleAction} toggles all lighting`}
-          {toggleAction !== undefined && wakeLayerList.length > 0 && " · "}
-          {wakeLayerList.length > 0 &&
-            `${wakeLayerList.map(nameOf).join(", ")} ${
-              wakeLayerList.length === 1 ? "wakes" : "wake"
-            } lighting and presents status`}
-        </p>
-      )}
-      {outputMode !== null && (
-        <p className="mt-1 text-[11.5px] leading-relaxed text-mute">
-          {outputMode.cycle_user_action !== undefined &&
-            `User${outputMode.cycle_user_action} cycles always on → always off → plugged-in only · `}
-          Current: {outputMode.mode === "AlwaysOn"
-            ? "always on"
-            : outputMode.mode === "AlwaysOff"
-              ? "always off"
-              : "plugged-in only"}
-          {` · ${outputMode.effective_enabled ? "lights on" : "lights off"}`}
-          {` · ${outputMode.powered ? "USB powered" : "on battery"}`}
-          {outputMode.powered_only_scope === "Local" && " · power evaluated per half"}
-        </p>
-      )}
-      {groups.length > 0 && (
-        <details className="mt-2 rounded-lg border border-line-soft bg-well px-3 py-2">
-          <summary className="cursor-pointer text-[12px] font-medium text-mute">
-            Show {groups.length} rule groups
-          </summary>
-          <div className="mt-2 flex flex-col gap-2">
-            {groups.map((group) => {
-              const names = group.leds.map((id) => labels.get(id) ?? `LED ${id}`).join(", ");
-              return (
-                <div key={group.id} className="flex items-start gap-2 text-[11.5px]">
-                  <span
-                    className="mt-1 size-2 shrink-0 rounded-full"
-                    style={{ background: group.color }}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-mute">{group.description}</span>
-                      <span className={group.active ? "text-ok" : "text-faint"}>
-                        {group.active ? "active" : "inactive"}
-                      </span>
-                    </div>
-                    <div className="truncate text-faint" title={names}>
-                      {names}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </details>
-      )}
-    </div>
-  );
 }
 
 export function LightingMode() {
@@ -360,29 +88,25 @@ export function LightingMode() {
     () => stagedBetween(draftMap, baseMap),
     [draftMap, baseMap],
   );
-  const compiledLayerMap = useMemo(
-    () => (isLayerTarget ? sceneLayerMap(state.compiledScenes, target) : {}),
-    [isLayerTarget, state.compiledScenes, target],
-  );
+  const compiledLayerLeds = useMemo(() => {
+    const leds = new Set<number>();
+    if (isLayerTarget) {
+      for (const cell of state.compiledScenes) if (cell.layer === target) leds.add(cell.led_id);
+    }
+    return leds;
+  }, [isLayerTarget, state.compiledScenes, target]);
 
+  const activeLayers = useMemo(
+    () => previewActiveLayers(target, state.activeLayers, state.defaultLayer),
+    [target, state.activeLayers, state.defaultLayer],
+  );
   const visibleEffects = useMemo(
     () => targetPreviewEffects(target, draftMap, state.compiledScenes),
     [draftMap, state.compiledScenes, target],
   );
-  // Compiled rules first, then the staged runtime table: composition follows
-  // table order and later cells win, which is exactly how the firmware lets
-  // runtime cells override the compiled ones on slots they share. Previewing
-  // the *draft* makes the rules editor WYSIWYG before Apply.
-  const conditionalPreview = useMemo(() => {
-    const activeLayers =
-      target === "overlay"
-        ? new Set(state.activeLayers)
-        : new Set([state.defaultLayer, target]);
-    return firmwarePreviewCells(
-      [],
-      state.conditionalScenes,
-      state.runtimeConditionalDraft,
-      {
+  const conditionalPreview = useMemo(
+    () =>
+      conditionalPreviewCells(state.conditionalScenes, state.runtimeConditionalDraft, {
         activeLayers,
         batteries: new Map([
           [0, state.battery],
@@ -393,42 +117,27 @@ export function LightingMode() {
         effectsEnabled: state.lightingExtension
           ? state.lightingExtension.state.value !== 0
           : undefined,
-      },
-    );
-  }, [
-    state.activeLayers,
-    state.battery,
-    state.conditionalScenes,
-    state.defaultLayer,
-    state.peripheralBattery,
-    state.runtimeConditionalDraft,
-    state.lightingOutputMode,
-    state.connection,
-    state.lightingExtension,
-    target,
-  ]);
-  const previewEffects = useMemo(() => {
-    const result = new Map(visibleEffects);
-    for (const cell of conditionalPreview.values()) result.set(cell.led_id, cell.effect);
-    const outputMode = state.lightingOutputMode;
-    const activeLayers =
-      target === "overlay"
-        ? new Set(state.activeLayers)
-        : new Set([state.defaultLayer, target]);
-    if (
-      outputMode?.indicator !== undefined &&
-      [...activeLayers].some((layer) => maskHasLayer(outputMode.wake_layers, layer))
-    ) {
-      const effect =
-        outputMode.mode === "AlwaysOn"
-          ? outputMode.indicator.always_on
-          : outputMode.mode === "AlwaysOff"
-            ? outputMode.indicator.always_off
-            : outputMode.indicator.powered_only;
-      result.set(outputMode.indicator.led_id, effect);
-    }
-    return result;
-  }, [conditionalPreview, state.activeLayers, state.defaultLayer, state.lightingOutputMode, target, visibleEffects]);
+      }),
+    [
+      activeLayers,
+      state.battery,
+      state.conditionalScenes,
+      state.peripheralBattery,
+      state.runtimeConditionalDraft,
+      state.lightingOutputMode,
+      state.connection,
+      state.lightingExtension,
+    ],
+  );
+  const previewEffects = useMemo(
+    () =>
+      composePreviewEffects(
+        visibleEffects,
+        conditionalPreview,
+        indicatorPreviewCell(state.lightingOutputMode, activeLayers),
+      ),
+    [activeLayers, conditionalPreview, state.lightingOutputMode, visibleEffects],
+  );
 
   const lighting = state.lightingState;
   const backgroundColor =
@@ -470,9 +179,9 @@ export function LightingMode() {
       return;
     }
     const masks = ledIds
-      .filter((id) => compiledLayerMap[id] !== undefined)
+      .filter((id) => compiledLayerLeds.has(id))
       .map((led_id): LightingOverlayCell => ({ led_id, effect: BLACK_EFFECT, ttl_ms: undefined }));
-    const removable = ledIds.filter((id) => compiledLayerMap[id] === undefined);
+    const removable = ledIds.filter((id) => !compiledLayerLeds.has(id));
     if (removable.length > 0) dispatch({ type: "erase", ledIds: removable });
     if (masks.length > 0) dispatch({ type: "paint", cells: masks });
   };
@@ -539,16 +248,12 @@ export function LightingMode() {
 
   const stagedCount = staged.size;
   const visibleCount = previewEffects.size;
-  const compiledCount = Object.keys(compiledLayerMap).length;
+  const compiledCount = compiledLayerLeds.size;
   const sceneStatus = bundle.sceneStatus;
 
   const applyLayerDraft = () => {
     if (!isLayerTarget) return;
-    const passThrough = state.scenes.filter((cell) => cell.layer !== target);
-    const replaced = Object.values(draftMap).map(
-      (cell): LightingSceneCell => ({ layer: target, led_id: cell.led_id, effect: cell.effect }),
-    );
-    io.applyScenes([...passThrough, ...replaced]);
+    io.applyScenes(sceneTableWithLayer(state.scenes, target, draftMap));
   };
 
   const clearLayer = () => {
@@ -615,41 +320,47 @@ export function LightingMode() {
           {/* Brush */}
           <div>
             <SectionLabel>Brush</SectionLabel>
-            <div className="mt-2 flex gap-0.5 rounded-lg border border-line-soft bg-well p-0.5">
-              {(
-                [
-                  { mode: "paint", label: "Paint", title: "Drag to paint keys with the brush" },
-                  { mode: "erase", label: "Erase", title: "Drag to clear keys" },
-                  {
-                    mode: "select",
-                    label: "Select",
-                    title:
-                      "Drag to build a multi-key selection — start on a selected key to deselect",
-                  },
-                ] as const
-              ).map(({ mode, label, title }) => (
-                <button
-                  key={mode}
-                  type="button"
-                  title={title}
-                  onClick={() => setBrush({ ...brush, mode })}
-                  className={cx(
-                    "flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md py-1.5 text-[12px] font-medium transition-colors duration-120",
-                    brush.mode === mode ? "bg-raised text-ink shadow-sm" : "text-faint hover:text-mute",
-                  )}
-                >
-                  {mode === "paint" && (
-                    <span
-                      className="size-2.5 rounded-full"
-                      style={{ background: cssRgb(hsvToRgb(brush.hsv)) }}
-                    />
-                  )}
-                  {mode === "erase" && <EraserIcon size={13} />}
-                  {mode === "select" && <MarqueeIcon size={13} />}
-                  {label}
-                </button>
-              ))}
-            </div>
+            <Segmented
+              className="mt-2"
+              items={[
+                {
+                  value: "paint",
+                  title: "Drag to paint keys with the brush",
+                  label: (
+                    <>
+                      <span
+                        className="size-2.5 rounded-full"
+                        style={{ background: cssRgb(hsvToRgb(brush.hsv)) }}
+                      />
+                      Paint
+                    </>
+                  ),
+                },
+                {
+                  value: "erase",
+                  title: "Drag to clear keys",
+                  label: (
+                    <>
+                      <EraserIcon size={13} />
+                      Erase
+                    </>
+                  ),
+                },
+                {
+                  value: "select",
+                  title:
+                    "Drag to build a multi-key selection — start on a selected key to deselect",
+                  label: (
+                    <>
+                      <MarqueeIcon size={13} />
+                      Select
+                    </>
+                  ),
+                },
+              ]}
+              value={brush.mode}
+              onChange={(mode) => setBrush({ ...brush, mode })}
+            />
             {brush.mode === "select" && (
               <p className="mt-1.5 text-[11.5px] leading-relaxed text-faint">
                 Drag across keys to select them, then paint or erase the whole selection at once.
@@ -661,60 +372,14 @@ export function LightingMode() {
             <>
               <ColorPicker value={brush.hsv} onChange={(hsv) => setBrush({ ...brush, hsv })} />
 
-              <div>
+              <div className="flex flex-col gap-2">
                 <SectionLabel>Effect</SectionLabel>
-                <div className="mt-2 flex gap-0.5 rounded-lg border border-line-soft bg-well p-0.5">
-                  {(["Solid", "Blink", "Breathe"] as const).map((k) => (
-                    <button
-                      key={k}
-                      type="button"
-                      onClick={() => setBrush({ ...brush, kind: k })}
-                      className={cx(
-                        "flex-1 cursor-pointer rounded-md py-1.5 text-[12px] font-medium transition-colors duration-120",
-                        brush.kind === k ? "bg-raised text-ink shadow-sm" : "text-faint hover:text-mute",
-                      )}
-                    >
-                      {k}
-                    </button>
-                  ))}
-                </div>
-                {brush.kind !== "Solid" && (
-                  <div className="mt-2.5 flex flex-col gap-1.5">
-                    <NumberField
-                      label="Period"
-                      unit="ms"
-                      min={100}
-                      value={brush.periodMs}
-                      onChange={(v) => setBrush({ ...brush, periodMs: v })}
-                    />
-                    {brush.kind === "Blink" && (
-                      <NumberField
-                        label="Duty"
-                        unit="/255"
-                        min={0}
-                        max={255}
-                        value={brush.duty}
-                        onChange={(v) => setBrush({ ...brush, duty: v })}
-                      />
-                    )}
-                    {brush.kind === "Breathe" && (
-                      <NumberField
-                        label="Step"
-                        unit="ms"
-                        min={1}
-                        value={brush.stepMs}
-                        onChange={(v) => setBrush({ ...brush, stepMs: v })}
-                      />
-                    )}
-                    <NumberField
-                      label="Phase"
-                      unit="ms"
-                      min={0}
-                      value={brush.phaseMs}
-                      onChange={(v) => setBrush({ ...brush, phaseMs: v })}
-                    />
-                  </div>
-                )}
+                <EffectShapeEditor
+                  kind={brush.kind}
+                  timing={brush.timing}
+                  onKind={(kind) => setBrush({ ...brush, kind })}
+                  onTiming={(timing) => setBrush({ ...brush, timing })}
+                />
               </div>
 
               {/* Scene cells have no TTL — only the transient overlay expires. */}
@@ -892,57 +557,38 @@ export function LightingMode() {
         {/* Apply bar */}
         <div className="mt-4 border-t border-line-soft pt-3">
           {state.lightingError && (
-            <div className="mb-2 flex items-center gap-2 text-[12px] text-danger">
-              <WarningIcon size={13} />
-              <span className="min-w-0 flex-1 truncate" title={state.lightingError}>
-                {state.lightingError}
-              </span>
-            </div>
+            <ErrorBanner className="mb-2" message={state.lightingError} />
           )}
-          <div className="flex flex-col gap-2">
-            <Button
-              variant="primary"
-              disabled={stagedCount === 0 || state.lightingBusy}
-              title={
-                isLayerTarget
-                  ? `Replace the stored scene of ${layerName(state.layerMetadata, target)} (physical layer ${target}) with the canvas`
-                  : "Apply the staged overlay to the device"
-              }
-              onClick={() => (isLayerTarget ? applyLayerDraft() : io.applyOverlay(Object.values(draftMap)))}
-            >
-              {state.lightingBusy && <SpinnerIcon size={13} />}
-              Apply{isLayerTarget ? ` to ${layerName(state.layerMetadata, target)}` : ""}
-              {stagedCount > 0 ? ` · ${stagedCount} staged` : ""}
-            </Button>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                className="flex-1 whitespace-nowrap"
-                title={
-                  isLayerTarget
-                    ? "Throw away staged edits and return to the stored scene"
-                    : "Throw away staged edits and return to what's on the device"
-                }
-                disabled={stagedCount === 0 || state.lightingBusy}
-                onClick={() => dispatch({ type: "draftReset" })}
-              >
-                Discard staged
-              </Button>
-              <Button
-                variant="danger"
-                className="flex-1 whitespace-nowrap"
-                title={
-                  isLayerTarget
-                    ? `Remove Layer ${target}'s runtime overrides and reveal its compiled firmware defaults`
-                    : "Remove the overlay that is currently applied on the device"
-                }
-                disabled={state.lightingBusy || appliedCount === 0}
-                onClick={() => (isLayerTarget ? clearLayer() : io.clearOverlay())}
-              >
-                Clear {isLayerTarget ? "overrides" : "applied"}
-              </Button>
-            </div>
-          </div>
+          <ApplyBar
+            busy={state.lightingBusy}
+            apply={{
+              label: `Apply${isLayerTarget ? ` to ${layerName(state.layerMetadata, target)}` : ""}${
+                stagedCount > 0 ? ` · ${stagedCount} staged` : ""
+              }`,
+              title: isLayerTarget
+                ? `Replace the stored scene of ${layerName(state.layerMetadata, target)} (physical layer ${target}) with the canvas`
+                : "Apply the staged overlay to the device",
+              disabled: stagedCount === 0 || state.lightingBusy,
+              onClick: () =>
+                isLayerTarget ? applyLayerDraft() : io.applyOverlay(Object.values(draftMap)),
+            }}
+            discard={{
+              label: "Discard staged",
+              title: isLayerTarget
+                ? "Throw away staged edits and return to the stored scene"
+                : "Throw away staged edits and return to what's on the device",
+              disabled: stagedCount === 0 || state.lightingBusy,
+              onClick: () => dispatch({ type: "draftReset" }),
+            }}
+            clear={{
+              label: `Clear ${isLayerTarget ? "overrides" : "applied"}`,
+              title: isLayerTarget
+                ? `Remove Layer ${target}'s runtime overrides and reveal its compiled firmware defaults`
+                : "Remove the overlay that is currently applied on the device",
+              disabled: state.lightingBusy || appliedCount === 0,
+              onClick: () => (isLayerTarget ? clearLayer() : io.clearOverlay()),
+            }}
+          />
         </div>
       </InspectorShell>
     </>

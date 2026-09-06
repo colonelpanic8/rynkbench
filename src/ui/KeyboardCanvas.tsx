@@ -9,7 +9,7 @@
 // overlap slightly (Glove80 thumb clusters), so labels must never be painted
 // over by a neighbouring cap drawn later.
 
-import { useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
@@ -20,6 +20,7 @@ import type { Encoder, Key, Rect } from "../vendor/rynk-wasm/rynk_wasm";
 import type { KeyboardModel, KeyView, PointingDeviceView } from "../model/keyboard";
 import type { KeyGlyph } from "./labels";
 import { keyHoverTitle } from "./key-address";
+import { same } from "./deep-equal";
 import { cx } from "./kit";
 
 export interface KeyDecor {
@@ -357,7 +358,48 @@ function fitText(text: string, capWidth: number, max: number): number {
   return Math.min(max, ((capWidth - 0.16) / len) * 1.5);
 }
 
-function KeyShape({
+/** KeyDecor is a flat bag of values; comparing every key of both objects keeps
+ *  this honest as the type grows, instead of a hand-written field list that
+ *  silently stops covering it. */
+function sameDecor(a: KeyDecor, b: KeyDecor): boolean {
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof KeyDecor>) {
+    if (!same(a[key], b[key])) return false;
+  }
+  return true;
+}
+
+/** Every key is rendered three times per paint (cap, ring, label), and a paint
+ *  step rebuilds each decor object. Decor is therefore compared by value and
+ *  everything else — including the canvas's own, deliberately stable handlers —
+ *  by identity. */
+function samePropsWithDecor<P extends { decor: KeyDecor }>(a: P, b: P): boolean {
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof P>) {
+    if (key !== "decor" && !Object.is(a[key], b[key])) return false;
+  }
+  return sameDecor(a.decor, b.decor);
+}
+
+/** A handler with a stable identity that always calls the caller's latest one.
+ *  Callers pass inline closures over live state; without this the memoized key
+ *  components would either re-render every paint or hold a stale closure.
+ *  `undefined` is preserved, since it is how the canvas advertises that a
+ *  gesture is unsupported. */
+function useLatestHandler<A extends unknown[], R>(
+  handler: ((...args: A) => R) | undefined,
+): ((...args: A) => R | undefined) | undefined {
+  const latest = useRef(handler);
+  useEffect(() => {
+    latest.current = handler;
+  });
+  const stable = useCallback((...args: A) => latest.current?.(...args), []);
+  return handler === undefined ? undefined : stable;
+}
+
+const KeyShape = memo(KeyShapeImpl, samePropsWithDecor);
+const KeyRing = memo(KeyRingImpl, samePropsWithDecor);
+const KeyLabel = memo(KeyLabelImpl, samePropsWithDecor);
+
+function KeyShapeImpl({
   view,
   decor,
   interactive,
@@ -489,7 +531,7 @@ function KeyShape({
  * they get their own pass above every cap; drawn per-key they'd be painted
  * over by neighbouring caps (thumb fans abut and even overlap).
  */
-function KeyRing({ view, decor }: { view: KeyView; decor: KeyDecor }) {
+function KeyRingImpl({ view, decor }: { view: KeyView; decor: KeyDecor }) {
   const { shape } = view;
   if (!decor.selected && !decor.highlight && !decor.inSelection) return null;
 
@@ -549,7 +591,7 @@ function KeyRing({ view, decor }: { view: KeyView; decor: KeyDecor }) {
  * or overlap (thumb clusters), and a later cap must never cover an earlier
  * key's legend — "Esc" turning into "sc".
  */
-function KeyLabel({ view, decor }: { view: KeyView; decor: KeyDecor }) {
+function KeyLabelImpl({ view, decor }: { view: KeyView; decor: KeyDecor }) {
   const { shape } = view;
   const glyph = decor.glyph;
   if (!glyph?.text) return null;
@@ -858,7 +900,33 @@ export function KeyboardCanvas({
     onKeyDragChange?.(null, null);
   };
 
-  const decorated = model.keys.map((key) => ({ key, decor: decorFor(key) }));
+  const keyPointerDown = useLatestHandler(onKeyPointerDown);
+  const keyPointerEnter = useLatestHandler(onKeyPointerEnter);
+  const keyKeyboardActivate = useLatestHandler(onKeyKeyboardActivate);
+  const keyFocus = useLatestHandler(onKeyFocus);
+  const draggable = useLatestHandler(keyDraggable);
+  const dragSupported = onKeyDrop !== undefined;
+  const beginKeyDrag = useCallback(
+    (view: KeyView, ev: ReactPointerEvent) => {
+      keyPointerDown?.(view, ev);
+      if (!dragSupported || ev.button !== 0 || draggable?.(view) === false) return;
+      dragRef.current = {
+        pointerId: ev.pointerId,
+        startX: ev.clientX,
+        startY: ev.clientY,
+        source: view,
+        destination: null,
+        started: false,
+      };
+      svgRef.current?.setPointerCapture(ev.pointerId);
+    },
+    [dragSupported, draggable, keyPointerDown],
+  );
+
+  const decorated = useMemo(
+    () => model.keys.map((key) => ({ key, decor: decorFor(key) })),
+    [model.keys, decorFor],
+  );
 
   return (
     <svg
@@ -920,23 +988,10 @@ export function KeyboardCanvas({
           view={key}
           decor={decor}
           interactive={interactive}
-          onPointerDown={(view, ev) => {
-            onKeyPointerDown?.(view, ev);
-            if (!onKeyDrop || ev.button !== 0 || keyDraggable?.(view) === false)
-              return;
-            dragRef.current = {
-              pointerId: ev.pointerId,
-              startX: ev.clientX,
-              startY: ev.clientY,
-              source: view,
-              destination: null,
-              started: false,
-            };
-            svgRef.current?.setPointerCapture(ev.pointerId);
-          }}
-          onPointerEnter={onKeyPointerEnter}
-          onKeyboardActivate={onKeyKeyboardActivate}
-          onFocus={onKeyFocus}
+          onPointerDown={beginKeyDrag}
+          onPointerEnter={keyPointerEnter}
+          onKeyboardActivate={keyKeyboardActivate}
+          onFocus={keyFocus}
         />
       ))}
 

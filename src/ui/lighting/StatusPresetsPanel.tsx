@@ -24,8 +24,7 @@ import {
 } from "./statusPresets";
 import type { BarOrder, BarStyle, Glove80BarLayout } from "./statusPresets";
 import { layersInMask } from "./wakeLayers";
-
-const RUNTIME_EFFECTS_CONDITIONS = 1 << 15;
+import { RUNTIME_EFFECTS_CONDITIONS, hasLightingFeature } from "../../session/lighting-features";
 
 const selectClass =
   "mt-1 w-full rounded-md border border-line bg-raised px-2 py-1.5 text-[12px] text-ink";
@@ -44,7 +43,10 @@ export function StatusPresetsPanel() {
   const [magicLayer] = layersInMask(wakeLayers, numLayers);
   const defaultLayer =
     magicLayer ?? (numLayers > GLOVE80_MAGIC_LAYER ? GLOVE80_MAGIC_LAYER : state.currentLayer);
-  const [layer, setLayer] = useState(defaultLayer);
+  // The default follows the board's designated Magic layer, which can arrive
+  // or move after this panel mounts; only an explicit choice pins it.
+  const [chosenLayer, setChosenLayer] = useState<number | null>(null);
+  const layer = chosenLayer !== null && chosenLayer < numLayers ? chosenLayer : defaultLayer;
   const [node, setNode] = useState(0);
   const [kind, setKind] = useState<"ble" | "usb">("ble");
   const [slot, setSlot] = useState(0);
@@ -83,8 +85,7 @@ export function StatusPresetsPanel() {
   if (status === null) return null;
 
   const nameOf = (n: number) => layerName(state.layerMetadata, n);
-  const predicatesSupported =
-    ((bundle.lightingCaps?.features ?? 0) & RUNTIME_EFFECTS_CONDITIONS) !== 0;
+  const predicatesSupported = hasLightingFeature(bundle.lightingCaps, RUNTIME_EFFECTS_CONDITIONS);
   const exactKeys = glove80ConnectionKeys(layer).map((preset) => ({
     preset,
     key: keyAt(bundle.model.keys, preset.row, preset.col),
@@ -187,7 +188,7 @@ export function StatusPresetsPanel() {
         Status layer
         <select
           value={layer}
-          onChange={(event) => setLayer(Number(event.target.value))}
+          onChange={(event) => setChosenLayer(Number(event.target.value))}
           className={selectClass}
         >
           {Array.from({ length: numLayers }, (_, index) => (

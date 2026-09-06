@@ -2,16 +2,12 @@
 // background layer (mode + HSV + speed). Staged locally, applied via
 // lighting.setState; the device's returned state is the source of truth.
 
-import { useEffect, useRef, useState } from "react";
-import type {
-  LightingBackgroundMode,
-  LightingMutableState,
-} from "../../vendor/rynk-wasm/rynk_wasm";
+import { useMemo } from "react";
+import type { LightingBackgroundMode } from "../../vendor/rynk-wasm/rynk_wasm";
 import { useWorkbench } from "../state";
+import { useDeviceDraft } from "../device-draft";
 import { cssRgb, hsvToRgb } from "../color";
-import { Button, SectionLabel, cx } from "../kit";
-
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+import { ApplyBar, SectionLabel, Segmented, cx } from "../kit";
 
 const MODES: LightingBackgroundMode[] = ["Solid", "Breathe"];
 
@@ -74,30 +70,21 @@ export function BackgroundPanel() {
   const { state, io } = useWorkbench();
   const device = state.lightingState;
 
-  const toMutable = (): LightingMutableState | null =>
-    device
-      ? {
-          output_enabled: device.output_enabled,
-          output_brightness: device.output_brightness,
-          background: { ...device.background },
-        }
-      : null;
-
-  const [draft, setDraft] = useState<LightingMutableState | null>(toMutable);
-
-  // Follow device pushes while the draft is clean.
-  const deviceRef = useRef(toMutable());
-  useEffect(() => {
-    const next = toMutable();
-    if (same(draft, deviceRef.current)) setDraft(next);
-    deviceRef.current = next;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device]);
+  const mutable = useMemo(
+    () =>
+      device === null
+        ? null
+        : {
+            output_enabled: device.output_enabled,
+            output_brightness: device.output_brightness,
+            background: { ...device.background },
+          },
+    [device],
+  );
+  const { draft, setDraft, dirty, reset } = useDeviceDraft(mutable);
 
   if (!device || !draft) return null;
 
-  const clean = toMutable();
-  const dirty = !same(draft, clean);
   const bg = draft.background;
   const setBg = (patch: Partial<typeof bg>) =>
     setDraft({ ...draft, background: { ...bg, ...patch } });
@@ -148,21 +135,12 @@ export function BackgroundPanel() {
 
         {bg.enabled && (
           <>
-            <div className="flex gap-0.5 rounded-lg border border-line-soft bg-well p-0.5">
-              {MODES.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setBg({ mode: m })}
-                  className={cx(
-                    "flex-1 cursor-pointer rounded-md py-1 text-[11.5px] font-medium transition-colors duration-120",
-                    bg.mode === m ? "bg-raised text-ink shadow-sm" : "text-faint hover:text-mute",
-                  )}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
+            <Segmented
+              size="sm"
+              items={MODES.map((mode) => ({ value: mode, label: mode }))}
+              value={bg.mode}
+              onChange={(mode) => setBg({ mode })}
+            />
             <Slider
               label="Hue"
               value={bg.hue}
@@ -188,19 +166,16 @@ export function BackgroundPanel() {
         )}
 
         {dirty && (
-          <div className="flex items-center gap-2 pt-1">
-            <Button
-              variant="primary"
-              className="flex-1 py-1"
-              disabled={state.lightingBusy}
-              onClick={() => io.setLightingState(JSON.parse(JSON.stringify(draft)))}
-            >
-              Apply
-            </Button>
-            <Button variant="ghost" className="py-1" onClick={() => setDraft(clean)}>
-              Revert
-            </Button>
-          </div>
+          <ApplyBar
+            className="pt-1"
+            compact
+            apply={{
+              label: "Apply",
+              disabled: state.lightingBusy,
+              onClick: () => io.setLightingState(JSON.parse(JSON.stringify(draft))),
+            }}
+            discard={{ label: "Revert", onClick: reset }}
+          />
         )}
       </div>
     </div>

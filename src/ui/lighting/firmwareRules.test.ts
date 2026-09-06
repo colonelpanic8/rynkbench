@@ -4,10 +4,12 @@ import type {
   LightingConditionalSceneCell,
   LightingConnectionCondition,
   LightingExtendedConditionalSceneCell,
+  LightingSceneCell,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import {
   conditionalRuleMatches,
   firmwarePreviewCells,
+  firmwareRuleGroups,
   runtimeConditionalRuleMatches,
 } from "./firmwareRules";
 
@@ -175,5 +177,46 @@ describe("runtime rule predicates", () => {
     };
     const cells = firmwarePreviewCells([], [compiled], [base], preview);
     expect(cells.get(7)?.effect).toEqual(green);
+  });
+});
+
+describe("firmware rule groups", () => {
+  const layerScenes: LightingSceneCell[] = [
+    { layer: 1, led_id: 1, effect: green },
+    { layer: 1, led_id: 2, effect: green },
+    { layer: 1, led_id: 3, effect: red },
+  ];
+  const conditional: LightingConditionalSceneCell[] = [
+    {
+      conditions: { layer: { layer: 1, active: true }, battery: undefined, output_mode: undefined },
+      led_id: 4,
+      effect: green,
+    },
+  ];
+
+  it("gathers the LEDs that share a rule and marks what the preview lights", () => {
+    const groups = firmwareRuleGroups(
+      layerScenes,
+      conditional,
+      { activeLayers: new Set([0]), batteries: new Map(), outputMode: undefined },
+      (layer) => `Magic ${layer}`,
+    );
+
+    expect(groups.map((group) => [group.description, group.leds, group.active])).toEqual([
+      // Same layer and same effect: one group carrying both LEDs.
+      ["Magic 1 active", [1, 2], false],
+      ["Magic 1 active", [3], false],
+      ["Magic 1 active", [4], false],
+    ]);
+  });
+
+  it("marks a group active when its condition holds", () => {
+    const groups = firmwareRuleGroups(
+      layerScenes,
+      conditional,
+      { activeLayers: new Set([1]), batteries: new Map(), outputMode: undefined },
+      (layer) => `L${layer}`,
+    );
+    expect(groups.every((group) => group.active)).toBe(true);
   });
 });

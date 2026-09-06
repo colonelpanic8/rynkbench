@@ -19,7 +19,7 @@ import type {
   LightingOutputMode,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import { conditionalTablesEqual, useWorkbench } from "../state";
-import { Button, SectionLabel, TextInput, cx } from "../kit";
+import { ApplyBar, Button, SectionLabel, Segmented, TextInput, cx } from "../kit";
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, TrashIcon } from "../icons";
 import { cssEmissiveRgb } from "../color";
 import { describeRuleConditions, runtimeConditionalSupported } from "./firmwareRules";
@@ -37,10 +37,9 @@ import {
   rulesOnLayer,
 } from "./rules";
 import type { Rule, Rules } from "./rules";
+import { RUNTIME_EFFECTS_CONDITIONS, hasLightingFeature } from "../../session/lighting-features";
 
 const CHARGE_STATES: LightingChargeCondition[] = ["Any", "Charging", "Discharging", "Unknown"];
-// LightingFeatureFlags::RUNTIME_EFFECTS_CONDITIONS.
-const RUNTIME_EFFECTS_CONDITIONS = 1 << 15;
 const OUTPUT_MODES: LightingOutputMode[] = ["AlwaysOn", "AlwaysOff", "PoweredOnly"];
 const TRANSPORTS: LightingActiveTransport[] = ["Usb", "Ble", "NoneActive"];
 const BLE_STATES: BleState[] = ["Advertising", "Connected", "Inactive"];
@@ -53,6 +52,20 @@ const EMPTY_CONNECTION: LightingConnectionCondition = {
 };
 
 const DEFAULT_EFFECT = { Solid: { color: { r: 40, g: 160, b: 255 } } } as const;
+
+// The open rule is tracked by identity, not by position, so list edits and
+// whole-table rewrites cannot leave the editor pointed at someone else's rule.
+// React keys follow the same identity.
+const ruleKeys = new WeakMap<Rule, number>();
+let nextRuleKey = 0;
+function ruleKey(rule: Rule): number {
+  let key = ruleKeys.get(rule);
+  if (key === undefined) {
+    key = nextRuleKey++;
+    ruleKeys.set(rule, key);
+  }
+  return key;
+}
 
 /** A percentage bound that may be absent. Empty means "no bound", which is a
  *  distinct condition from 0 — the firmware treats them differently. */
@@ -89,7 +102,7 @@ function LevelField({
 export function ConditionalRulesPanel() {
   const { bundle, state, dispatch, io } = useWorkbench();
   const status = bundle.runtimeConditionalStatus;
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selectedRule, setSelectedRule] = useState<Rule | null>(null);
   const [moveFrom, setMoveFrom] = useState<number | null>(null);
   const [moveTo, setMoveTo] = useState(0);
 
@@ -120,13 +133,18 @@ export function ConditionalRulesPanel() {
   if (!runtimeConditionalSupported(status) || status === null) return null;
 
   const rules = state.runtimeConditionalDraft;
+  const selectedIndex = selectedRule === null ? -1 : rules.indexOf(selectedRule);
+  const selected = selectedIndex === -1 ? null : selectedIndex;
   const dirty = !conditionalTablesEqual(rules, state.runtimeConditionalScenes);
   const full = rules.length >= status.capacity;
   const ledName = (id: number) => ledLabels.get(id) ?? `LED ${id}`;
 
   const setRules = (cells: Rules) => dispatch({ type: "conditionalDraft", cells });
 
-  const edit = (index: number, cell: Rule) => setRules(replaceRule(rules, index, cell));
+  const edit = (index: number, cell: Rule) => {
+    setRules(replaceRule(rules, index, cell));
+    if (index === selected) setSelectedRule(cell);
+  };
 
   /** Edit the base cell of a rule, leaving its extended predicates alone. */
   const editCell = (index: number, rule: Rule, cell: LightingConditionalSceneCell) =>
@@ -134,15 +152,14 @@ export function ConditionalRulesPanel() {
 
   const move = (index: number, to: number) => {
     const next = moveRule(rules, index, to);
-    if (next === rules) return;
-    setRules(next);
-    setSelected(to);
+    if (next !== rules) setRules(next);
   };
 
   const add = () => {
     if (full) return;
-    setRules(appendRule(rules, newRule(ledOptions[0] ?? 0, DEFAULT_EFFECT)));
-    setSelected(rules.length);
+    const rule = newRule(ledOptions[0] ?? 0, DEFAULT_EFFECT);
+    setRules(appendRule(rules, rule));
+    setSelectedRule(rule);
   };
 
   const layerCounts = new Map<number, number>();
@@ -159,12 +176,7 @@ export function ConditionalRulesPanel() {
     setRules(retargetLayer(rules, moveSource, moveTo));
   };
 
-  const drop = (index: number) => {
-    setRules(removeRule(rules, index));
-    setSelected((current) =>
-      current === null || current === index ? null : current > index ? current - 1 : current,
-    );
-  };
+  const drop = (index: number) => setRules(removeRule(rules, index));
 
   const rule = selected === null ? undefined : rules[selected];
   const conditions = rule?.cell.conditions;
@@ -172,8 +184,7 @@ export function ConditionalRulesPanel() {
   // Gate on the encoding bit, not on the connection bit: firmware advertising
   // only RUNTIME_CONNECTION_CONDITIONS speaks an earlier extended cell that
   // this build does not write.
-  const predicatesSupported =
-    ((bundle.lightingCaps?.features ?? 0) & RUNTIME_EFFECTS_CONDITIONS) !== 0;
+  const predicatesSupported = hasLightingFeature(bundle.lightingCaps, RUNTIME_EFFECTS_CONDITIONS);
 
   const setConnection = (target: Rule, next: LightingConnectionCondition) => {
     if (selected === null) return;
@@ -206,7 +217,7 @@ export function ConditionalRulesPanel() {
             const open = index === selected;
             return (
               <div
-                key={index}
+                key={ruleKey(entry)}
                 className={cx(
                   "rounded-lg border transition-colors duration-120",
                   open ? "border-accent-deep bg-accent-dim/20" : "border-line-soft bg-well",
@@ -220,7 +231,7 @@ export function ConditionalRulesPanel() {
                   </span>
                   <button
                     type="button"
-                    onClick={() => setSelected(open ? null : index)}
+                    onClick={() => setSelectedRule(open ? null : entry)}
                     title={`${ledName(cell.led_id)} · ${describeRuleConditions(entry, nameOf)}`}
                     className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
                   >
@@ -339,7 +350,7 @@ export function ConditionalRulesPanel() {
             <SectionLabel>Rule {selected + 1}</SectionLabel>
             <button
               type="button"
-              onClick={() => setSelected(null)}
+              onClick={() => setSelectedRule(null)}
               className="cursor-pointer text-[10.5px] text-faint hover:text-mute"
             >
               close
@@ -401,31 +412,24 @@ export function ConditionalRulesPanel() {
                     </option>
                   ))}
                 </select>
-                <div className="flex flex-1 gap-0.5 rounded-lg border border-line-soft bg-well p-0.5">
-                  {[true, false].map((active) => (
-                    <button
-                      key={String(active)}
-                      type="button"
-                      onClick={() =>
-                        editCell(selected, rule, {
-                          ...rule.cell,
-                          conditions: {
-                            ...conditions,
-                            layer: { ...conditions.layer!, active },
-                          },
-                        })
-                      }
-                      className={cx(
-                        "flex-1 cursor-pointer rounded-md py-1 text-[11.5px] font-medium transition-colors duration-120",
-                        conditions.layer!.active === active
-                          ? "bg-raised text-ink shadow-sm"
-                          : "text-faint hover:text-mute",
-                      )}
-                    >
-                      {active ? "active" : "inactive"}
-                    </button>
-                  ))}
-                </div>
+                <Segmented
+                  className="flex-1"
+                  size="sm"
+                  items={[
+                    { value: "active", label: "active" },
+                    { value: "inactive", label: "inactive" },
+                  ]}
+                  value={conditions.layer!.active ? "active" : "inactive"}
+                  onChange={(choice) =>
+                    editCell(selected, rule, {
+                      ...rule.cell,
+                      conditions: {
+                        ...conditions,
+                        layer: { ...conditions.layer!, active: choice === "active" },
+                      },
+                    })
+                  }
+                />
               </div>
             )}
           </div>
@@ -747,28 +751,22 @@ export function ConditionalRulesPanel() {
       )}
 
       {dirty && (
-        <div className="mt-2 flex items-center gap-2">
-          <Button
-            variant="primary"
-            className="flex-1 py-1"
-            disabled={state.lightingBusy}
-            title="Replace the whole rule table on the keyboard with this order"
-            onClick={() => io.applyConditionalScenes(rules)}
-          >
-            Apply rules
-          </Button>
-          <Button
-            variant="ghost"
-            className="py-1"
-            disabled={state.lightingBusy}
-            onClick={() => {
-              dispatch({ type: "conditionalDraftReset" });
-              setSelected(null);
-            }}
-          >
-            Revert
-          </Button>
-        </div>
+        <ApplyBar
+          className="mt-2"
+          compact
+          busy={state.lightingBusy}
+          apply={{
+            label: "Apply rules",
+            title: "Replace the whole rule table on the keyboard with this order",
+            disabled: state.lightingBusy,
+            onClick: () => io.applyConditionalScenes(rules),
+          }}
+          discard={{
+            label: "Revert",
+            disabled: state.lightingBusy,
+            onClick: () => dispatch({ type: "conditionalDraftReset" }),
+          }}
+        />
       )}
     </div>
   );

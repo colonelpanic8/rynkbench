@@ -4,23 +4,19 @@
 // the bindings you are already editing.
 
 import { useEffect, useMemo, useState } from "react";
-import type {
-  LightingEffect,
-  LightingOverlayCell,
-  LightingSceneCell,
-} from "../../vendor/rynk-wasm/rynk_wasm";
+import type { LightingEffect, LightingOverlayCell } from "../../vendor/rynk-wasm/rynk_wasm";
 import { lightingBaseFor, lightingDraftFor, stagedBetween, useWorkbench } from "../state";
 import { ColorPicker } from "../lighting/ColorPicker";
-import { NumberField } from "../lighting/EffectEditor";
+import { EffectShapeEditor } from "../lighting/EffectEditor";
 import { buildEffect, effectKind, effectRgb, effectTiming, DEFAULT_TIMING } from "../lighting/effect";
 import type { EffectKind, EffectTiming } from "../lighting/effect";
 import { effectColor } from "../lighting/decor";
+import { BLACK_EFFECT, sceneTableWithLayer, targetPreviewEffects } from "../lighting/preview";
+import { layerName } from "../layer-names";
 import type { Hsv } from "../color";
 import { hsvToRgb, rgbToHsv } from "../color";
-import { Button, SectionLabel, cx } from "../kit";
-import { ChevronRightIcon, SpinnerIcon, WarningIcon } from "../icons";
-
-const BLACK_EFFECT: LightingEffect = { Solid: { color: { r: 0, g: 0, b: 0 } } };
+import { ApplyBar, Button, ErrorBanner, SectionLabel, cx } from "../kit";
+import { ChevronRightIcon } from "../icons";
 
 const DEFAULT_HSV: Hsv = { h: 195, s: 0.85, v: 1 };
 
@@ -54,7 +50,14 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
   const draft = lightingDraftFor(state, layer);
   const base = lightingBaseFor(state, layer);
   const staged = useMemo(() => stagedBetween(draft, base), [draft, base]);
-  const current = ledId === undefined ? undefined : draft[ledId];
+
+  // What the key actually shows on this layer: its runtime cell, or the
+  // firmware default underneath when only a compiled cell claims it.
+  const preview = useMemo(
+    () => targetPreviewEffects(layer, draft, state.compiledScenes),
+    [layer, draft, state.compiledScenes],
+  );
+  const current = ledId === undefined ? undefined : preview.get(ledId);
 
   // A compiled cell cannot be deleted, only masked: dropping the runtime cell
   // would reveal the firmware default instead of turning the key off.
@@ -69,7 +72,7 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
   // Seed the brush from whatever the key already shows, so opening a lit key
   // and pressing Set is a no-op rather than a surprise recolor.
   useEffect(() => {
-    setBrush(current ? brushFrom(current.effect) : DEFAULT_BRUSH);
+    setBrush(current ? brushFrom(current) : DEFAULT_BRUSH);
     // Re-seed only when the target key changes, not on every draft edit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ledId, layer]);
@@ -97,15 +100,7 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
     }
   };
 
-  const applyLayer = () => {
-    const passThrough = state.scenes.filter((cell) => cell.layer !== layer);
-    const replaced = Object.values(draft).map(
-      (cell): LightingSceneCell => ({ layer, led_id: cell.led_id, effect: cell.effect }),
-    );
-    io.applyScenes([...passThrough, ...replaced]);
-  };
-
-  const layerName = state.layerMetadata?.[layer]?.name ?? `Layer ${layer}`;
+  const name = layerName(state.layerMetadata, layer);
 
   return (
     <div className="border-t border-line-soft pt-4">
@@ -126,7 +121,7 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
           {current && (
             <span
               className="size-3 rounded-sm border border-cap-edge"
-              style={{ background: effectColor(current.effect) }}
+              style={{ background: effectColor(current) }}
             />
           )}
           {ledId !== undefined && staged.has(ledId) && (
@@ -145,89 +140,33 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
       ) : (
         <>
           <p className="mt-1 text-[11.5px] leading-relaxed text-faint">
-            Stored on the keyboard for {layerName} and composited natively as the layer activates.
+            Stored on the keyboard for {name} and composited natively as the layer activates.
           </p>
 
           <div className="mt-2 flex items-center gap-2.5 rounded-lg border border-line bg-raised px-3 py-2">
             <span
               className="size-5 shrink-0 rounded-md border border-cap-edge"
-              style={{ background: current ? effectColor(current.effect) : "var(--color-cap)" }}
+              style={{ background: current ? effectColor(current) : "var(--color-cap)" }}
             />
             <span className="min-w-0 flex-1 text-[12px] text-mute">
-              {current ? `${effectKind(current.effect)} on this key` : "Unlit on this layer"}
+              {current ? `${effectKind(current)} on this key` : "Unlit on this layer"}
               {compiled && " · firmware default"}
             </span>
-            {ledId !== undefined && staged.has(ledId) && (
-              <span className="text-[11px] text-accent">staged</span>
-            )}
+            {staged.has(ledId) && <span className="text-[11px] text-accent">staged</span>}
           </div>
 
           <div className="mt-3">
             <ColorPicker value={brush.hsv} onChange={(hsv) => setBrush({ ...brush, hsv })} />
           </div>
 
-          <div className="mt-3">
+          <div className="mt-3 flex flex-col gap-2">
             <SectionLabel>Effect</SectionLabel>
-            <div className="mt-2 flex gap-0.5 rounded-lg border border-line-soft bg-well p-0.5">
-              {(["Solid", "Blink", "Breathe"] as const).map((kind) => (
-                <button
-                  key={kind}
-                  type="button"
-                  onClick={() => setBrush({ ...brush, kind })}
-                  className={cx(
-                    "flex-1 cursor-pointer rounded-md py-1.5 text-[12px] font-medium transition-colors duration-120",
-                    brush.kind === kind
-                      ? "bg-raised text-ink shadow-sm"
-                      : "text-faint hover:text-mute",
-                  )}
-                >
-                  {kind}
-                </button>
-              ))}
-            </div>
-            {brush.kind !== "Solid" && (
-              <div className="mt-2.5 flex flex-col gap-1.5">
-                <NumberField
-                  label="Period"
-                  unit="ms"
-                  min={100}
-                  value={brush.timing.periodMs}
-                  onChange={(periodMs) =>
-                    setBrush({ ...brush, timing: { ...brush.timing, periodMs } })
-                  }
-                />
-                {brush.kind === "Blink" && (
-                  <NumberField
-                    label="Duty"
-                    unit="/255"
-                    min={0}
-                    max={255}
-                    value={brush.timing.duty}
-                    onChange={(duty) => setBrush({ ...brush, timing: { ...brush.timing, duty } })}
-                  />
-                )}
-                {brush.kind === "Breathe" && (
-                  <NumberField
-                    label="Step"
-                    unit="ms"
-                    min={1}
-                    value={brush.timing.stepMs}
-                    onChange={(stepMs) =>
-                      setBrush({ ...brush, timing: { ...brush.timing, stepMs } })
-                    }
-                  />
-                )}
-                <NumberField
-                  label="Phase"
-                  unit="ms"
-                  min={0}
-                  value={brush.timing.phaseMs}
-                  onChange={(phaseMs) =>
-                    setBrush({ ...brush, timing: { ...brush.timing, phaseMs } })
-                  }
-                />
-              </div>
-            )}
+            <EffectShapeEditor
+              kind={brush.kind}
+              timing={brush.timing}
+              onKind={(kind) => setBrush({ ...brush, kind })}
+              onTiming={(timing) => setBrush({ ...brush, timing })}
+            />
           </div>
 
           <div className="mt-3 flex items-center gap-2">
@@ -254,34 +193,25 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
       {open && (
         <>
           {state.lightingError && (
-            <div className="mt-2 flex items-center gap-2 text-[12px] text-danger">
-              <WarningIcon size={13} />
-              <span className="min-w-0 flex-1 truncate" title={state.lightingError}>
-                {state.lightingError}
-              </span>
-            </div>
+            <ErrorBanner className="mt-2" message={state.lightingError} />
           )}
 
-          <div className="mt-3 flex items-center gap-2">
-            <Button
-              variant="primary"
-              className="flex-1"
-              disabled={staged.size === 0 || state.lightingBusy}
-              title={`Replace ${layerName}'s stored scene with the staged canvas`}
-              onClick={applyLayer}
-            >
-              {state.lightingBusy && <SpinnerIcon size={13} />}
-              Apply{staged.size > 0 ? ` · ${staged.size} staged` : ""}
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={staged.size === 0 || state.lightingBusy}
-              title="Throw away staged edits and return to the stored scene"
-              onClick={() => dispatch({ type: "draftReset", target: layer })}
-            >
-              Discard
-            </Button>
-          </div>
+          <ApplyBar
+            className="mt-3"
+            busy={state.lightingBusy}
+            apply={{
+              label: `Apply${staged.size > 0 ? ` · ${staged.size} staged` : ""}`,
+              title: `Replace ${name}'s stored scene with the staged canvas`,
+              disabled: staged.size === 0 || state.lightingBusy,
+              onClick: () => io.applyScenes(sceneTableWithLayer(state.scenes, layer, draft)),
+            }}
+            discard={{
+              label: "Discard",
+              title: "Throw away staged edits and return to the stored scene",
+              disabled: staged.size === 0 || state.lightingBusy,
+              onClick: () => dispatch({ type: "draftReset", target: layer }),
+            }}
+          />
 
           <button
             type="button"
@@ -291,7 +221,7 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
               dispatch({ type: "mode", mode: "lighting" });
             }}
           >
-            Open {layerName} in Lighting for brushes, zones and rules
+            Open {name} in Lighting for brushes, zones and rules
           </button>
         </>
       )}

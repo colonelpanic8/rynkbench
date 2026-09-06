@@ -15,11 +15,20 @@ import type {
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import type { ExtensionParamWrite } from "../state";
 import { paramEffects, useWorkbench } from "../state";
-import { Button, Chip, InspectorShell, SectionLabel, TextInput, cx } from "../kit";
-import { SpinnerIcon, WarningIcon } from "../icons";
+import { useDeviceDraft } from "../device-draft";
+import { same } from "../deep-equal";
+import {
+  ApplyBar,
+  Button,
+  Chip,
+  ErrorBanner,
+  InspectorShell,
+  SectionLabel,
+  Segmented,
+  TextInput,
+  cx,
+} from "../kit";
 import { Slider } from "../lighting/BackgroundPanel";
-
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /** Which slot the gallery is assigning to. */
 type Slot = "base" | "overlay";
@@ -107,31 +116,19 @@ export function EffectsMode() {
   const extension = state.lightingExtension;
   const extensionLayers = state.lightingExtensionLayers;
 
-  const toDraft = (): LightingExtensionState | null =>
-    extension ? { ...extension.state } : null;
-
-  const [draft, setDraft] = useState<LightingExtensionState | null>(toDraft);
-  const [overlayDraft, setOverlayDraft] = useState<number | undefined>(
-    extensionLayers?.overlay,
+  const device = useMemo<LightingExtensionState | null>(
+    () => (extension ? { ...extension.state } : null),
+    [extension],
   );
+  const { draft, setDraft, dirty: selectionDirty, reset: resetDraft } = useDeviceDraft(device);
+  const {
+    draft: overlayDraft,
+    setDraft: setOverlayDraft,
+    dirty: overlayDirty,
+    reset: resetOverlay,
+  } = useDeviceDraft(extensionLayers?.overlay);
   const [slot, setSlot] = useState<Slot>("base");
   const [filter, setFilter] = useState("");
-
-  // Follow device pushes while the draft is clean.
-  const deviceRef = useRef(toDraft());
-  useEffect(() => {
-    const next = toDraft();
-    if (same(draft, deviceRef.current)) setDraft(next);
-    deviceRef.current = next;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [extension]);
-
-  const overlayDeviceRef = useRef(extensionLayers?.overlay);
-  useEffect(() => {
-    const next = extensionLayers?.overlay;
-    if (overlayDraft === overlayDeviceRef.current) setOverlayDraft(next);
-    overlayDeviceRef.current = next;
-  }, [extensionLayers, overlayDraft]);
 
   // Parameters belong to the *staged* effects: the protocol serves any effect's
   // list, so picking one in the gallery previews its parameters before Apply.
@@ -196,7 +193,6 @@ export function EffectsMode() {
   }
 
   const palettes = bundle.extensionPaletteNames;
-  const clean = toDraft();
 
   const hasOverlaySlot = extensionLayers !== null;
   const activeSlot = hasOverlaySlot ? slot : "base";
@@ -250,10 +246,7 @@ export function EffectsMode() {
       return next;
     });
 
-  const dirty =
-    !same(draft, clean) ||
-    overlayDraft !== extensionLayers?.overlay ||
-    paramWrites.length > 0;
+  const dirty = selectionDirty || overlayDirty || paramWrites.length > 0;
 
   const effectName = (index: number | undefined) =>
     index === undefined ? "None" : (effects[index] ?? `Effect ${index}`);
@@ -276,37 +269,24 @@ export function EffectsMode() {
 
         <div className="flex items-center gap-3 px-1">
           {hasOverlaySlot && (
-            <div className="flex gap-0.5 rounded-lg border border-line-soft bg-well p-0.5">
-              {(
-                [
-                  {
-                    id: "base",
-                    label: `Base · ${effectName(draft.effect)}`,
-                    title: "The effect the pack renders across the board",
-                  },
-                  {
-                    id: "overlay",
-                    label: `Overlay · ${effectName(overlayDraft)}`,
-                    title: "A second effect composited over the base — optional",
-                  },
-                ] as const
-              ).map(({ id, label, title }) => (
-                <button
-                  key={id}
-                  type="button"
-                  title={title}
-                  onClick={() => setSlot(id)}
-                  className={cx(
-                    "cursor-pointer rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors duration-120",
-                    activeSlot === id
-                      ? "bg-raised text-ink shadow-sm"
-                      : "text-faint hover:text-mute",
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <Segmented
+              layout="fit"
+              className="px-1"
+              items={[
+                {
+                  value: "base",
+                  label: `Base · ${effectName(draft.effect)}`,
+                  title: "The effect the pack renders across the board",
+                },
+                {
+                  value: "overlay",
+                  label: `Overlay · ${effectName(overlayDraft)}`,
+                  title: "A second effect composited over the base — optional",
+                },
+              ]}
+              value={activeSlot}
+              onChange={setSlot}
+            />
           )}
           <div className="flex-1" />
           <div className="w-44 shrink-0">
@@ -430,35 +410,25 @@ export function EffectsMode() {
 
         <div className="mt-4 border-t border-line-soft pt-3">
           {state.lightingError && (
-            <div className="mb-2 flex items-center gap-2 text-[12px] text-danger">
-              <WarningIcon size={13} />
-              <span className="min-w-0 flex-1 truncate" title={state.lightingError}>
-                {state.lightingError}
-              </span>
-            </div>
+            <ErrorBanner className="mb-2" message={state.lightingError} />
           )}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="primary"
-              className="flex-1"
-              disabled={!dirty || state.lightingBusy}
-              onClick={() => io.setExtensionState({ ...draft }, paramWrites, overlayDraft)}
-            >
-              {state.lightingBusy && <SpinnerIcon size={13} />}
-              Apply
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={!dirty}
-              onClick={() => {
-                setDraft(clean);
-                setOverlayDraft(extensionLayers?.overlay);
+          <ApplyBar
+            busy={state.lightingBusy}
+            apply={{
+              label: "Apply",
+              disabled: !dirty || state.lightingBusy,
+              onClick: () => io.setExtensionState({ ...draft }, paramWrites, overlayDraft),
+            }}
+            discard={{
+              label: "Revert",
+              disabled: !dirty,
+              onClick: () => {
+                resetDraft();
+                resetOverlay();
                 revertParams();
-              }}
-            >
-              Revert
-            </Button>
-          </div>
+              },
+            }}
+          />
         </div>
       </InspectorShell>
     </>
