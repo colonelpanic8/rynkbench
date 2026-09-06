@@ -3,6 +3,7 @@ import type { KeyView } from "../../model/keyboard";
 import { Button, SectionLabel } from "../kit";
 import { keyAddressLabel, keyHoverTitle } from "../key-address";
 import { useWorkbench } from "../state";
+import { LightingKeyPresetPanel } from "./LightingKeyPresetPanel";
 import {
   GLOVE80_CONNECTION_KEYS,
   connectionKeyAction,
@@ -41,7 +42,7 @@ export function StatusPresetsPanel() {
     });
   }, [bundle.model.keys, state.lightingSelection]);
 
-  const selectedKey = selectedKeys.length === 1 ? selectedKeys[0] : null;
+  const selectedKey = selectedKeys.length === 1 && state.lightingSelection.length === 1 ? selectedKeys[0] : null;
   const selectedBar = selectedKeys.length === 5
     ? [...selectedKeys]
         .sort((a, b) => b.shape.rect.y - a.shape.rect.y || a.shape.rect.x - b.shape.rect.x)
@@ -138,7 +139,7 @@ export function StatusPresetsPanel() {
     <div>
       <SectionLabel>Status setup</SectionLabel>
       <p className="mt-1 text-[11.5px] leading-relaxed text-faint">
-        Bind connection actions and install their ordered status-light rules together. Presets
+        Bind key actions and install their ordered status-light rules together. Presets
         replace matching rules on the chosen keys, so running them again is safe.
       </p>
 
@@ -160,6 +161,8 @@ export function StatusPresetsPanel() {
           </Button>
         </div>
       )}
+
+      <LightingKeyPresetPanel selectedKey={selectedKey} layer={layer} onLayerChange={setLayer} />
 
       <div className="mt-3 rounded-lg border border-line-soft bg-well p-3">
         <div className="text-[12.5px] font-medium text-ink">Connection key</div>

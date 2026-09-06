@@ -96,6 +96,17 @@ key inspector retain the raw matrix row and column for diagnostics.
   to bind the action and install the ordered indicator rules. On a Glove80, the
   complete Magic-layer layout from `moergo-config`—two battery bars, three BLE
   profile keys, and the USB key—is available as a single preset.
+- **Lighting control key presets pair behavior and colors.** In Lighting →
+  Status setup, select one key and choose its layer under **Lighting control
+  key**. **Cycle lighting policy** installs the output-mode action and
+  green/red/blue indicators for always on/off/USB-powered only. **Toggle RGB
+  effects** installs the effects toggle and green/dim-red enabled/disabled
+  indicators. Configure writes both the action and its conditional lighting;
+  repeating a preset replaces the existing lighting-control rules on that key
+  and layer. Rule capacity is checked before the action is written. Finish
+  batch editing first, since these presets apply both parts immediately.
+  The indicator is layer-scoped and follows the output policy; designate its
+  layer as a **MoErgo Magic Layer** to see it while normal lighting is off.
 
 Web Serial and WebHID need a Chromium-based browser (Chrome or Edge); Firefox
 and Safari don't implement them. Use **Web Serial** for upstream RMK's USB CDC
