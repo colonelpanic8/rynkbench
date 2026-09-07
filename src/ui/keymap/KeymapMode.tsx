@@ -725,6 +725,7 @@ function KeyInspector({ row, col }: { row: number; col: number }) {
           current={action}
           numLayers={bundle.caps.num_layers}
           onCommit={(next) => io.setKey(state.uiLayer, row, col, next)}
+          lightingKey={key && { layer: state.uiLayer, key }}
         />
       </div>
       <LayerLighting ledId={key?.ledId} />

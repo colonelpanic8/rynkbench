@@ -65,7 +65,6 @@ describe("status preset key choice", () => {
     expect(render([4])).toContain("Configure LH1");
     const html = render([4, 5]);
     expect(html).toContain("2 keys are chosen; a connection key needs exactly one.");
-    expect(html).toContain("2 keys are chosen; a lighting control key needs exactly one.");
     expect(html).toContain("2 chosen; a bar needs 3–8 keys.");
   });
 });

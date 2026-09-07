@@ -12,4 +12,3 @@ export interface KeyPick {
 
 export const CONNECTION_KEY_PICK: KeyPick = { label: "connection key", single: true };
 export const BATTERY_BAR_PICK: KeyPick = { label: "battery bar", single: false };
-export const LIGHTING_KEY_PICK: KeyPick = { label: "lighting control key", single: true };

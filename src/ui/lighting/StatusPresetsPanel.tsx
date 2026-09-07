@@ -7,7 +7,6 @@ import { BATTERY_BAR_PICK, CONNECTION_KEY_PICK } from "./keyPick";
 import type { KeyPick } from "./keyPick";
 import { layerName } from "../layer-names";
 import { useWorkbench } from "../state";
-import { LightingKeyPresetPanel } from "./LightingKeyPresetPanel";
 import { StockMagicLayerPanel } from "./StockMagicLayerPanel";
 import { stockMagicIndicatorKeys } from "./stockMagicLayer";
 import {
@@ -259,15 +258,6 @@ export function StatusPresetsPanel({
       )}
 
       {stockMagicAvailable && predicatesSupported && <StockMagicLayerPanel layer={layer} />}
-
-      <LightingKeyPresetPanel
-        selectedKey={selectedKey}
-        selectedKeys={selectedKeys}
-        pick={pick}
-        onPick={onPick}
-        layer={layer}
-        onLayerChange={setChosenLayer}
-      />
 
       <div className="mt-3 rounded-lg border border-line-soft bg-well p-3">
         <div className="text-[12.5px] font-medium text-ink">Connection key</div>

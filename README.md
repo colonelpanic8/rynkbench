@@ -144,17 +144,23 @@ transparent fallthrough to the default layer); Overlay follows the live layers.
   layer indicators light whenever their layer is active rather than only
   while Magic is held; the default layer's indicator is omitted for that
   reason.
-- **Lighting control key presets pair behavior and colors.** In Lighting →
-  Status setup, select one key and choose its layer under **Lighting control
-  key**. **Cycle lighting policy** installs the output-mode action and
-  green/red/blue indicators for always on/off/USB-powered only. **Toggle RGB
-  effects** installs the effects toggle and green/dim-red enabled/disabled
-  indicators. Configure writes both the action and its conditional lighting;
-  repeating a preset replaces the existing lighting-control rules on that key
-  and layer. Rule capacity is checked before the action is written. Finish
-  batch editing first, since these presets apply both parts immediately.
-  The indicator is layer-scoped and follows the output policy; designate its
-  layer as a **MoErgo Magic Layer** to see it while normal lighting is off.
+- **Lighting control key presets pair behavior and colors.** In Keymap, select
+  a key and open the Lighting tab of its action editor. Under **Key presets**,
+  **Toggle RGB effects** installs the effects toggle and green/dim-red
+  enabled/disabled indicators; **Cycle lighting policy** installs the
+  output-mode action and green/red/blue indicators for always on/off/USB-powered
+  only. Each preset writes both the action and its conditional lighting to the
+  layer being edited; repeating one replaces the existing lighting-control
+  rules on that key and layer. Rule capacity is checked before the action is
+  written. Finish batch editing first, since these presets apply both parts
+  immediately. The indicator is layer-scoped and follows the output policy;
+  designate its layer as a **MoErgo Magic Layer** in Lighting to see it while
+  normal lighting is off.
+- **Status setup chooses its keys from the board.** The connection key and
+  battery bar presets under Lighting → Status setup have a **Choose on board**
+  button: the canvas selects instead of painting until you press Done, a
+  single-key pick replaces on every click, and the chosen keys are listed as
+  chips that highlight their key when hovered.
 
 Web Serial, WebHID, and Web Bluetooth need a Chromium-based browser (Chrome or
 Edge); Firefox and Safari don't implement them. Use **Web Serial** for upstream
