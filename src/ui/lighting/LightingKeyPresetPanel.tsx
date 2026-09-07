@@ -117,7 +117,7 @@ export function LightingKeyPresetPanel({ layer, target }: { layer: number; targe
       {!wakes && (
         <p className="mt-2 text-[11px] leading-relaxed text-faint">
           The indicator lights while {layerName(state.layerMetadata, layer)} is active. To see it
-          while lighting is off, make that layer a MoErgo Magic Layer in Lighting mode.
+          while lighting is off, enable that layer’s wake setting in Lighting mode.
         </p>
       )}
       {message && (

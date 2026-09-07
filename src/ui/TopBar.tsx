@@ -1,8 +1,9 @@
 // Workbench top bar: identity, live status, disconnect.
 
-import { useRef, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import type { BatteryStatus } from "../vendor/rynk-wasm/rynk_wasm";
 import { stagedEditCount, useWorkbench } from "./state";
+import { DocumentControls } from "./DocumentControls";
 import { useDocumentTransfer } from "./transfer-actions";
 import { Chip, Button } from "./kit";
 import { TransferReportPanel } from "./TransferReport";
@@ -55,9 +56,8 @@ function BatteryReadout({ battery, split }: { battery: BatteryStatus; split: boo
 export function TopBar() {
   const { bundle, state, dispatch, io, history } = useWorkbench();
   const offline = bundle.session.kind === "offline";
-  const fileInput = useRef<HTMLInputElement>(null);
-  const { phase: transfer, report, dismissReport, workspaceName, importFile, exportFile } =
-    useDocumentTransfer();
+  const transfer = useDocumentTransfer();
+  const { report, dismissReport, workspaceName } = transfer;
   const split = bundle.caps.is_split;
   const stagedCount = stagedEditCount(state);
   const activeLabel = [...new Set([state.defaultLayer, ...state.activeLayers])]
@@ -209,43 +209,7 @@ export function TopBar() {
 
       <LocaleSelect />
 
-      <div className="h-6 w-px bg-line-soft" />
-
-      <input
-        ref={fileInput}
-        type="file"
-        accept=".toml,.json,application/json,application/toml"
-        className="hidden"
-        onChange={importFile}
-      />
-      <Button
-        variant="ghost"
-        disabled={transfer !== null || history.phase !== "idle"}
-        onClick={() => fileInput.current?.click()}
-        title={
-          offline
-            ? "Open another Glove80 TOML or MoErgo JSON document into this workspace"
-            : "Import a Glove80 or Go60 TOML (or MoErgo JSON), automatically transferring shared physical keys between boards"
-        }
-      >
-        {transfer === "importing" ? "Opening…" : offline ? "Open" : "Import layout"}
-      </Button>
-      <Button
-        variant="ghost"
-        disabled={transfer !== null}
-        onClick={() => void exportFile("toml")}
-        title={offline ? "Download this workspace as Glove80 TOML" : "Export the live configuration as Glove80 TOML"}
-      >
-        {transfer === "exporting" ? "Downloading…" : offline ? "Download TOML" : "Export TOML"}
-      </Button>
-      <Button
-        variant="ghost"
-        disabled={transfer !== null}
-        onClick={() => void exportFile("moergo-json")}
-        title={offline ? "Download this workspace as MoErgo JSON" : "Export the live keymap as MoErgo JSON"}
-      >
-        {offline ? "Download JSON" : "Export JSON"}
-      </Button>
+      <DocumentControls transfer={transfer} offline={offline} busy={history.phase !== "idle"} />
 
       <div className="h-6 w-px bg-line-soft" />
 

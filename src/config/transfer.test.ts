@@ -76,7 +76,7 @@ function harness(layerMetadata: LayerMetadata[] | null) {
     },
   } as unknown as RynkSession;
   const bundle = {
-    info: { product_name: "MoErgo Glove80" },
+    info: { product_name: "Glove80", vendor_id: 0x16c0, product_id: 0x27db },
     caps: {
       num_rows: 6,
       num_cols: 14,
@@ -193,7 +193,7 @@ describe("importDocument pointing configuration", () => {
       },
     } as unknown as RynkSession;
     const bundle = {
-      info: { product_name: "MoErgo Go60" },
+      info: { product_name: "Go60", vendor_id: 0x16c0, product_id: 0x27db },
       caps: {
         num_rows: 5,
         num_cols: 14,

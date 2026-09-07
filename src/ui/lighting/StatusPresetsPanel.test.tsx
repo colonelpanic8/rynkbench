@@ -2,6 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { WorkbenchContext, type WorkbenchContextValue } from "../state";
 import { StatusPresetsPanel } from "./StatusPresetsPanel";
+import { resolveBoardProfile } from "../../model/boards/profiles";
+import type { DeviceInfo } from "../../vendor/rynk-wasm/rynk_wasm";
 import { CONNECTION_KEY_PICK } from "./keyPick";
 import { GLOVE80_BOARD_KEYS, GLOVE80_COLS, GLOVE80_GRID } from "../../model/boards/glove80";
 
@@ -53,6 +55,8 @@ describe("status preset key choice", () => {
     expect(html).toContain("None chosen yet");
     expect(html).toContain("Choose on board");
     expect(html).toContain("Choose a key first");
+    expect(html).not.toContain("MoErgo");
+    expect(html).not.toContain("Glove80");
   });
 
   it("prompts for a board click while a pick is active", () => {
@@ -85,6 +89,10 @@ describe("Glove80 presets", () => {
   function renderGlove80(name: string, features = (1 << 15) | (1 << 16)) {
     const value = {
       bundle: {
+        boardProfile: resolveBoardProfile(
+          { product_name: name, vendor_id: 0x16c0, product_id: 0x27db } as DeviceInfo,
+          { num_rows: 6, num_cols: GLOVE80_COLS },
+        ),
         caps: { num_cols: GLOVE80_COLS, num_layers: 6, num_split_peripherals: 1, num_ble_profiles: 4 },
         model: { name, keys: glove80Keys, zones: [] },
         runtimeConditionalStatus: { capacity: 100 },
@@ -129,5 +137,6 @@ describe("Glove80 presets", () => {
     expect(html).toContain("Install stock Magic layer on Layer 2");
     expect(html).toContain("Bluetooth profiles 1–4");
     expect(renderGlove80("Go60")).not.toContain("stock Magic layer");
+    expect(renderGlove80("My Glove80 clone")).not.toContain("Glove80 Magic status cluster");
   });
 });

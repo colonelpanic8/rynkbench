@@ -109,7 +109,7 @@ export function BackgroundPanel() {
         <p className="text-[11.5px] leading-relaxed text-faint">
           Applies to layer colors, effects, and indicators. To toggle from a key,
           assign Output toggle (BacklightToggle) in Keymap.
-          {state.lightingOutputMode?.wake_layers ? " Wake layers can temporarily turn lighting back on; disable MoErgo Magic Layer for those layers below to keep it off on every layer." : ""}
+          {state.lightingOutputMode?.wake_layers ? " Wake layers can temporarily turn lighting back on; disable the wake setting for those layers below to keep it off on every layer." : ""}
         </p>
         <Slider
           label="Brightness"

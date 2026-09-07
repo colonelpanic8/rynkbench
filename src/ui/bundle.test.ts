@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { exportDocument } from "../config/transfer";
 import { mockProvider } from "../session/mock/board";
+import { ortho60Board } from "../session/mock/ortho60";
 import { glove80Board } from "../session/mock/glove80";
 import type { RynkSession } from "../session/types";
 import { unsupported } from "../session/unsupported";
@@ -69,5 +70,38 @@ describe("connect-time snapshot", () => {
         expect(bundle.incompleteReads).toEqual(["lighting topology: bad page"]);
       },
     );
+  });
+});
+
+describe("board profile resolution at connect time", () => {
+  it("exposes known-board tools together with enrichment", async () => {
+    await readBundle(() => {}, bundle => {
+      expect(bundle.boardProfile?.id).toBe("glove80");
+      expect(bundle.model.keys.some(key => key.address === "LH-C1R3")).toBe(true);
+    });
+  });
+
+  it("keeps generic capabilities and geometry without adding a board profile", async () => {
+    const session = await mockProvider(ortho60Board).connect();
+    try {
+      const bundle = await openBundle(session);
+      expect(bundle.boardProfile).toBeUndefined();
+      expect(bundle.caps.num_cols).toBe(12);
+      expect(bundle.model.keys).toHaveLength(60);
+      expect(bundle.model.keys.every(key => key.address === undefined)).toBe(true);
+      expect(bundle.lightingCaps).not.toBeNull();
+    } finally {
+      await session.close();
+    }
+  });
+
+  it("does not enrich a same-shaped device from its product name alone", async () => {
+    await readBundle(session => {
+      vi.spyOn(session.device, "info").mockResolvedValue({ ...glove80Board.info, vendor_id: 123 });
+    }, bundle => {
+      expect(bundle.boardProfile).toBeUndefined();
+      expect(bundle.model.keys.every(key => key.address === undefined)).toBe(true);
+      expect(bundle.layers[0]).toHaveLength(84);
+    });
   });
 });

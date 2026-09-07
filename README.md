@@ -273,3 +273,58 @@ Dual-licensed under either of
 - MIT license ([LICENSE-MIT](LICENSE-MIT))
 
 at your option, matching the RMK ecosystem this builds on.
+
+### Download a configuration for the other MoErgo board
+
+Open a configuration workspace or connect a Glove80/Go60, then choose
+**Migrate to Go60** or **Migrate to Glove80** in the top bar. Review the report
+and choose **Download migrated TOML**. This creates a standalone draft without
+writing to a keyboard or replacing the workspace. Apply or discard staged
+edits first; incomplete device reads must be resolved before migration.
+
+Migration uses the same physical mapping as cross-board import: number and
+letter rows align, lower thumb arcs transfer, and shared bottom-row finger
+positions stay aligned. Unmatched destination keys are transparent. The report
+lists lost bindings and lighting cells; positional combos missing any input
+are disabled as a whole. A hold-trigger policy that loses every position
+blocks migration. Review layer access, action-based combo inputs, and thumb
+ergonomics before importing the draft. The Bluetooth name is omitted, and
+Go60 pointing policies are omitted when migrating to Glove80.
+
+### Board profiles and generic RMK support
+
+The connected workbench has two independent sources of feature support:
+
+- **Firmware capabilities** control generic editors: keymaps, behaviors,
+  pointing, lighting scenes, wake layers, and user-selected status indicators.
+  A known board name is never required for these.
+- **Board profiles** contribute optional product knowledge: physical addresses,
+  configuration codecs and migration targets, and presets tied to a board's
+  wiring. A profile cannot substitute for firmware capability or LED-topology
+  checks.
+
+The registry in src/model/boards/profiles.ts resolves profiles using the
+reported USB vendor and product IDs, exact product name, and matrix dimensions.
+The connection bundle stores the result as boardProfile and uses the same
+profile for enrichment. Unknown or inconsistent identities stay generic—even
+if their matrix matches a known board or their name contains “Glove80”.
+
+Product definitions live in src/model/boards/profiles/moergo.ts; the generic
+contract is profile.ts. Document controls render the profile's declared formats
+and migration target. The registry in src/config/adapters.ts supplies the codec,
+and action handlers reject calls without a compatible profile. The current
+TOML/JSON codec is MoErgo-specific; unknown boards therefore do not offer those
+file controls. Adding a generic RMK document codec is separate from making
+generic device editors available.
+
+Glove80 status and stock Magic presets require their registered preset IDs,
+the relevant firmware features, and the expected physical LED mapping. Go60
+does not inherit those presets. Wake-layer lighting uses generic language and
+remains available on any firmware exposing that capability.
+
+To support another board, add its profile contribution to the registry and
+declare only the document tools and physical presets it implements. Add a
+codec adapter if its file format differs. Keep product-name and matrix
+heuristics out of React components. Offline templates explicitly choose their
+board and expose that board's canonical identity; they are separate from
+generic device discovery.

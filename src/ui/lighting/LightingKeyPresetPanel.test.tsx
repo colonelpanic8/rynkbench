@@ -39,7 +39,8 @@ describe("lighting key presets", () => {
     const html = render(false);
     expect(html).toMatch(/<button[^>]*>[^<]*<div[^>]*>Toggle RGB effects/);
     expect(html).toMatch(/<button[^>]*disabled[^>]*>[^<]*<div[^>]*>Cycle lighting policy/);
-    expect(html).toContain("MoErgo Magic Layer");
+    expect(html).toContain("wake setting");
+    expect(html).not.toContain("MoErgo");
   });
 
   it("explains why batch mode blocks installs", () => {

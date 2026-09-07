@@ -50,7 +50,7 @@ interface ImportArgs {
 
 export async function importDocument(args: ImportArgs): Promise<ImportResult> {
   const { text, session, bundle, state, dispatch, catalog } = args;
-  boardForTarget(bundle.info.product_name, bundle.caps.num_rows, bundle.caps.num_cols);
+  boardForTarget(bundle.info, bundle.caps.num_rows, bundle.caps.num_cols);
 
   const { format, snapshot: sourceSnapshot, notes: parseNotes } = parseDocument(text, catalog);
   if (sourceSnapshot.layers.length > bundle.caps.num_layers) {

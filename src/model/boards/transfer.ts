@@ -1,5 +1,7 @@
 import type { ImportNote, RuntimeSnapshot } from "../../config/document";
 import type { KeyboardModel } from "../keyboard";
+import { resolveBoardProfile } from "./profiles";
+import type { DeviceInfo } from "../../vendor/rynk-wasm/rynk_wasm";
 import type { KeyAction } from "../../vendor/rynk-wasm/rynk_wasm";
 import {
   GLOVE80_BOARD_KEYS,
@@ -132,17 +134,15 @@ export function boardForMatrix(rows: number, cols: number): BoardTransferModel {
 }
 
 export function boardForTarget(
-  productName: string,
+  info: DeviceInfo,
   rows: number,
   cols: number,
 ): BoardTransferModel {
-  const board = boardForMatrix(rows, cols);
-  if (!productName.toLowerCase().includes(board.name.toLowerCase())) {
-    throw new Error(
-      `Configuration transfer supports Glove80 and Go60; this ${rows}x${cols} keyboard reports itself as ${productName}`,
-    );
+  const profile = resolveBoardProfile(info, { num_rows: rows, num_cols: cols });
+  if (profile?.documents?.codec !== "moergo") {
+    throw new Error(`No configuration transfer is registered for ${info.product_name} (${rows}x${cols}).`);
   }
-  return board;
+  return boardForMatrix(rows, cols);
 }
 
 /** The board a matrix-cell count identifies, or `undefined` for a size neither
@@ -221,7 +221,7 @@ export function transferSnapshot(
   targetRows: number,
   targetCols: number,
   targetSnapshot: RuntimeSnapshot,
-  targetKeyboard: KeyboardModel,
+  targetKeyboard?: KeyboardModel,
 ): SnapshotTransfer {
   const source = boardForSnapshot(sourceSnapshot);
   const target = boardForMatrix(targetRows, targetCols);
@@ -272,9 +272,32 @@ export function transferSnapshot(
     });
   }
 
+  if (behaviors?.combos) {
+    behaviors.combos = behaviors.combos.map((combo, index) => {
+      if (!("Positions" in combo)) return combo;
+      const positions = combo.Positions.positions.map((entry) => mapping.get(at(entry)));
+      if (positions.some((entry) => entry === undefined)) {
+        notes.push({
+          approximated: false,
+          location: `combo ${index}`,
+          message: `Disabled because a required position has no corresponding key on ${target.name}.`,
+        });
+        return { Actions: { actions: [], output: "No", layer: combo.Positions.layer } };
+      }
+      return { Positions: { ...combo.Positions, positions: positions.filter((entry) => entry !== undefined) } };
+    });
+  }
+
+  const profilesWithPositions = new Set(sourceSnapshot.behaviors?.hold_trigger_positions?.map((entry) => entry.profile));
+  for (const profile of profilesWithPositions) {
+    if (!behaviors?.hold_trigger_positions?.some((entry) => entry.profile === profile)) {
+      throw new Error(`Morse profile ${profile} would lose all hold-trigger positions. Edit its position policy before migrating.`);
+    }
+  }
+
   const lighting = structuredClone(sourceSnapshot.lighting);
   if (lighting) {
-    const targetLeds = targetLedMap(targetKeyboard);
+    const targetLeds = targetKeyboard ? targetLedMap(targetKeyboard) : target.ledAt;
     const mappedTargetLeds = new Set(
       [...mapping.values()].flatMap((destination) => {
         const led = targetLeds.get(at(destination));
@@ -323,7 +346,7 @@ export function transferSnapshot(
   }
 
   return {
-    snapshot: { ...sourceSnapshot, layers, behaviors, lighting },
+    snapshot: { ...sourceSnapshot, rows: target.rows, cols: target.cols, layers, behaviors, lighting },
     notes,
     source: source.id,
     target: target.id,

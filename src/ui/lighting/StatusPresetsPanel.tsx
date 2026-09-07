@@ -13,7 +13,6 @@ import {
   BAR_ORDERS,
   BAR_STYLES,
   GLOVE80_BAR_LAYOUTS,
-  GLOVE80_MAGIC_LAYER,
   MAX_BAR_SEGMENTS,
   MIN_BAR_SEGMENTS,
   batteryBarLevels,
@@ -48,14 +47,13 @@ export function StatusPresetsPanel({
   const { bundle, state, dispatch, io } = useWorkbench();
   const status = bundle.runtimeConditionalStatus;
   const numLayers = bundle.caps.num_layers;
-  // Status lighting belongs on the Magic layer when one is designated; the
-  // stock Glove80 config keeps it on layer 2.
   const wakeLayers = state.lightingOutputMode?.wake_layers ?? state.lightingControls.wake_layers;
-  const [magicLayer] = layersInMask(wakeLayers, numLayers);
-  const defaultLayer =
-    magicLayer ?? (numLayers > GLOVE80_MAGIC_LAYER ? GLOVE80_MAGIC_LAYER : state.currentLayer);
-  // The default follows the board's designated Magic layer, which can arrive
-  // or move after this panel mounts; only an explicit choice pins it.
+  const [wakeLayer] = layersInMask(wakeLayers, numLayers);
+  const preferredLayer = bundle.boardProfile?.defaultStatusLayer;
+  const defaultLayer = wakeLayer ?? (
+    preferredLayer !== undefined && preferredLayer < numLayers ? preferredLayer : state.currentLayer
+  );
+  // Follow the current wake policy until the user explicitly chooses a layer.
   const [chosenLayer, setChosenLayer] = useState<number | null>(null);
   const layer = chosenLayer !== null && chosenLayer < numLayers ? chosenLayer : defaultLayer;
   const [node, setNode] = useState(0);
@@ -103,13 +101,14 @@ export function StatusPresetsPanel({
     key: keyAt(bundle.model.keys, preset.row, preset.col),
   }));
   const glove80Available =
-    bundle.model.name.toLowerCase().includes("glove80") &&
+    bundle.boardProfile?.presets.includes("glove80-status") &&
     numLayers > 2 &&
     bundle.caps.num_split_peripherals > 0 &&
     bundle.caps.num_ble_profiles >= 3 &&
     exactKeys.every(({ preset, key }) => key?.ledId === preset.led);
   const stockMagicAvailable =
     glove80Available &&
+    bundle.boardProfile?.presets.includes("glove80-stock-magic") &&
     stockMagicIndicatorKeys().every(
       (indicator) => keyAt(bundle.model.keys, indicator.row, indicator.col)?.ledId === indicator.led,
     );
@@ -216,7 +215,7 @@ export function StatusPresetsPanel({
           {Array.from({ length: numLayers }, (_, index) => (
             <option key={index} value={index}>
               {nameOf(index)}
-              {index === magicLayer ? " · wakes lighting" : ""}
+              {index === wakeLayer ? " · wakes lighting" : ""}
             </option>
           ))}
         </select>

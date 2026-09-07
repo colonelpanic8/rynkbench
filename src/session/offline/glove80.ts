@@ -47,7 +47,7 @@ export function offlineGlove80Board(snapshot?: RuntimeSnapshot): BoardSpec {
     description: "Local configuration workspace — no keyboard connection.",
     info: {
       ...glove80Board.info,
-      product_name: "Glove80 configuration",
+      product_name: "Glove80",
       serial_number: "OFFLINE",
     },
     build: { label: "Offline configuration workspace" },

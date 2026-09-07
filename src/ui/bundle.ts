@@ -23,7 +23,7 @@ import type {
   PointingConfig,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import { buildKeyboardModel } from "../model/keyboard";
-import { enrichmentFor } from "../model/boards";
+import { resolveBoardProfile } from "../model/boards";
 import type { LayerMetadata, LightingTopology, RynkSession } from "../session/types";
 import { isUnsupportedError } from "../session/unsupported";
 import type { ConnectedBundle } from "./state";
@@ -187,8 +187,9 @@ export async function openBundle(session: RynkSession): Promise<ConnectedBundle>
     }
   }
 
+  const boardProfile = resolveBoardProfile(info, caps);
   const model = buildKeyboardModel(layout, topology, {
-    enrichment: enrichmentFor(info),
+    enrichment: boardProfile?.enrichment,
     fallbackName: info.product_name,
   });
 
@@ -291,6 +292,7 @@ export async function openBundle(session: RynkSession): Promise<ConnectedBundle>
   return {
     session,
     incompleteReads,
+    boardProfile,
     model,
     info,
     caps,

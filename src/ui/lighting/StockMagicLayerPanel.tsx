@@ -13,7 +13,7 @@ export function StockMagicLayerPanel({ layer }: { layer: number }) {
   const name = layerName(state.layerMetadata, layer);
   const profiles = Math.min(bundle.caps.num_ble_profiles, STOCK_PROFILE_KEYS.length);
 
-  if (!status) return null;
+  if (!status || !bundle.boardProfile?.presets.includes("glove80-stock-magic")) return null;
 
   const install = async () => {
     if (installing.current || busy || state.batchMode) return;

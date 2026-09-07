@@ -15,7 +15,7 @@ export type BarStyle = "bands" | "stock";
 
 export const BAR_STYLES: Array<{ id: BarStyle; label: string }> = [
   { id: "bands", label: "Equal bands · amber/red low" },
-  { id: "stock", label: "MoErgo stock · whole bar green/yellow/red" },
+  { id: "stock", label: "Whole bar · green/yellow/red" },
 ];
 
 export const MIN_BAR_SEGMENTS = 3;

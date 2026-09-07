@@ -207,9 +207,9 @@ export function ConnectScreen({
               <FileConfigIcon size={19} />
             </div>
             <div>
-              <div className="text-[14px] font-semibold text-ink">Configuration workspace</div>
+              <div className="text-[14px] font-semibold text-ink">Board configuration templates</div>
               <div className="mt-0.5 text-[12px] leading-snug text-mute">
-                Edit locally without connecting a keyboard.
+                Edit locally using an available board template. Currently supports Glove80 TOML and MoErgo JSON.
               </div>
             </div>
           </div>

@@ -68,7 +68,7 @@ function keyboardModel(board: BoardTransferModel): KeyboardModel {
 
 describe("Glove80 and Go60 layout transfer", () => {
   it("does not treat an unrelated same-size keyboard as a Go60", () => {
-    expect(() => boardForTarget("Other 60", 5, 14)).toThrow(/reports itself as Other 60/);
+    expect(() => boardForTarget({ product_name: "Other 60", vendor_id: 0x16c0, product_id: 0x27db } as import("../../vendor/rynk-wasm/rynk_wasm").DeviceInfo, 5, 14)).toThrow(/No configuration transfer is registered for Other 60/);
   });
 
   it("maps the Go60 finger rows, bottom row, and lower thumbs onto Glove80", () => {

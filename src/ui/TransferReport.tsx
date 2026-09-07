@@ -23,6 +23,7 @@ export interface TransferReport {
   detail?: string;
   /** How an imported layout differs from its source. */
   notes?: ImportNote[];
+  download?: { text: string; filename: string };
 }
 
 const TONE: Record<TransferOutcome, { border: string; text: string }> = {
@@ -105,6 +106,22 @@ export function TransferReportPanel({
         <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-[11.5px] leading-relaxed text-mute">
           {report.detail}
         </pre>
+      )}
+
+      {report.download && (
+        <div className="mt-3">
+          <Button onClick={() => {
+            const download = report.download!;
+            const url = URL.createObjectURL(new Blob([download.text], { type: "text/plain" }));
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = download.filename;
+            link.click();
+            URL.revokeObjectURL(url);
+          }}>
+            Download migrated TOML
+          </Button>
+        </div>
       )}
 
       {report.notes && report.notes.length > 0 && <Notes notes={report.notes} />}

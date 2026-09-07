@@ -44,6 +44,7 @@ import type {
   PointingCapabilities,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import type { LayerMetadata, RynkSession } from "../session/types";
+import type { BoardProfile } from "../model/boards";
 import type { KeyboardModel } from "../model/keyboard";
 import {
   initialKeyEditHistory,
@@ -80,6 +81,8 @@ export type Selection =
 
 /** Everything loaded during the connect flow, before the workbench mounts. */
 export interface ConnectedBundle {
+  /** Optional board-specific tools, resolved once from identity and geometry. */
+  boardProfile?: BoardProfile;
   session: RynkSession;
   /** Configuration-bearing reads that failed while opening this snapshot.
    *  Export must refuse to turn their fallback values into a lossy file. */
