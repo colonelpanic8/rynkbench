@@ -38,7 +38,7 @@ describe("stock Magic layer bindings", () => {
     expect(at(grid, 4, 0)).toEqual({ Single: { KeyboardControl: "Reboot" } });
     expect(at(grid, 4, 13)).toEqual({ Single: { KeyboardControl: "Reboot" } });
     expect([1, 2, 3, 4, 5].map((col) => at(grid, 2, col))).toEqual(
-      ["RgbSpi", "RgbSai", "RgbHui", "BacklightUp", "RgbTog"].map((action) => ({ Single: { Light: action } })),
+      ["RgbSpi", "RgbSai", "RgbHui", "BacklightUp", "BacklightToggle"].map((action) => ({ Single: { Light: action } })),
     );
     expect([1, 2, 3, 4, 5].map((col) => at(grid, 3, col))).toEqual(
       ["RgbSpd", "RgbSad", "RgbHud", "BacklightDown", "RgbModeForward"].map((action) => ({ Single: { Light: action } })),
@@ -67,15 +67,27 @@ describe("stock Magic layer indicators", () => {
     const leds = stockMagicIndicatorKeys().map((key) => key.led);
     expect(new Set(leds).size).toBe(leds.length);
     expect(leds.every((led) => led < 40)).toBe(true);
-    expect(rules).toHaveLength(5 + 2 * 15 + 4 * 4 + 3);
+    expect(rules).toHaveLength(6 + 3 + 2 * 15 + 4 * 4 + 3);
+    expect(rules.every((entry) => entry.cell.conditions.layer?.layer === 2)).toBe(true);
   });
 
-  it("shows active layers in magenta, except the always-active default", () => {
+  it("shows the layers held alongside Magic in magenta, only while Magic is held", () => {
     const cells = preview({ activeLayers: new Set([0, 2, 3]) });
-    expect(cells.get(35)).toBeUndefined();
+    expect(cells.get(35)?.effect).toEqual(solid(255, 0, 255));
     expect(cells.get(23)?.effect).toEqual(solid(255, 0, 255));
     expect(cells.get(17)?.effect).toEqual(solid(255, 0, 255));
     expect(cells.get(29)).toBeUndefined();
+    const released = preview({ activeLayers: new Set([0, 3]) });
+    expect(released.get(35)).toBeUndefined();
+    expect(released.get(17)).toBeUndefined();
+  });
+
+  it("shows the host's lock indicators in red on F3-F5", () => {
+    const locks = preview({ indicators: { num_lock: true, caps_lock: false, scroll_lock: true } });
+    expect(locks.get(22)).toBeUndefined();
+    expect(locks.get(16)?.effect).toEqual(solid(255, 0, 0));
+    expect(locks.get(10)?.effect).toEqual(solid(255, 0, 0));
+    expect(preview({}).get(16)).toBeUndefined();
   });
 
   it("fills each half's bar like the stock firmware", () => {
@@ -178,7 +190,7 @@ describe("writing the stock Magic layer", () => {
     expect(result).toEqual({ ok: true });
     expect(calls.filter((call) => call.startsWith("key"))).toHaveLength(19);
     expect(calls).not.toContain("key 3,6");
-    expect(calls.slice(-3)).toEqual(["scenes 40", "rules 54", "wake 4"]);
+    expect(calls.slice(-3)).toEqual(["scenes 40", "rules 58", "wake 4"]);
   });
 
   it("skips the scene table and wake policy the firmware lacks", async () => {
@@ -204,7 +216,7 @@ describe("writing the stock Magic layer", () => {
       { setKey, applyScenes: vi.fn(), applyRules: vi.fn(), setWakeLayers: vi.fn() },
       { ...target(), ruleCapacity: 32 },
     );
-    expect(result).toEqual({ ok: false, message: "This layout needs 54 rules; the keyboard holds 32." });
+    expect(result).toEqual({ ok: false, message: "This layout needs 58 rules; the keyboard holds 32." });
     expect(setKey).not.toHaveBeenCalled();
   });
 

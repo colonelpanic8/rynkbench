@@ -89,6 +89,8 @@ function snapshot(): LayerRewriteSnapshot {
         },
         connection: undefined,
         effects: undefined,
+        layers: undefined,
+        indicators: undefined,
       },
     ],
     compiledScenes: [],

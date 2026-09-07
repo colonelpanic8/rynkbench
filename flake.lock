@@ -42,11 +42,11 @@
     "moergo-rmk": {
       "flake": false,
       "locked": {
-        "lastModified": 1787171048,
-        "narHash": "sha256-XvH+H7UpxLlmGDFezNtsLfS2cCNbkWQ2gDSi4aA65/I=",
+        "lastModified": 1788813730,
+        "narHash": "sha256-12NZNj2/nyDfpqp8N8tql7frBs2V9WthgXE5qqpi8MQ=",
         "owner": "colonelpanic8",
         "repo": "moergo-rmk",
-        "rev": "0fd8e8d365b22fa66d9c880b87678a8f0fd9ae0f",
+        "rev": "efdf162e049656085a485472fdc052a5768ffc7a",
         "type": "github"
       },
       "original": {
@@ -74,11 +74,11 @@
     "rmk": {
       "flake": false,
       "locked": {
-        "lastModified": 1787169293,
-        "narHash": "sha256-sGoQU8owPm0COyU0YJOGMyrmDTOmujWPx8e9lK9MXA8=",
+        "lastModified": 1788813249,
+        "narHash": "sha256-gEfImGWMg2gF/PjyeNzSSNcYz/xE8oGVgxfvp1x1Fjs=",
         "owner": "colonelpanic8",
         "repo": "rmk",
-        "rev": "dff8ddf6a53882f46f6728c6e9a647a252d67d27",
+        "rev": "9a88399366a01b344cf90fb3723cae68dc4dc949",
         "type": "github"
       },
       "original": {

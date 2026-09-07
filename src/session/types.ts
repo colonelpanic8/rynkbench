@@ -40,7 +40,7 @@ import type {
   LightingCapabilities,
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
-  LightingExtendedConditionalSceneCell,
+  LightingAdvancedConditionalSceneCell,
   LightingConditionalSceneStatus,
   LightingExtension,
   LightingExtensionLayers,
@@ -192,12 +192,12 @@ export interface LightingRuntimeConditionalOps {
   status(): Promise<LightingRuntimeConditionalSceneStatus>;
   /** Read the whole ordered table (paging under one pinned revision, with a
    *  restart when the revision drifts, is the backend's job). */
-  read(): Promise<LightingExtendedConditionalSceneCell[]>;
+  read(): Promise<LightingAdvancedConditionalSceneCell[]>;
   /** Atomically replace the whole table, in the order given (wraps the
    *  begin/put-chunks/commit transaction and its revision handshake).
    *  Rejects cells carrying predicates the connected firmware cannot store
    *  rather than writing them away. */
-  replace(cells: LightingExtendedConditionalSceneCell[]): Promise<LightingState>;
+  replace(cells: LightingAdvancedConditionalSceneCell[]): Promise<LightingState>;
 }
 
 export interface LightingSceneOps {

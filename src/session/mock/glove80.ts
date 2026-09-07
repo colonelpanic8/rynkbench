@@ -14,7 +14,7 @@ import type {
   Key,
   KeyAction,
   LightingConditionalSceneCell,
-  LightingExtendedConditionalSceneCell,
+  LightingAdvancedConditionalSceneCell,
   LightingSceneCell,
   LightingZone,
   Morse,
@@ -338,7 +338,7 @@ conditionalScenes.push({
 // warning that outranks the compiled gauge on the same LED, and a layer-3
 // override that recolors one of the compiled gaming keys. Order is meaning —
 // the blink lands after the solid warning and wins the slot they share.
-const seedRuntimeConditionalScenes: LightingExtendedConditionalSceneCell[] = [
+const seedRuntimeConditionalScenes: LightingAdvancedConditionalSceneCell[] = [
   {
     cell: {
       conditions: {
@@ -351,6 +351,8 @@ const seedRuntimeConditionalScenes: LightingExtendedConditionalSceneCell[] = [
     },
     connection: undefined,
     effects: undefined,
+    layers: undefined,
+    indicators: undefined,
   },
   {
     cell: {
@@ -364,6 +366,8 @@ const seedRuntimeConditionalScenes: LightingExtendedConditionalSceneCell[] = [
     },
     connection: undefined,
     effects: undefined,
+    layers: undefined,
+    indicators: undefined,
   },
   {
     cell: {
@@ -377,6 +381,8 @@ const seedRuntimeConditionalScenes: LightingExtendedConditionalSceneCell[] = [
     },
     connection: undefined,
     effects: undefined,
+    layers: undefined,
+    indicators: undefined,
   },
   {
     cell: {
@@ -395,6 +401,8 @@ const seedRuntimeConditionalScenes: LightingExtendedConditionalSceneCell[] = [
     },
     connection: undefined,
     effects: undefined,
+    layers: undefined,
+    indicators: undefined,
   },
   {
     cell: {
@@ -408,6 +416,8 @@ const seedRuntimeConditionalScenes: LightingExtendedConditionalSceneCell[] = [
     },
     connection: undefined,
     effects: undefined,
+    layers: undefined,
+    indicators: undefined,
   },
   ...([
     ["AlwaysOn", solid(0, 128, 0)],
@@ -425,6 +435,8 @@ const seedRuntimeConditionalScenes: LightingExtendedConditionalSceneCell[] = [
     },
     connection: undefined,
     effects: undefined,
+    layers: undefined,
+    indicators: undefined,
   })),
   // The extended predicates, so the mock exercises the same editors a current
   // keyboard does: an effects-state indicator and a USB-presence indicator.
@@ -436,6 +448,8 @@ const seedRuntimeConditionalScenes: LightingExtendedConditionalSceneCell[] = [
     },
     connection: undefined,
     effects: { enabled: true },
+    layers: undefined,
+    indicators: undefined,
   },
   {
     cell: {
@@ -445,6 +459,8 @@ const seedRuntimeConditionalScenes: LightingExtendedConditionalSceneCell[] = [
     },
     connection: undefined,
     effects: { enabled: false },
+    layers: undefined,
+    indicators: undefined,
   },
   {
     cell: {
@@ -460,6 +476,8 @@ const seedRuntimeConditionalScenes: LightingExtendedConditionalSceneCell[] = [
       usb_connected: true,
     },
     effects: undefined,
+    layers: undefined,
+    indicators: undefined,
   },
 ];
 

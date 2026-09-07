@@ -128,22 +128,30 @@ transparent fallthrough to the default layer); Overlay follows the live layers.
   chosen layer as the factory ZMK Magic layer: Bluetooth profiles 1–4 on T4,
   T5, T1, and T2 (RMK's slot-select actions, which also prefer Bluetooth
   output), USB output on T6, RGB speed/saturation/hue/brightness and
-  toggle/effect keys on the Q–T and A–G rows, bootloader and reset on each
-  half's outer keys, forget-active-pairing on F1, and every other key
+  toggle/effect keys on the Q–T and A–G rows (the toggle is the lighting
+  output toggle, which is what MoErgo's `RGB_TOG` does), bootloader and reset
+  on each half's outer keys, forget-active-pairing on F1, and every other key
   unbound. It installs the stock indicator map from MoErgo's firmware on the
-  same layer: the left half goes dark, the number row shows active layers in
-  magenta, rows 3 and 4 fill green/yellow/red with the left and right battery
+  same layer: the left half goes dark, the number row shows in magenta which
+  layers are held alongside Magic, F3–F5 show caps, num, and scroll lock in
+  red, rows 3 and 4 fill green/yellow/red with the left and right battery
   (all green while charging), and the profile and USB keys show lilac
   unpaired, red paired-but-idle, green connected, and white while carrying
-  typing. The layer is designated a Magic layer so it wakes lighting while
-  held. Unchanged keys are skipped, the template's own rules and the layer's
-  scene are replaced on repeat runs, and rule and scene capacity are checked
-  before anything is written. Not reproduced, because the firmware has no
-  matching condition or action: caps/num/scroll lock, the output-fallback
-  indicator, and clear-all-pairings. A rule can watch only one layer, so
-  layer indicators light whenever their layer is active rather than only
-  while Magic is held; the default layer's indicator is omitted for that
-  reason.
+  typing. The layer is designated a Magic layer so it wakes lighting; the
+  firmware keeps the view up for 20 seconds after release. Brightness keys
+  adjust the whole output, including indicators.
+  Unchanged keys are skipped, the template's own rules and the layer's scene
+  are replaced on repeat runs, and rule and scene capacity are checked before
+  anything is written. Not reproduced, because the firmware has no matching
+  condition or action: the output-fallback indicator and clear-all-pairings.
+- **Rules can watch a layer set and the host's lock indicators.** Beyond the
+  single layer condition, a runtime rule can require every layer in a set to
+  be active and every layer in another set to be inactive (**Other layers**),
+  and can gate on num, caps, and scroll lock (**Lock indicators**). Both ride
+  the advanced conditional endpoints, so firmware must advertise the
+  layer/indicator-conditions capability; the preview evaluates layer sets
+  against the live layer state and treats lock rules as unsatisfiable, since
+  the host does not see the keyboard's lock state.
 - **Lighting control key presets pair behavior and colors.** In Keymap, select
   a key and open the Lighting tab of its action editor. Under **Key presets**,
   **Toggle RGB effects** installs the effects toggle and green/dim-red

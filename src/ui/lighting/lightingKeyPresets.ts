@@ -39,6 +39,8 @@ export function lightingKeyRules(preset: LightingKeyPreset): StatusRule[] {
     },
     connection: undefined,
     effects: enabled === undefined ? undefined : { enabled },
+    layers: undefined,
+    indicators: undefined,
   }));
 }
 

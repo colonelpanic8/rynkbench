@@ -17,6 +17,9 @@ export const RUNTIME_CONNECTION_CONDITIONS = 1 << 14;
  *  an earlier extended cell, so gating on that bit instead would risk a
  *  misparse. Anything short of this bit uses the legacy endpoints. */
 export const RUNTIME_EFFECTS_CONDITIONS = 1 << 15;
+/** Advanced endpoints add layer-set and lock-indicator predicates while
+ * preserving the original extended endpoint encoding. */
+export const RUNTIME_LAYER_INDICATOR_CONDITIONS = 1 << 16;
 
 export function hasLightingFeature(
   caps: Pick<LightingCapabilities, "features"> | null | undefined,

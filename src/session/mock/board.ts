@@ -27,7 +27,7 @@ import type {
   LightingCapabilities,
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
-  LightingExtendedConditionalSceneCell,
+  LightingAdvancedConditionalSceneCell,
   LightingConditionalSceneStatus,
   LightingControls,
   LightingExtension,
@@ -85,6 +85,7 @@ import {
   RUNTIME_CONDITIONAL_SCENES,
   RUNTIME_CONNECTION_CONDITIONS,
   RUNTIME_EFFECTS_CONDITIONS,
+  RUNTIME_LAYER_INDICATOR_CONDITIONS,
 } from "../lighting-features";
 import { unsupported } from "../unsupported";
 import {
@@ -156,7 +157,7 @@ export interface BoardSpec {
   runtimeConditionalCapacity?: number;
   /** Runtime conditional cells stored "in flash" when the session opens, in
    *  composition order. */
-  seedRuntimeConditionalScenes?: LightingExtendedConditionalSceneCell[];
+  seedRuntimeConditionalScenes?: LightingAdvancedConditionalSceneCell[];
   /** Advertise the extended conditional cell, so rules may carry connection
    *  and effects predicates. Firmware without it stores the base cell only. */
   runtimeConditionalPredicates?: boolean;
@@ -334,7 +335,7 @@ class MockSession implements RynkSession {
   private readonly sceneTable = new Map<string, LightingSceneCell>();
   /** Mutable conditional table. A list, not a map: rules compose in table
    *  order, later rules win shared slots, and duplicates are legitimate. */
-  private runtimeConditional: LightingExtendedConditionalSceneCell[] = [];
+  private runtimeConditional: LightingAdvancedConditionalSceneCell[] = [];
   private layerPolicy: LightingLayerPolicy;
   private readonly comboTable: ComboDefinition[];
   private readonly morseTable: Morse[];
@@ -960,7 +961,9 @@ class MockSession implements RynkSession {
         (this.spec.extensionEffects?.overlay !== undefined ? EXTENSION_LAYERING : 0) |
         ((this.spec.runtimeConditionalCapacity ?? 0) > 0 ? RUNTIME_CONDITIONAL_SCENES : 0) |
         ((this.spec.runtimeConditionalCapacity ?? 0) > 0 && this.spec.runtimeConditionalPredicates
-          ? RUNTIME_CONNECTION_CONDITIONS | RUNTIME_EFFECTS_CONDITIONS
+          ? RUNTIME_CONNECTION_CONDITIONS |
+            RUNTIME_EFFECTS_CONDITIONS |
+            RUNTIME_LAYER_INDICATOR_CONDITIONS
           : 0),
       effects: 0b111, // solid | blink | breathe
     };
@@ -1193,16 +1196,23 @@ class MockSession implements RynkSession {
    *  so this rejects instead — with the live backend's wording, since this is a
    *  document the user can fix rather than a missing command. */
   private checkExtendedConditionalCell(
-    cell: LightingExtendedConditionalSceneCell,
+    cell: LightingAdvancedConditionalSceneCell,
     index: number,
   ): void {
     this.checkConditionalCell(cell.cell);
-    const gated = cell.connection !== undefined || cell.effects !== undefined;
+    const gated =
+      cell.connection !== undefined ||
+      cell.effects !== undefined ||
+      cell.layers !== undefined ||
+      cell.indicators !== undefined;
     if (gated && !this.spec.runtimeConditionalPredicates) {
       throw new Error(
-        `rule ${index + 1} names a connection or effects condition, which this ` +
-          `firmware cannot store; update the firmware or remove the condition`,
+        `rule ${index + 1} names a connection, effects, layers, or indicator condition, ` +
+          `which this firmware cannot store; update the firmware or remove the condition`,
       );
+    }
+    if (cell.layers !== undefined && layersOverlap(cell.layers.active, cell.layers.inactive)) {
+      throw new Error(`rule ${index + 1} wants a layer both active and inactive`);
     }
     const { connection } = cell;
     if (connection === undefined) return;
@@ -1374,4 +1384,14 @@ export function mockProvider(spec: BoardSpec): SessionProvider {
 /** Open the same mutable in-memory engine without presenting it as a demo. */
 export function memorySession(spec: BoardSpec, kind: SessionKind = "offline"): RynkSession {
   return new MockSession(spec, kind);
+}
+
+/** Whether two layer masks share a bit; masks are numbers, like `wake_layers`. */
+function layersOverlap(active: number, inactive: number): boolean {
+  for (let layer = 0; layer < 32; layer++) {
+    if (Math.floor(active / 2 ** layer) % 2 === 1 && Math.floor(inactive / 2 ** layer) % 2 === 1) {
+      return true;
+    }
+  }
+  return false;
 }

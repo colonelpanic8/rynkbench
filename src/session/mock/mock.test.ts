@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   ComboDefinition,
   LightingConditionalSceneCell,
-  LightingExtendedConditionalSceneCell,
+  LightingAdvancedConditionalSceneCell,
   Morse,
   TopicEvent,
 } from "../../vendor/rynk-wasm/rynk_wasm";
@@ -359,7 +359,7 @@ describe("runtime conditional scenes", () => {
   const rule = (
     led_id: number,
     over: Partial<LightingConditionalSceneCell["conditions"]> = {},
-  ): LightingExtendedConditionalSceneCell => ({
+  ): LightingAdvancedConditionalSceneCell => ({
     cell: {
       conditions: {
         layer: undefined,
@@ -372,6 +372,8 @@ describe("runtime conditional scenes", () => {
     },
     connection: undefined,
     effects: undefined,
+    layers: undefined,
+    indicators: undefined,
   });
 
   it("advertises RUNTIME_CONDITIONAL_SCENES and serves the seeded ordered table", async () => {
@@ -433,6 +435,8 @@ describe("runtime conditional scenes", () => {
           usb_connected: false,
         },
         effects: { enabled: true },
+        layers: undefined,
+        indicators: undefined,
       };
       await session.lighting.conditionalScenes.replace([gated]);
       // The predicates must survive the round trip verbatim: reading a table
@@ -1171,10 +1175,12 @@ describe("seeded firmware lighting tables", () => {
     await withSession(glove80Board, async (session) => {
       const compiled = glove80Board.compiledScenes!;
       const conditional = glove80Board.conditionalScenes!.map(
-        (cell): LightingExtendedConditionalSceneCell => ({
+        (cell): LightingAdvancedConditionalSceneCell => ({
           cell,
           connection: undefined,
           effects: undefined,
+          layers: undefined,
+          indicators: undefined,
         }),
       );
       expect(compiled.length).toBeGreaterThan(0);

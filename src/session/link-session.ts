@@ -19,8 +19,10 @@ import type {
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
   LightingConditionalSceneStatus,
+  LightingAdvancedConditionalSceneCell,
   LightingExtendedConditionalSceneCell,
   LightingExtendedRuntimeConditionalScenesPage,
+  LightingAdvancedRuntimeConditionalScenesPage,
   LightingExtension,
   LightingExtensionNameKind,
   LightingExtensionParam,
@@ -66,6 +68,7 @@ import {
   OUTPUT_MODE,
   RUNTIME_CONDITIONAL_SCENES,
   RUNTIME_EFFECTS_CONDITIONS,
+  RUNTIME_LAYER_INDICATOR_CONDITIONS,
   hasLightingFeature,
 } from "./lighting-features";
 import { unsupported } from "./unsupported";
@@ -223,6 +226,13 @@ interface RuntimeConditionalClient {
   ): Promise<LightingRuntimeConditionalScenesPage>;
 }
 
+interface AdvancedRuntimeConditionalClient {
+  get_lighting_advanced_runtime_conditional_scene_status(): Promise<LightingRuntimeConditionalSceneStatus>;
+  get_lighting_advanced_runtime_conditional_scenes(
+    request: LightingRuntimeConditionalScenePageRequest,
+  ): Promise<LightingAdvancedRuntimeConditionalScenesPage>;
+}
+
 interface ExtendedRuntimeConditionalClient {
   get_lighting_extended_runtime_conditional_scene_status(): Promise<LightingRuntimeConditionalSceneStatus>;
   get_lighting_extended_runtime_conditional_scenes(
@@ -233,6 +243,7 @@ interface ExtendedRuntimeConditionalClient {
 interface RuntimeConditionalStatusClient {
   get_lighting_capabilities(): Promise<LightingCapabilities>;
   get_lighting_runtime_conditional_scene_status(): Promise<LightingRuntimeConditionalSceneStatus>;
+  get_lighting_advanced_runtime_conditional_scene_status(): Promise<LightingRuntimeConditionalSceneStatus>;
   get_lighting_extended_runtime_conditional_scene_status(): Promise<LightingRuntimeConditionalSceneStatus>;
 }
 
@@ -543,6 +554,23 @@ export async function readLightingRuntimeConditionalScenes(
  *  the connection and effects predicates the legacy endpoints omit. Reading a
  *  predicate-bearing table through the legacy pair and writing it back is what
  *  silently strips those predicates, so callers that can use this must. */
+export async function readLightingAdvancedRuntimeConditionalScenes(
+  client: AdvancedRuntimeConditionalClient,
+  attempts = READ_ATTEMPTS,
+): Promise<LightingAdvancedConditionalSceneCell[]> {
+  return readPinnedTable(
+    "runtime conditional",
+    {
+      status: async () => {
+        const status = await client.get_lighting_advanced_runtime_conditional_scene_status();
+        return { revision: status.revision, total: status.cell_len };
+      },
+      page: (request) => client.get_lighting_advanced_runtime_conditional_scenes(request),
+    },
+    attempts,
+  );
+}
+
 export async function readLightingExtendedRuntimeConditionalScenes(
   client: ExtendedRuntimeConditionalClient,
   attempts = READ_ATTEMPTS,
@@ -567,9 +595,11 @@ export async function readLightingRuntimeConditionalStatus(
   if (!hasLightingFeature(caps, RUNTIME_CONDITIONAL_SCENES)) {
     throw unsupported("runtime conditional scenes");
   }
-  return hasLightingFeature(caps, RUNTIME_EFFECTS_CONDITIONS)
-    ? client.get_lighting_extended_runtime_conditional_scene_status()
-    : client.get_lighting_runtime_conditional_scene_status();
+  return hasLightingFeature(caps, RUNTIME_LAYER_INDICATOR_CONDITIONS)
+    ? client.get_lighting_advanced_runtime_conditional_scene_status()
+    : hasLightingFeature(caps, RUNTIME_EFFECTS_CONDITIONS)
+      ? client.get_lighting_extended_runtime_conditional_scene_status()
+      : client.get_lighting_runtime_conditional_scene_status();
 }
 
 export class LinkSession implements RynkSession {
@@ -1220,49 +1250,74 @@ export class LinkSession implements RynkSession {
         this.client.get_lighting_runtime_conditional_scene_status(),
       get_lighting_extended_runtime_conditional_scene_status: () =>
         this.client.get_lighting_extended_runtime_conditional_scene_status(),
+      get_lighting_advanced_runtime_conditional_scene_status: () =>
+        this.client.get_lighting_advanced_runtime_conditional_scene_status(),
     });
   }
 
   private async readAllRuntimeConditionalScenes(): Promise<
-    LightingExtendedConditionalSceneCell[]
+    LightingAdvancedConditionalSceneCell[]
   > {
     await this.readRuntimeConditionalStatus();
-    if (await this.hasLightingFeature(RUNTIME_EFFECTS_CONDITIONS)) {
-      return readLightingExtendedRuntimeConditionalScenes(this.client);
+    if (await this.hasLightingFeature(RUNTIME_LAYER_INDICATOR_CONDITIONS)) {
+      return readLightingAdvancedRuntimeConditionalScenes(this.client);
     }
-    // Legacy firmware stores no connection or effects predicate, so widening
+    if (await this.hasLightingFeature(RUNTIME_EFFECTS_CONDITIONS)) {
+      const cells = await readLightingExtendedRuntimeConditionalScenes(this.client);
+      return cells.map((cell) => ({ ...cell, layers: undefined, indicators: undefined }));
+    }
+    // Legacy firmware stores none of the extended predicates, so widening
     // its cells loses nothing.
     const cells = await readLightingRuntimeConditionalScenes(this.client);
-    return cells.map((cell) => ({ cell, connection: undefined, effects: undefined }));
+    return cells.map((cell) => ({
+      cell,
+      connection: undefined,
+      effects: undefined,
+      layers: undefined,
+      indicators: undefined,
+    }));
   }
 
   private async replaceRuntimeConditionalCells(
-    cells: LightingExtendedConditionalSceneCell[],
+    cells: LightingAdvancedConditionalSceneCell[],
   ): Promise<LightingState> {
     const status = await this.readRuntimeConditionalStatus();
     const client = this.client;
-    if (await this.hasLightingFeature(RUNTIME_EFFECTS_CONDITIONS)) {
+    if (await this.hasLightingFeature(RUNTIME_LAYER_INDICATOR_CONDITIONS)) {
       return replaceInChunks(
         {
           begin: (expected_revision, cell_count) =>
-            client.begin_lighting_extended_runtime_conditional_scene_replace({
+            client.begin_lighting_advanced_runtime_conditional_scene_replace({
               expected_revision,
               cell_count,
             }),
           put: (transaction_id, offset, chunk) =>
-            client.put_lighting_extended_runtime_conditional_scene_chunk({
+            client.put_lighting_advanced_runtime_conditional_scene_chunk({
               transaction_id,
               offset,
               cells: chunk,
             }),
           commit: (transaction_id) =>
-            client.commit_lighting_extended_runtime_conditional_scene_replace({ transaction_id }),
+            client.commit_lighting_advanced_runtime_conditional_scene_replace({ transaction_id }),
           abort: (transaction_id) =>
-            client.abort_lighting_extended_runtime_conditional_scene_replace({ transaction_id }),
+            client.abort_lighting_advanced_runtime_conditional_scene_replace({ transaction_id }),
         },
         status.revision,
         cells,
         status.chunk_capacity,
+      );
+    }
+    if (cells.some((cell) => cell.layers !== undefined || cell.indicators !== undefined)) {
+      throw new Error("This firmware cannot store layer-set or lock-indicator conditions; update firmware first");
+    }
+    if (await this.hasLightingFeature(RUNTIME_EFFECTS_CONDITIONS)) {
+      return replaceInChunks(
+        {
+          begin: (expected_revision, cell_count) => client.begin_lighting_extended_runtime_conditional_scene_replace({ expected_revision, cell_count }),
+          put: (transaction_id, offset, chunk) => client.put_lighting_extended_runtime_conditional_scene_chunk({ transaction_id, offset, cells: chunk }),
+          commit: (transaction_id) => client.commit_lighting_extended_runtime_conditional_scene_replace({ transaction_id }),
+          abort: (transaction_id) => client.abort_lighting_extended_runtime_conditional_scene_replace({ transaction_id }),
+        }, status.revision, cells.map(({ cell, connection, effects }) => ({ cell, connection, effects })), status.chunk_capacity,
       );
     }
     // Refuse rather than write a table the firmware would store without its

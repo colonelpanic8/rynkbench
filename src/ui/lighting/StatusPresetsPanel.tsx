@@ -29,7 +29,7 @@ import {
 } from "./statusPresets";
 import type { BarOrder, BarStyle, Glove80BarLayout } from "./statusPresets";
 import { layersInMask } from "./wakeLayers";
-import { RUNTIME_EFFECTS_CONDITIONS, hasLightingFeature } from "../../session/lighting-features";
+import { RUNTIME_EFFECTS_CONDITIONS, RUNTIME_LAYER_INDICATOR_CONDITIONS, hasLightingFeature } from "../../session/lighting-features";
 
 const selectClass =
   "mt-1 w-full rounded-md border border-line bg-raised px-2 py-1.5 text-[12px] text-ink";
@@ -97,6 +97,7 @@ export function StatusPresetsPanel({
 
   const nameOf = (n: number) => layerName(state.layerMetadata, n);
   const predicatesSupported = hasLightingFeature(bundle.lightingCaps, RUNTIME_EFFECTS_CONDITIONS);
+  const magicSupported = hasLightingFeature(bundle.lightingCaps, RUNTIME_LAYER_INDICATOR_CONDITIONS);
   const exactKeys = glove80ConnectionKeys(layer).map((preset) => ({
     preset,
     key: keyAt(bundle.model.keys, preset.row, preset.col),
@@ -257,7 +258,12 @@ export function StatusPresetsPanel({
         </div>
       )}
 
-      {stockMagicAvailable && predicatesSupported && <StockMagicLayerPanel layer={layer} />}
+      {stockMagicAvailable && magicSupported && <StockMagicLayerPanel layer={layer} />}
+      {stockMagicAvailable && !magicSupported && (
+        <p className="mt-2 text-[11px] leading-relaxed text-warn">
+          Update firmware to install the stock Magic layer with layer and lock indicators.
+        </p>
+      )}
 
       <div className="mt-3 rounded-lg border border-line-soft bg-well p-3">
         <div className="text-[12.5px] font-medium text-ink">Connection key</div>

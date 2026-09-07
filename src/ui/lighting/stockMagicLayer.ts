@@ -36,10 +36,20 @@ export const STOCK_RIGHT_BATTERY_KEYS = rowKeys(3, [37, 31, 25, 19, 13, 8]);
 export const STOCK_PROFILE_KEYS = [thumb(3), thumb(4), thumb(0), thumb(1)];
 export const STOCK_USB_KEY = thumb(5);
 
+export type LockIndicator = "caps_lock" | "num_lock" | "scroll_lock";
+
+/** Caps, num, and scroll lock on F3, F4, and F5. */
+export const STOCK_LOCK_KEYS: Array<IndicatorKey & { lock: LockIndicator }> = [
+  { row: 0, col: 2, led: 22, lock: "caps_lock" },
+  { row: 0, col: 3, led: 16, lock: "num_lock" },
+  { row: 0, col: 4, led: 10, lock: "scroll_lock" },
+];
+
 /** Every key the template lights, for checking a board against the stock LED map. */
 export function stockMagicIndicatorKeys(): IndicatorKey[] {
   return [
     ...STOCK_LAYER_KEYS,
+    ...STOCK_LOCK_KEYS,
     ...STOCK_LEFT_BATTERY_KEYS,
     ...STOCK_RIGHT_BATTERY_KEYS,
     ...STOCK_PROFILE_KEYS,
@@ -69,7 +79,9 @@ export function stockMagicLayerGrid(profiles: number): KeyAction[] {
   set(2, 2, light("RgbSai"));
   set(2, 3, light("RgbHui"));
   set(2, 4, light("BacklightUp"));
-  set(2, 5, light("RgbTog"));
+  // RGB_TOG turns all underglow off; on this firmware that is the output
+  // toggle, while RgbTog only flips the uniform background band.
+  set(2, 5, light("BacklightToggle"));
   set(3, 0, control("Bootloader"));
   set(3, 1, light("RgbSpd"));
   set(3, 2, light("RgbSad"));
@@ -105,6 +117,8 @@ function rule(layer: number, led: number, effect: LightingEffect): StatusRule {
     },
     connection: undefined,
     effects: undefined,
+    layers: undefined,
+    indicators: undefined,
   };
 }
 
@@ -174,16 +188,26 @@ function usbRules(layer: number, led: number): StatusRule[] {
 }
 
 /** The indicator rules for a Magic layer at `layer` on a board with
- *  `numLayers` layers and `profiles` BLE slots. A rule can watch one layer,
- *  so a layer indicator lights whenever its layer is active rather than only
- *  while Magic is held; the default layer is skipped because it always is. */
+ *  `numLayers` layers and `profiles` BLE slots. Every rule watches the Magic
+ *  layer; a layer indicator adds the shown layer through the layer-set
+ *  predicate, and a lock indicator adds the host's lock state. */
 export function stockMagicLayerRules(layer: number, numLayers: number, profiles: number): StatusRule[] {
   const rules: StatusRule[] = [];
   STOCK_LAYER_KEYS.slice(0, numLayers).forEach((key, shown) => {
-    if (shown === 0) return;
-    const entry = rule(shown, key.led, MAGENTA);
+    const entry = rule(layer, key.led, MAGENTA);
+    if (shown !== layer) entry.layers = { active: 2 ** shown, inactive: 0 };
     rules.push(entry);
   });
+  for (const key of STOCK_LOCK_KEYS) {
+    const entry = rule(layer, key.led, RED);
+    entry.indicators = {
+      num_lock: undefined,
+      caps_lock: undefined,
+      scroll_lock: undefined,
+      [key.lock]: true,
+    };
+    rules.push(entry);
+  }
   rules.push(...batteryRules(layer, 0, STOCK_LEFT_BATTERY_KEYS));
   rules.push(...batteryRules(layer, 1, STOCK_RIGHT_BATTERY_KEYS));
   STOCK_PROFILE_KEYS.slice(0, profiles).forEach((key, slot) =>

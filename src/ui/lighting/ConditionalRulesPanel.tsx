@@ -12,6 +12,7 @@
 import { lightingKeyLegend } from "./keyLegend";
 import { useMemo, useState } from "react";
 import type {
+  LightingIndicatorCondition,
   BleState,
   LightingActiveTransport,
   LightingChargeCondition,
@@ -38,7 +39,8 @@ import {
   rulesOnLayer,
 } from "./rules";
 import type { Rule, Rules } from "./rules";
-import { RUNTIME_EFFECTS_CONDITIONS, hasLightingFeature } from "../../session/lighting-features";
+import { RUNTIME_LAYER_INDICATOR_CONDITIONS, hasLightingFeature } from "../../session/lighting-features";
+import { maskHasLayer, setLayerInMask } from "./wakeLayers";
 
 const CHARGE_STATES: LightingChargeCondition[] = ["Any", "Charging", "Discharging", "Unknown"];
 const OUTPUT_MODES: LightingOutputMode[] = ["AlwaysOn", "AlwaysOff", "PoweredOnly"];
@@ -187,9 +189,22 @@ export function ConditionalRulesPanel() {
   const conditions = rule?.cell.conditions;
   const connection = rule?.connection;
   // Gate on the encoding bit, not on the connection bit: firmware advertising
-  // only RUNTIME_CONNECTION_CONDITIONS speaks an earlier extended cell that
-  // this build does not write.
-  const predicatesSupported = hasLightingFeature(bundle.lightingCaps, RUNTIME_EFFECTS_CONDITIONS);
+  // only the earlier predicate bits speaks a shorter extended cell that this
+  // build does not write.
+  const predicatesSupported = hasLightingFeature(bundle.lightingCaps, RUNTIME_LAYER_INDICATOR_CONDITIONS);
+  const layerSet = rule?.layers;
+  const setLayerSet = (target: Rule, next: { active: number; inactive: number }) => {
+    if (selected === null) return;
+    // No layer named is the same as no condition; collapse it so it reads honestly.
+    edit(selected, { ...target, layers: next.active === 0 && next.inactive === 0 ? undefined : next });
+  };
+  const indicators = rule?.indicators;
+  const setIndicators = (target: Rule, next: LightingIndicatorCondition) => {
+    if (selected === null) return;
+    const empty =
+      next.num_lock === undefined && next.caps_lock === undefined && next.scroll_lock === undefined;
+    edit(selected, { ...target, indicators: empty ? undefined : next });
+  };
 
   const setConnection = (target: Rule, next: LightingConnectionCondition) => {
     if (selected === null) return;
@@ -620,6 +635,111 @@ export function ConditionalRulesPanel() {
                     <option value="on">effects on</option>
                     <option value="off">effects off</option>
                   </select>
+                )}
+              </div>
+
+              {/* Layer-set condition: every layer marked active must be held
+                  and none marked inactive, on top of the single layer above. */}
+              <div className="flex flex-col gap-1.5 border-t border-line-soft pt-2">
+                <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+                  Other layers
+                  <input
+                    type="checkbox"
+                    checked={layerSet !== undefined}
+                    onChange={(e) =>
+                      edit(selected, {
+                        ...rule,
+                        layers: e.target.checked ? { active: 0, inactive: 0 } : undefined,
+                      })
+                    }
+                    className="accent-(--color-accent)"
+                  />
+                </label>
+                {layerSet !== undefined && (
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 pl-2">
+                    {Array.from({ length: Math.min(32, bundle.caps.num_layers) }, (_, n) => {
+                      const choice = maskHasLayer(layerSet.active, n)
+                        ? "active"
+                        : maskHasLayer(layerSet.inactive, n)
+                          ? "inactive"
+                          : "any";
+                      return (
+                        <label
+                          key={n}
+                          className="flex items-center justify-between gap-2 text-[12px] text-mute"
+                        >
+                          <span className="truncate">{nameOf(n)}</span>
+                          <select
+                            value={choice}
+                            onChange={(e) =>
+                              setLayerSet(rule, {
+                                active: setLayerInMask(layerSet.active, n, e.target.value === "active"),
+                                inactive: setLayerInMask(layerSet.inactive, n, e.target.value === "inactive"),
+                              })
+                            }
+                            className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                          >
+                            <option value="any">any</option>
+                            <option value="active">active</option>
+                            <option value="inactive">inactive</option>
+                          </select>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Lock-indicator condition: each named lock must match the
+                  state the host reports. */}
+              <div className="flex flex-col gap-1.5 border-t border-line-soft pt-2">
+                <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+                  Lock indicators
+                  <input
+                    type="checkbox"
+                    checked={indicators !== undefined}
+                    onChange={(e) =>
+                      edit(selected, {
+                        ...rule,
+                        indicators: e.target.checked
+                          ? { num_lock: undefined, caps_lock: true, scroll_lock: undefined }
+                          : undefined,
+                      })
+                    }
+                    className="accent-(--color-accent)"
+                  />
+                </label>
+                {indicators !== undefined && (
+                  <div className="flex flex-col gap-1.5 pl-2">
+                    {(
+                      [
+                        ["num_lock", "Num lock"],
+                        ["caps_lock", "Caps lock"],
+                        ["scroll_lock", "Scroll lock"],
+                      ] as const
+                    ).map(([lock, label]) => (
+                      <label
+                        key={lock}
+                        className="flex items-center justify-between gap-3 text-[12px] text-mute"
+                      >
+                        {label}
+                        <select
+                          value={indicators[lock] === undefined ? "any" : indicators[lock] ? "on" : "off"}
+                          onChange={(e) =>
+                            setIndicators(rule, {
+                              ...indicators,
+                              [lock]: e.target.value === "any" ? undefined : e.target.value === "on",
+                            })
+                          }
+                          className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                        >
+                          <option value="any">any</option>
+                          <option value="on">on</option>
+                          <option value="off">off</option>
+                        </select>
+                      </label>
+                    ))}
+                  </div>
                 )}
               </div>
 

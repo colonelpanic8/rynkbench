@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   EncoderAction,
   KeyAction,
-  LightingExtendedConditionalSceneCell,
+  LightingAdvancedConditionalSceneCell,
   LightingEffect,
   LightingExtensionParam,
   LightingSceneCell,
@@ -225,7 +225,7 @@ describe("per-target lighting drafts", () => {
 });
 
 describe("conditional rule tables", () => {
-  function rule(ledId: number, r: number): LightingExtendedConditionalSceneCell {
+  function rule(ledId: number, r: number): LightingAdvancedConditionalSceneCell {
     return {
       cell: {
         conditions: { layer: undefined, battery: undefined, output_mode: undefined },
@@ -234,6 +234,8 @@ describe("conditional rule tables", () => {
       },
       connection: undefined,
       effects: undefined,
+      layers: undefined,
+      indicators: undefined,
     };
   }
 
@@ -325,7 +327,7 @@ describe("Magic-layer policy", () => {
 });
 
 describe("verified status writes", () => {
-  const statusRule = (ledId: number, red: number): LightingExtendedConditionalSceneCell => ({
+  const statusRule = (ledId: number, red: number): LightingAdvancedConditionalSceneCell => ({
     cell: {
       conditions: { layer: undefined, battery: undefined, output_mode: undefined },
       led_id: ledId,
@@ -333,6 +335,8 @@ describe("verified status writes", () => {
     },
     connection: undefined,
     effects: undefined,
+    layers: undefined,
+    indicators: undefined,
   });
 
   it("does not report conditional success until device read-back matches", async () => {

@@ -82,14 +82,14 @@ describe("Glove80 presets", () => {
     }];
   });
 
-  function renderGlove80(name: string) {
+  function renderGlove80(name: string, features = (1 << 15) | (1 << 16)) {
     const value = {
       bundle: {
         caps: { num_cols: GLOVE80_COLS, num_layers: 6, num_split_peripherals: 1, num_ble_profiles: 4 },
         model: { name, keys: glove80Keys, zones: [] },
         runtimeConditionalStatus: { capacity: 100 },
         sceneStatus: { capacity: 100 },
-        lightingCaps: { features: 1 << 15 },
+        lightingCaps: { features },
       },
       state: {
         layers: Array.from({ length: 6 }, () => []),
@@ -115,6 +115,13 @@ describe("Glove80 presets", () => {
       </WorkbenchContext>,
     );
   }
+
+  it("keeps connection presets on older firmware while requiring an update for stock Magic", () => {
+    const html = renderGlove80("Glove80", 1 << 15);
+    expect(html).toContain("Install complete Glove80 setup");
+    expect(html).not.toContain("Install stock Magic layer");
+    expect(html).toContain("Update firmware to install the stock Magic layer");
+  });
 
   it("offers the stock Magic layer template only on a Glove80 with the stock LED map", () => {
     const html = renderGlove80("Glove80");

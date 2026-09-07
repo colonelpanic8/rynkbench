@@ -1,7 +1,7 @@
 import type {
   LightingConditionalSceneCell,
   LightingEffect,
-  LightingExtendedConditionalSceneCell,
+  LightingAdvancedConditionalSceneCell,
   LightingOutputModeState,
   LightingOverlayCell,
   LightingSceneCell,
@@ -64,7 +64,7 @@ export function previewActiveLayers(
  *  Previewing the *draft* makes the rules editor WYSIWYG before Apply. */
 export function conditionalPreviewCells(
   conditionalScenes: LightingConditionalSceneCell[],
-  runtimeConditionalDraft: LightingExtendedConditionalSceneCell[],
+  runtimeConditionalDraft: LightingAdvancedConditionalSceneCell[],
   preview: FirmwareLightingPreview,
 ): Map<number, LightingOverlayCell> {
   return firmwarePreviewCells([], conditionalScenes, runtimeConditionalDraft, preview);

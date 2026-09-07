@@ -4,7 +4,7 @@ import type {
   ConnectionType,
   LightingConditionalSceneCell,
   LightingEffect,
-  LightingExtendedConditionalSceneCell,
+  LightingAdvancedConditionalSceneCell,
   LightingOverlayCell,
   LightingOutputMode,
   LightingRuntimeConditionalSceneStatus,
@@ -34,6 +34,27 @@ export interface FirmwareLightingPreview {
    *  against its own bond table and does not publish it over Rynk, so this is
    *  normally absent and such rules preview as unsatisfiable. */
   bondedSlots?: ReadonlySet<number>;
+  /** The host's lock indicators, when known; absent, indicator rules are
+   *  unsatisfiable on the same grounds as `bondedSlots`. */
+  indicators?: { num_lock: boolean; caps_lock: boolean; scroll_lock: boolean };
+}
+
+/** Bit `layer` of a layer mask. Masks arrive as numbers, like `wake_layers`. */
+function maskHas(mask: number, layer: number): boolean {
+  return Math.floor(mask / 2 ** layer) % 2 === 1;
+}
+
+/** Every layer in `active` held and none in `inactive`, over all 32 bits. */
+function layersMatch(
+  condition: { active: number; inactive: number },
+  activeLayers: ReadonlySet<number>,
+): boolean {
+  for (let layer = 0; layer < 32; layer++) {
+    const held = activeLayers.has(layer);
+    if (maskHas(condition.active, layer) && !held) return false;
+    if (maskHas(condition.inactive, layer) && held) return false;
+  }
+  return true;
 }
 
 /** Mirror of `ConnectionStatus::usb_ready`: plugged and routable, whether or
@@ -56,12 +77,21 @@ function activeTransport(status: ConnectionStatus): ConnectionType | undefined {
  *  the same rule the firmware applies to a source that cannot see the state.
  *  Lighting a rule we cannot actually verify would be the worse error. */
 function connectionMatches(
-  cell: LightingExtendedConditionalSceneCell,
+  cell: LightingAdvancedConditionalSceneCell,
   preview: FirmwareLightingPreview,
 ): boolean {
   if (cell.effects !== undefined) {
     if (preview.effectsEnabled === undefined) return false;
     if (preview.effectsEnabled !== cell.effects.enabled) return false;
+  }
+  if (cell.layers !== undefined && !layersMatch(cell.layers, preview.activeLayers)) return false;
+  if (cell.indicators !== undefined) {
+    const actual = preview.indicators;
+    if (actual === undefined) return false;
+    for (const lock of ["num_lock", "caps_lock", "scroll_lock"] as const) {
+      const wanted = cell.indicators[lock];
+      if (wanted !== undefined && actual[lock] !== wanted) return false;
+    }
   }
   const condition = cell.connection;
   if (condition === undefined) return true;
@@ -107,7 +137,7 @@ export function conditionalRuleMatches(
 /** Whether a runtime rule matches: the base conditions plus the connection and
  *  effects predicates only the extended cell carries. */
 export function runtimeConditionalRuleMatches(
-  rule: LightingExtendedConditionalSceneCell,
+  rule: LightingAdvancedConditionalSceneCell,
   preview: FirmwareLightingPreview,
 ): boolean {
   return conditionalRuleMatches(rule.cell, preview) && connectionMatches(rule, preview);
@@ -119,7 +149,7 @@ export function runtimeConditionalRuleMatches(
 export function firmwarePreviewCells(
   layerScenes: LightingSceneCell[],
   conditionalScenes: LightingConditionalSceneCell[],
-  runtimeConditionalScenes: LightingExtendedConditionalSceneCell[],
+  runtimeConditionalScenes: LightingAdvancedConditionalSceneCell[],
   preview: FirmwareLightingPreview,
 ): Map<number, LightingOverlayCell> {
   const result = new Map<number, LightingOverlayCell>();
@@ -187,12 +217,34 @@ export function firmwareRuleGroups(
 /** Human summary of a runtime rule, including the predicates only the
  *  extended cell carries. */
 export function describeRuleConditions(
-  rule: LightingExtendedConditionalSceneCell,
+  rule: LightingAdvancedConditionalSceneCell,
   layerLabel?: (layer: number) => string,
 ): string {
   const parts: string[] = [];
   const base = describeConditions(rule.cell, layerLabel);
   if (base !== "always") parts.push(base);
+  const label = layerLabel ?? ((layer: number) => `L${layer}`);
+  if (rule.layers !== undefined) {
+    const named = (mask: number) =>
+      Array.from({ length: 32 }, (_, layer) => layer)
+        .filter((layer) => maskHas(mask, layer))
+        .map(label)
+        .join("+");
+    const active = named(rule.layers.active);
+    const inactive = named(rule.layers.inactive);
+    if (active) parts.push(`${active} active`);
+    if (inactive) parts.push(`${inactive} inactive`);
+  }
+  if (rule.indicators !== undefined) {
+    for (const [lock, name] of [
+      ["num_lock", "num lock"],
+      ["caps_lock", "caps lock"],
+      ["scroll_lock", "scroll lock"],
+    ] as const) {
+      const wanted = rule.indicators[lock];
+      if (wanted !== undefined) parts.push(`${name} ${wanted ? "on" : "off"}`);
+    }
+  }
   if (rule.effects !== undefined) {
     parts.push(rule.effects.enabled ? "effects on" : "effects off");
   }

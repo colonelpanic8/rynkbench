@@ -3,11 +3,12 @@ import type {
   ConnectionStatus,
   LightingConditionalSceneCell,
   LightingConnectionCondition,
-  LightingExtendedConditionalSceneCell,
+  LightingAdvancedConditionalSceneCell,
   LightingSceneCell,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import {
   conditionalRuleMatches,
+  describeRuleConditions,
   firmwarePreviewCells,
   firmwareRuleGroups,
   runtimeConditionalRuleMatches,
@@ -83,7 +84,7 @@ describe("firmware lighting rules", () => {
 });
 
 describe("runtime rule predicates", () => {
-  const base: LightingExtendedConditionalSceneCell = {
+  const base: LightingAdvancedConditionalSceneCell = {
     cell: {
       conditions: { layer: undefined, battery: undefined, output_mode: undefined },
       led_id: 7,
@@ -91,6 +92,8 @@ describe("runtime rule predicates", () => {
     },
     connection: undefined,
     effects: undefined,
+    layers: undefined,
+    indicators: undefined,
   };
   const connected: ConnectionStatus = {
     usb: "Configured",
@@ -102,6 +105,29 @@ describe("runtime rule predicates", () => {
     batteries: new Map(),
     outputMode: undefined,
   };
+
+  it("requires every layer in a set active and none of the excluded ones", () => {
+    const rule = { ...base, layers: { active: 0b101, inactive: 0b010 } };
+    const held = (...layers: number[]) => ({ ...preview, activeLayers: new Set(layers) });
+    expect(runtimeConditionalRuleMatches(rule, held(0, 2))).toBe(true);
+    expect(runtimeConditionalRuleMatches(rule, held(0, 2, 3))).toBe(true);
+    expect(runtimeConditionalRuleMatches(rule, held(0))).toBe(false);
+    expect(runtimeConditionalRuleMatches(rule, held(0, 1, 2))).toBe(false);
+    expect(describeRuleConditions(rule)).toBe("L0+L2 active + L1 inactive");
+  });
+
+  it("matches named lock indicators and treats unknown ones as unsatisfiable", () => {
+    const rule = { ...base, indicators: { num_lock: undefined, caps_lock: true, scroll_lock: false } };
+    const locks = (caps_lock: boolean, scroll_lock: boolean) => ({
+      ...preview,
+      indicators: { num_lock: true, caps_lock, scroll_lock },
+    });
+    expect(runtimeConditionalRuleMatches(rule, locks(true, false))).toBe(true);
+    expect(runtimeConditionalRuleMatches(rule, locks(false, false))).toBe(false);
+    expect(runtimeConditionalRuleMatches(rule, locks(true, true))).toBe(false);
+    expect(runtimeConditionalRuleMatches(rule, preview)).toBe(false);
+    expect(describeRuleConditions(rule)).toBe("caps lock on + scroll lock off");
+  });
 
   it("matches the effects state and treats an unknown one as unsatisfiable", () => {
     const rule = { ...base, effects: { enabled: true } };

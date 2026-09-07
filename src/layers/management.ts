@@ -7,7 +7,7 @@ import type {
   Fork,
   KeyAction,
   LightingConditionalSceneCell,
-  LightingExtendedConditionalSceneCell,
+  LightingAdvancedConditionalSceneCell,
   LightingSceneCell,
   Morse,
   PointingConfig,
@@ -26,7 +26,7 @@ export interface LayerRewriteSnapshot {
   behaviorOptions: BehaviorOptions | null;
   autoMouseLayers: AutoMouseLayerConfig[];
   scenes: LightingSceneCell[];
-  runtimeConditionalScenes: LightingExtendedConditionalSceneCell[];
+  runtimeConditionalScenes: LightingAdvancedConditionalSceneCell[];
   compiledScenes: LightingSceneCell[];
   compiledConditionalScenes: LightingConditionalSceneCell[];
   wakeLayers: number;

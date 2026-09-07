@@ -1,10 +1,10 @@
 import type {
   KeyAction,
   LightingEffect,
-  LightingExtendedConditionalSceneCell,
+  LightingAdvancedConditionalSceneCell,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 
-export type StatusRule = LightingExtendedConditionalSceneCell;
+export type StatusRule = LightingAdvancedConditionalSceneCell;
 
 /** How a bar colors itself as the level drops.
  *  - `bands`: each segment owns an equal band; the lowest lit segments turn
@@ -175,6 +175,8 @@ function rule(
     },
     connection: undefined,
     effects: undefined,
+    layers: undefined,
+    indicators: undefined,
   };
 }
 

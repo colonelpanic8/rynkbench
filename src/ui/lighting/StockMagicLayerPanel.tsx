@@ -64,15 +64,15 @@ export function StockMagicLayerPanel({ layer }: { layer: number }) {
         Every other key is unbound.
       </p>
       <p className="mt-1 text-[11px] leading-relaxed text-faint">
-        While the layer is active the left half goes dark: the number row shows active layers
-        in magenta, rows 3 and 4 fill green, yellow, or red with each half's battery, and the
-        profile and USB keys show lilac unpaired, red paired, green connected, and white when
-        carrying typing. The layer also wakes lighting while held.
+        While the layer is active the left half goes dark: the number row shows the layers
+        held alongside it in magenta, F3–F5 show caps, num, and scroll lock in red, rows 3 and
+        4 fill green, yellow, or red with each half's battery, and the profile and USB keys
+        show lilac unpaired, red paired, green connected, and white when carrying typing. The
+        layer wakes lighting and keeps its view visible for 20 seconds after release. Brightness controls also adjust the indicators.
       </p>
       <p className="mt-1 text-[10.5px] leading-relaxed text-faint">
-        Not reproduced: caps/num/scroll lock, output fallback, and clear-all-pairings, which
-        this firmware cannot express. A rule watches one layer, so layer indicators light
-        whenever their layer is active, not only while Magic is held.
+        Not reproduced: the output-fallback indicator and clear-all-pairings, which this
+        firmware cannot express.
       </p>
       {state.batchMode && (
         <p className="mt-2 text-[11px] text-warn">
