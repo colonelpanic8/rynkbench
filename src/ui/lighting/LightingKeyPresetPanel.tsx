@@ -4,16 +4,25 @@ import { Button } from "../kit";
 import { keyAddressLabel } from "../key-address";
 import { hasPendingConfigurationWrite, useWorkbench } from "../state";
 import { writeLightingKeyPreset, type LightingKeyKind } from "./lightingKeyPresets";
+import { KeyChoice } from "./KeyChoice";
+import { BATTERY_BAR_PICK, LIGHTING_KEY_PICK } from "./keyPick";
+import type { KeyPick } from "./keyPick";
 import { maskHasLayer } from "./wakeLayers";
 
 const RUNTIME_EFFECTS_CONDITIONS = 1 << 15;
 
 export function LightingKeyPresetPanel({
   selectedKey,
+  selectedKeys,
+  pick,
+  onPick,
   layer,
   onLayerChange,
 }: {
   selectedKey: KeyView | null;
+  selectedKeys: KeyView[];
+  pick: KeyPick | null;
+  onPick: (pick: KeyPick | null) => void;
   layer: number;
   onLayerChange(layer: number): void;
 }) {
@@ -47,6 +56,10 @@ export function LightingKeyPresetPanel({
         status.capacity,
       );
       setMessage(result.ok ? `Configured ${keyAddressLabel(selectedKey)} on layer ${layer}: action and status lighting.` : result.message);
+      if (result.ok) {
+        onPick(null);
+        dispatch({ type: "lightingSelect", leds: [] });
+      }
     } finally {
       installing.current = false;
       dispatch({ type: "lightingBusy", busy: false });
@@ -58,8 +71,19 @@ export function LightingKeyPresetPanel({
     <div className="mt-3 rounded-lg border border-line-soft bg-well p-3">
       <div className="text-[12.5px] font-medium text-ink">Lighting control key</div>
       <p className="mt-1 text-[11px] leading-relaxed text-faint">
-        Select one key, then install its behavior and status colors together.
+        Pick one key, then install its behavior and status colors together.
       </p>
+      <KeyChoice
+        pick={LIGHTING_KEY_PICK}
+        active={pick === LIGHTING_KEY_PICK}
+        keys={selectedKeys}
+        problem={
+          selectedKeys.length > 1 && pick !== BATTERY_BAR_PICK
+            ? `${selectedKeys.length} keys are chosen; a lighting control key needs exactly one.`
+            : undefined
+        }
+        onPick={onPick}
+      />
       <div className="mt-2 grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-2">
         <label className="text-[11px] text-faint">
           Preset
@@ -98,7 +122,7 @@ export function LightingKeyPresetPanel({
       <Button variant="outline" className="mt-2 w-full"
         disabled={!selectedKey || !supported || busy || state.batchMode || status.capacity === 0}
         onClick={install}>
-        {selectedKey ? `Configure ${keyAddressLabel(selectedKey)} · action + lighting` : "Select one key"}
+        {selectedKey ? `Configure ${keyAddressLabel(selectedKey)} · action + lighting` : "Choose a key first"}
       </Button>
       {message && <p role="status" className="mt-2 text-[11px] leading-relaxed text-mute">{message}</p>}
     </div>

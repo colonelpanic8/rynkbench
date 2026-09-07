@@ -2,6 +2,9 @@ import { useMemo, useState } from "react";
 import type { KeyView } from "../../model/keyboard";
 import { Button, SectionLabel } from "../kit";
 import { keyAddressLabel, keyHoverTitle } from "../key-address";
+import { KeyChoice } from "./KeyChoice";
+import { BATTERY_BAR_PICK, CONNECTION_KEY_PICK } from "./keyPick";
+import type { KeyPick } from "./keyPick";
 import { layerName } from "../layer-names";
 import { useWorkbench } from "../state";
 import { LightingKeyPresetPanel } from "./LightingKeyPresetPanel";
@@ -34,7 +37,13 @@ function keyAt(keys: KeyView[], row: number, col: number): KeyView | undefined {
   return keys.find((key) => key.row === row && key.col === col);
 }
 
-export function StatusPresetsPanel() {
+export function StatusPresetsPanel({
+  pick,
+  onPick,
+}: {
+  pick: KeyPick | null;
+  onPick: (pick: KeyPick | null) => void;
+}) {
   const { bundle, state, dispatch, io } = useWorkbench();
   const status = bundle.runtimeConditionalStatus;
   const numLayers = bundle.caps.num_layers;
@@ -151,12 +160,16 @@ export function StatusPresetsPanel() {
       setMessage(`Installation failed: ${keyResult.message}`);
       return;
     }
-    await applyRules(
+    const ok = await applyRules(
       rules,
       kind === "ble"
         ? `Bound and verified Bluetooth slot ${slot + 1} with status lighting on ${nameOf(layer)}.`
         : `Bound and verified USB output with status lighting on ${nameOf(layer)}.`,
     );
+    if (ok) {
+      onPick(null);
+      dispatch({ type: "lightingSelect", leds: [] });
+    }
   };
 
   const installBatteryBar = async () => {
@@ -173,6 +186,7 @@ export function StatusPresetsPanel() {
         `Installed and verified a ${selectedBar.length}-segment battery bar for node ${node} on ${nameOf(layer)}.`,
       )
     ) {
+      onPick(null);
       dispatch({ type: "lightingSelect", leds: [] });
     }
   };
@@ -237,13 +251,31 @@ export function StatusPresetsPanel() {
         </div>
       )}
 
-      <LightingKeyPresetPanel selectedKey={selectedKey} layer={layer} onLayerChange={setChosenLayer} />
+      <LightingKeyPresetPanel
+        selectedKey={selectedKey}
+        selectedKeys={selectedKeys}
+        pick={pick}
+        onPick={onPick}
+        layer={layer}
+        onLayerChange={setChosenLayer}
+      />
 
       <div className="mt-3 rounded-lg border border-line-soft bg-well p-3">
         <div className="text-[12.5px] font-medium text-ink">Connection key</div>
         <p className="mt-1 text-[11px] leading-relaxed text-faint">
-          Use Select above and choose one lit key on the board, then bind its action and indicator.
+          Pick one lit key, then bind its action and status indicator together.
         </p>
+        <KeyChoice
+          pick={CONNECTION_KEY_PICK}
+          active={pick === CONNECTION_KEY_PICK}
+          keys={selectedKeys}
+          problem={
+            selectedKeys.length > 1 && pick !== BATTERY_BAR_PICK
+              ? `${selectedKeys.length} keys are chosen; a connection key needs exactly one.`
+              : undefined
+          }
+          onPick={onPick}
+        />
         <div className="mt-2 grid grid-cols-2 gap-2">
           <label className="text-[11px] text-faint">
             Action
@@ -278,16 +310,30 @@ export function StatusPresetsPanel() {
           disabled={!predicatesSupported || selectedKey === null || state.lightingBusy}
           onClick={installConnectionKey}
         >
-          {selectedKey ? `Configure ${keyAddressLabel(selectedKey)}` : "Select one key"}
+          {selectedKey ? `Configure ${keyAddressLabel(selectedKey)}` : "Choose a key first"}
         </Button>
       </div>
 
       <div className="mt-2 rounded-lg border border-line-soft bg-well p-3">
         <div className="text-[12.5px] font-medium text-ink">Battery bar</div>
         <p className="mt-1 text-[11px] leading-relaxed text-faint">
-          Select {MIN_BAR_SEGMENTS}–{MAX_BAR_SEGMENTS} keys in a column or a row. Along the fill
+          Pick {MIN_BAR_SEGMENTS}–{MAX_BAR_SEGMENTS} keys in a column or a row. Along the fill
           direction each lights at a rising level; charging turns the lit segments blue.
         </p>
+        <KeyChoice
+          pick={BATTERY_BAR_PICK}
+          active={pick === BATTERY_BAR_PICK}
+          keys={barPreview ?? selectedKeys}
+          chip={(key, index) =>
+            barLevels ? `${keyAddressLabel(key)} ≥${barLevels[index]}%` : keyAddressLabel(key)
+          }
+          problem={
+            selectedKeys.length > 0 && !barSized && pick !== CONNECTION_KEY_PICK
+              ? `${selectedKeys.length} chosen; a bar needs ${MIN_BAR_SEGMENTS}–${MAX_BAR_SEGMENTS} keys.`
+              : undefined
+          }
+          onPick={onPick}
+        />
         <div className="mt-2 grid grid-cols-2 gap-2">
           <label className="text-[11px] text-faint">
             Battery node
@@ -331,16 +377,6 @@ export function StatusPresetsPanel() {
             </select>
           </label>
         </div>
-        {barPreview && barLevels && (
-          <p className="mt-2 text-[11px] leading-relaxed text-mute">
-            {barPreview.map((key, index) => (
-              <span key={key.ledId} title={keyHoverTitle(key)}>
-                {index > 0 && " · "}
-                {keyAddressLabel(key)} ≥{barLevels[index]}%
-              </span>
-            ))}
-          </p>
-        )}
         <Button
           variant="outline"
           className="mt-2 w-full"
@@ -349,7 +385,7 @@ export function StatusPresetsPanel() {
         >
           {selectedBar
             ? `Install ${selectedBar.length}-segment node ${node} bar`
-            : `Select ${MIN_BAR_SEGMENTS}–${MAX_BAR_SEGMENTS} keys (${selectedKeys.length})`}
+            : `Choose ${MIN_BAR_SEGMENTS}–${MAX_BAR_SEGMENTS} keys first`}
         </Button>
       </div>
 

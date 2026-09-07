@@ -20,6 +20,7 @@ import { FirmwareRulesPanel } from "./FirmwareRulesPanel";
 import { LightingTargets } from "./LightingTargets";
 import { ConditionalRulesPanel } from "./ConditionalRulesPanel";
 import { StatusPresetsPanel } from "./StatusPresetsPanel";
+import type { KeyPick } from "./keyPick";
 import { LayerPresets } from "./LayerPresets";
 import type { Hsv } from "../color";
 import { cssEmissiveRgb, cssRgb, hsvToRgb } from "../color";
@@ -48,6 +49,7 @@ interface Brush {
   ttlMs: number;
 }
 
+
 const DEFAULT_BRUSH: Brush = {
   mode: "paint",
   hsv: { h: 195, s: 0.85, v: 1 },
@@ -68,8 +70,19 @@ function brushCell(brush: Brush, ledId: number, allowTtl: boolean): LightingOver
 export function LightingMode() {
   const { bundle, state, dispatch, io } = useWorkbench();
   const [brush, setBrush] = useState<Brush>(DEFAULT_BRUSH);
+  const [pick, setPick] = useState<KeyPick | null>(null);
+  const canvasMode = pick ? "select" : brush.mode;
   const painting = useRef(false);
   const strokeMode = useRef<"add" | "remove">("add");
+
+  useEffect(() => {
+    if (!pick) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setPick(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pick]);
 
   useEffect(() => {
     const up = () => {
@@ -187,7 +200,9 @@ export function LightingMode() {
 
   const stampKey = (key: KeyView) => {
     if (key.ledId === undefined) return;
-    if (brush.mode === "select") {
+    if (pick?.single) {
+      dispatch({ type: "lightingSelect", leds: [key.ledId] });
+    } else if (canvasMode === "select") {
       // A stroke keeps whichever polarity its first key implied, so dragging
       // back over already-visited keys can't flip them off again.
       dispatch({ type: "lightingSelect", leds: [key.ledId], mode: strokeMode.current });
@@ -284,6 +299,24 @@ export function LightingMode() {
             </span>
           )}
         </div>
+        {pick && (
+          <div className="flex items-center gap-3 rounded-lg border border-accent-deep/60 bg-accent-dim/20 px-3 py-2 text-[12.5px] text-ink">
+            <MarqueeIcon size={14} />
+            <span className="flex-1">
+              {pick.single
+                ? `Click one key on the board for the ${pick.label}.`
+                : `Click or drag across keys on the board for the ${pick.label}.`}
+              {state.lightingSelection.length > 0 && (
+                <span className="tnum text-mute">
+                  {" "}· {state.lightingSelection.length} chosen
+                </span>
+              )}
+            </span>
+            <Button variant="ghost" className="py-0.5" onClick={() => setPick(null)}>
+              Done
+            </Button>
+          </div>
+        )}
         <BoardWell model={bundle.model}>
           <KeyboardCanvas
             model={bundle.model}
@@ -291,8 +324,8 @@ export function LightingMode() {
             decorFor={decorFor}
             onKeyPointerDown={(key, ev) => {
               ev.preventDefault();
-              painting.current = true;
-              if (brush.mode === "select")
+              painting.current = !pick?.single;
+              if (canvasMode === "select")
                 strokeMode.current =
                   key.ledId !== undefined && selectionSet.has(key.ledId) ? "remove" : "add";
               stampKey(key);
@@ -350,10 +383,17 @@ export function LightingMode() {
                   ),
                 },
               ]}
-              value={brush.mode}
-              onChange={(mode) => setBrush({ ...brush, mode })}
+              value={canvasMode}
+              onChange={(mode) => {
+                setPick(null);
+                setBrush({ ...brush, mode });
+              }}
             />
-            {brush.mode === "select" && (
+            {pick ? (
+              <p className="mt-1.5 text-[11.5px] leading-relaxed text-accent">
+                Choosing keys for the {pick.label} — the board selects until you press Done.
+              </p>
+            ) : brush.mode === "select" && (
               <p className="mt-1.5 text-[11.5px] leading-relaxed text-faint">
                 Drag across keys to select them, then paint or erase the whole selection at once.
               </p>
@@ -416,7 +456,7 @@ export function LightingMode() {
                       key={zone.id}
                       type="button"
                       title={
-                        brush.mode === "select"
+                        canvasMode === "select"
                           ? `${selected ? "Remove" : "Add"} ${zone.name} ${
                               selected ? "from" : "to"
                             } the selection`
@@ -430,7 +470,7 @@ export function LightingMode() {
                         if (members.length === 0) return;
                         // The select brush accumulates zones instead of
                         // painting, so several can be combined before a stamp.
-                        if (brush.mode === "select") {
+                        if (canvasMode === "select") {
                           dispatch({
                             type: "lightingSelect",
                             leds: members,
@@ -472,7 +512,7 @@ export function LightingMode() {
                 {state.lightingSelection.length === 1 ? "" : "s"} selected
               </p>
               <div className="mt-2 flex items-center gap-2">
-                {brush.mode === "select" ? (
+                {canvasMode === "select" ? (
                   <>
                     <Button variant="outline" className="flex-1" onClick={() => paintSelection()}>
                       Paint
@@ -508,7 +548,7 @@ export function LightingMode() {
           {bundle.runtimeConditionalStatus && (
             <>
               <div className="border-t border-line-soft pt-4">
-                <StatusPresetsPanel />
+                <StatusPresetsPanel pick={pick} onPick={setPick} />
               </div>
               <div className="border-t border-line-soft pt-4">
                 <ConditionalRulesPanel />
