@@ -123,6 +123,27 @@ transparent fallthrough to the default layer); Overlay follows the live layers.
   six-segment bars across the left half on rows 2 and 3. Rules already installed on
   another layer can be re-pointed in bulk with **Move rules between layers**
   under the Conditional rules list; key bindings stay where they are.
+- **The MoErgo stock Magic layer is a one-click template.** On a Glove80,
+  Status setup also offers **MoErgo stock Magic layer**, which rebuilds the
+  chosen layer as the factory ZMK Magic layer: Bluetooth profiles 1–4 on T4,
+  T5, T1, and T2 (RMK's slot-select actions, which also prefer Bluetooth
+  output), USB output on T6, RGB speed/saturation/hue/brightness and
+  toggle/effect keys on the Q–T and A–G rows, bootloader and reset on each
+  half's outer keys, forget-active-pairing on F1, and every other key
+  unbound. It installs the stock indicator map from MoErgo's firmware on the
+  same layer: the left half goes dark, the number row shows active layers in
+  magenta, rows 3 and 4 fill green/yellow/red with the left and right battery
+  (all green while charging), and the profile and USB keys show lilac
+  unpaired, red paired-but-idle, green connected, and white while carrying
+  typing. The layer is designated a Magic layer so it wakes lighting while
+  held. Unchanged keys are skipped, the template's own rules and the layer's
+  scene are replaced on repeat runs, and rule and scene capacity are checked
+  before anything is written. Not reproduced, because the firmware has no
+  matching condition or action: caps/num/scroll lock, the output-fallback
+  indicator, and clear-all-pairings. A rule can watch only one layer, so
+  layer indicators light whenever their layer is active rather than only
+  while Magic is held; the default layer's indicator is omitted for that
+  reason.
 - **Lighting control key presets pair behavior and colors.** In Lighting →
   Status setup, select one key and choose its layer under **Lighting control
   key**. **Cycle lighting policy** installs the output-mode action and

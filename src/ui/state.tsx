@@ -1365,9 +1365,9 @@ export interface WorkbenchIo {
   refreshLighting(): void;
   setLightingState(state: LightingMutableState): void;
   /** Replace the on-device scene table (only when scenes are supported). */
-  applyScenes(cells: LightingSceneCell[]): void;
+  applyScenes(cells: LightingSceneCell[]): Promise<IoWriteResult>;
   setScenePolicy(policy: LightingLayerPolicy): void;
-  setWakeLayers(layers: number): void;
+  setWakeLayers(layers: number): Promise<IoWriteResult>;
   /** Atomically replace the mutable conditional table with this exact order
    *  (only when the firmware has such a table). */
   applyConditionalScenes(
@@ -2053,9 +2053,16 @@ export function makeIo(
     },
     applyScenes(cells) {
       dispatch({ type: "lightingBusy", busy: true, error: null });
-      session.lighting.scenes.replaceScenes(cells).then(
-        (lightingState) => dispatch({ type: "scenesApplied", state: lightingState, cells }),
-        (err) => dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
+      return session.lighting.scenes.replaceScenes(cells).then(
+        (lightingState) => {
+          dispatch({ type: "scenesApplied", state: lightingState, cells });
+          return { ok: true } as const;
+        },
+        (err) => {
+          const message = errorMessage(err);
+          dispatch({ type: "lightingBusy", busy: false, error: message });
+          return { ok: false, message } as const;
+        },
       );
     },
     applyConditionalScenes(cells) {
@@ -2086,9 +2093,16 @@ export function makeIo(
     },
     setWakeLayers(layers) {
       dispatch({ type: "lightingBusy", busy: true, error: null });
-      session.lighting.setWakeLayers(layers).then(
-        (outputMode) => dispatch({ type: "wakeLayersSet", outputMode }),
-        (err) => dispatch({ type: "lightingBusy", busy: false, error: errorMessage(err) }),
+      return session.lighting.setWakeLayers(layers).then(
+        (outputMode) => {
+          dispatch({ type: "wakeLayersSet", outputMode });
+          return { ok: true } as const;
+        },
+        (err) => {
+          const message = errorMessage(err);
+          dispatch({ type: "lightingBusy", busy: false, error: message });
+          return { ok: false, message } as const;
+        },
       );
     },
     setExtensionState(extension, params = [], overlay) {

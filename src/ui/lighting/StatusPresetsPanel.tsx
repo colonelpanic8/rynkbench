@@ -8,6 +8,8 @@ import type { KeyPick } from "./keyPick";
 import { layerName } from "../layer-names";
 import { useWorkbench } from "../state";
 import { LightingKeyPresetPanel } from "./LightingKeyPresetPanel";
+import { StockMagicLayerPanel } from "./StockMagicLayerPanel";
+import { stockMagicIndicatorKeys } from "./stockMagicLayer";
 import {
   BAR_ORDERS,
   BAR_STYLES,
@@ -106,6 +108,11 @@ export function StatusPresetsPanel({
     bundle.caps.num_split_peripherals > 0 &&
     bundle.caps.num_ble_profiles >= 3 &&
     exactKeys.every(({ preset, key }) => key?.ledId === preset.led);
+  const stockMagicAvailable =
+    glove80Available &&
+    stockMagicIndicatorKeys().every(
+      (indicator) => keyAt(bundle.model.keys, indicator.row, indicator.col)?.ledId === indicator.led,
+    );
 
   const applyRules = async (rules: typeof state.runtimeConditionalDraft, success: string) => {
     if (rules.length > status.capacity) {
@@ -250,6 +257,8 @@ export function StatusPresetsPanel({
           </Button>
         </div>
       )}
+
+      {stockMagicAvailable && predicatesSupported && <StockMagicLayerPanel layer={layer} />}
 
       <LightingKeyPresetPanel
         selectedKey={selectedKey}
