@@ -262,8 +262,19 @@ nix build                     # result/ contains the deployable site
 ```
 
 The flake follows the fork's `assembled` branch, while `flake.lock` pins the exact
-commit used by `moergo-rmk` for reproducible builds. Update it with
-`nix flake update rmk`.
+commit used by `moergo-rmk` for reproducible builds. Update both source inputs
+with a fresh fetch cache:
+
+```bash
+XDG_CACHE_HOME="$(mktemp -d)" nix flake update rmk moergo-rmk
+```
+
+MoErgo contains submodules. Nix can reuse a local checkout's cached tree for a
+GitHub archive, even though only the archive includes empty submodule
+directories ([Nix #13698](https://github.com/NixOS/nix/issues/13698)). A fresh
+cache keeps the lock hash reproducible on CI and other machines. After a pin
+change, refresh `nix/rynk-wasm-Cargo.lock` as needed and run `just check` and
+`just nix-check`.
 
 ## License
 
