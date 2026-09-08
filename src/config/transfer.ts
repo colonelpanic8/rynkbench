@@ -519,7 +519,11 @@ async function writeLighting(
     applied.push(`${desired.scenes.length} scene cell${desired.scenes.length === 1 ? "" : "s"}`);
   }
 
-  const rules = desired.conditional_scenes;
+  const rules = desired.conditional_scenes?.map((cell) => ({
+    layers: undefined,
+    indicators: undefined,
+    ...cell,
+  }));
   if (rules !== undefined && !same(rules, state.runtimeConditionalScenes)) {
     const lightingState = await session.lighting.conditionalScenes.replace(rules);
     dispatch({ type: "conditionalApplied", state: lightingState, cells: rules });

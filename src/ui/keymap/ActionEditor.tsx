@@ -388,14 +388,12 @@ const SYSTEM_ACTIONS: Array<{
   hint: string;
   danger?: boolean;
 }> = [
-  { id: "OutputAuto", label: "Output · Auto", hint: "Route typing over USB when present, else BLE" },
-  { id: "OutputUsb", label: "Output · USB", hint: "Force typing over USB" },
-  { id: "OutputBluetooth", label: "Output · Bluetooth", hint: "Force typing over BLE" },
+  { id: "OutputUsb", label: "Output · USB", hint: "Prefer typing over USB" },
+  { id: "OutputBluetooth", label: "Output · Bluetooth", hint: "Prefer typing over BLE" },
   { id: "ComboToggle", label: "Combos · toggle", hint: "Enable/disable combo processing" },
   { id: "ComboOn", label: "Combos · on", hint: "Enable combo processing" },
   { id: "ComboOff", label: "Combos · off", hint: "Disable combo processing" },
   { id: "CapsWordToggle", label: "Caps Word", hint: "Capitalize until the next word break" },
-  { id: "DebugToggle", label: "Debug toggle", hint: "Toggle firmware debug output" },
   { id: "Bootloader", label: "Bootloader", hint: "Reboot into flashing mode", danger: true },
   { id: "Reboot", label: "Reboot", hint: "Restart the keyboard", danger: true },
   {

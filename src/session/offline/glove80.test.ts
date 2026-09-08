@@ -51,7 +51,15 @@ describe("offline Glove80 workspace", () => {
         overlay: undefined,
         effect_params: [{ effect: 5, index: 0, value: 11 }],
         scenes: [],
-        conditional_scenes: [],
+        conditional_scenes: [{
+          cell: {
+            led_id: 0,
+            effect: { Solid: { color: { r: 255, g: 0, b: 0 } } },
+            conditions: { layer: { layer: 1, active: true }, battery: undefined, output_mode: "PoweredOnly" },
+          },
+          connection: undefined,
+          effects: { enabled: true },
+        }],
       },
       behaviors: {
         config: undefined,
@@ -95,6 +103,9 @@ describe("offline Glove80 workspace", () => {
 
     const session = openOfflineGlove80(snapshot);
     expect(session.kind).toBe("offline");
+    expect(await session.lighting.conditionalScenes.read()).toStrictEqual([
+      { ...snapshot.lighting!.conditional_scenes![0], layers: undefined, indicators: undefined },
+    ]);
     // The document chose no overlay effect; the workspace still offers the
     // surface, which `overlay: undefined` on the spec would have withdrawn.
     expect(await session.lighting.extensionLayers()).toMatchObject({ overlay: undefined });

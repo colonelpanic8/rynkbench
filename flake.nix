@@ -49,9 +49,6 @@
 
           cargoLock = {
             lockFile = ./nix/rynk-wasm-Cargo.lock;
-            outputHashes = {
-              "trouble-host-0.7.0" = "sha256-QBaTrDmBCLNN+lbJBBcvJbD2hq0Bx1fuFC4p7onSiRw=";
-            };
           };
           nativeBuildInputs = [
             pkgs.binaryen
@@ -154,7 +151,7 @@
 
           buildPhase = ''
             runHook preBuild
-            npm exec tsc -b
+            npm exec -- tsc -b
             npm exec vite build
             runHook postBuild
           '';

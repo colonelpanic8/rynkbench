@@ -406,7 +406,7 @@ const LIVE_MORSE = [
   {
     profile: {
       unilateral_tap: true,
-      opposite_hand_hold: undefined,
+      opposite_hand_hold: false,
       enable_flow_tap: undefined,
       mode: "Normal" as const,
       hold_timeout_ms: 210,

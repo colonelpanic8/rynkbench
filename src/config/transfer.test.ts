@@ -1,8 +1,12 @@
 import { readFileSync } from "node:fs";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { initSync } from "../vendor/moergo-config-wasm/moergo_config_wasm";
 import { importDocument } from "./transfer";
 import type { ExtensionCatalog } from "./document";
+import { renderDocument, snapshotFromState } from "./document";
+import { offlineGlove80Catalog, openOfflineGlove80 } from "../session/offline/glove80";
+import { openBundle } from "../ui/bundle";
+import { initialWorkbenchState } from "../ui/state";
 import type { RynkSession, LayerMetadata } from "../session/types";
 import type { ConnectedBundle, WorkbenchAction, WorkbenchState } from "../ui/state";
 import type { PointingConfig } from "../vendor/rynk-wasm/rynk_wasm";
@@ -270,5 +274,43 @@ describe("importDocument pointing configuration", () => {
     expect(h.writes).toHaveLength(1);
     expect(h.writes[0]).toMatchObject({ revision: 5 });
     expect(result.applied).toContain("pointing configuration");
+  });
+});
+
+
+describe("importDocument conditional rules", () => {
+  it("widens document rules for the session and skips an unchanged reimport", async () => {
+    const session = openOfflineGlove80();
+    try {
+      const bundle = await openBundle(session);
+      const state = initialWorkbenchState(bundle);
+      const snapshot = snapshotFromState(state);
+      const rule = {
+        cell: {
+          led_id: 0,
+          effect: { Solid: { color: { r: 255, g: 0, b: 0 } } },
+          conditions: { layer: { layer: 0, active: true }, battery: undefined, output_mode: undefined },
+        },
+        connection: undefined,
+        effects: { enabled: true },
+      };
+      snapshot.lighting!.conditional_scenes = [rule];
+      const catalog = offlineGlove80Catalog();
+      const text = renderDocument(snapshot, catalog, "toml");
+      const replace = vi.spyOn(session.lighting.conditionalScenes, "replace");
+      const dispatch = vi.fn();
+      await importDocument({ text, session, bundle, state, dispatch, catalog });
+      expect(replace).toHaveBeenCalledExactlyOnceWith([
+        { ...rule, layers: undefined, indicators: undefined },
+      ]);
+      replace.mockClear();
+      const updated = await openBundle(session);
+      await importDocument({
+        text, session, bundle: updated, state: initialWorkbenchState(updated), dispatch, catalog,
+      });
+      expect(replace).not.toHaveBeenCalled();
+    } finally {
+      await session.close();
+    }
   });
 });

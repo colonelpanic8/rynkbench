@@ -108,7 +108,11 @@ export function offlineGlove80Board(snapshot?: RuntimeSnapshot): BoardSpec {
     lightingControls: { output_toggle_user_action: undefined, wake_layers: wakeLayers },
     runtimeConditionalCapacity: Math.max(64, lighting?.conditional_scenes?.length ?? 0),
     runtimeConditionalPredicates: true,
-    seedRuntimeConditionalScenes: structuredClone(lighting?.conditional_scenes ?? []),
+    seedRuntimeConditionalScenes: structuredClone(lighting?.conditional_scenes ?? []).map((cell) => ({
+      layers: undefined,
+      indicators: undefined,
+      ...cell,
+    })),
     lightingOutputMode: {
       ...structuredClone(glove80Board.lightingOutputMode!),
       mode: lighting?.output_mode ?? "PoweredOnly",

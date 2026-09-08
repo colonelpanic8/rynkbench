@@ -45,7 +45,7 @@ jobs:
         run: npm run wasm
 
       - name: Typecheck
-        run: npm exec tsc -b
+        run: npm exec -- tsc -b
 
       - name: Lint
         run: npm run lint

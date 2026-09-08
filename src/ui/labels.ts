@@ -209,9 +209,7 @@ const LIGHT_LABELS: Record<string, string> = {
 const CONTROL_LABELS: Record<string, string> = {
   Bootloader: "Boot",
   Reboot: "Reset",
-  DebugToggle: "Debug",
   ClearEeprom: "ClrEE",
-  OutputAuto: "OutAuto",
   OutputUsb: "OutUSB",
   OutputBluetooth: "OutBLE",
   ComboOn: "CmbOn",
