@@ -201,8 +201,12 @@ export function StatusPresetsPanel({
     <div>
       <SectionLabel>Status setup</SectionLabel>
       <p className="mt-1 text-[11.5px] leading-relaxed text-faint">
-        Bind key actions and install their ordered status-light rules together. Presets
+        Bind connection actions and install their ordered status-light rules together. Presets
         replace matching rules on the chosen keys, so running them again is safe.
+      </p>
+      <p className="mt-1 text-[11px] leading-relaxed text-faint">
+        For a lighting toggle key, select the key in Keymap and pick a preset on its Lighting
+        tab.
       </p>
 
       <label className="mt-2 block text-[11px] text-faint">

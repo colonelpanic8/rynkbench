@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { firmwarePreviewCells } from "./firmwareRules";
-import { lightingKeyAction, lightingKeyRules, replaceLightingKeyRules, writeLightingKeyPreset } from "./lightingKeyPresets";
+import { installedLightingKeyKind, lightingKeyAction, lightingKeyRules, replaceLightingKeyRules, writeLightingKeyPreset } from "./lightingKeyPresets";
 import type { LightingKeyPreset } from "./lightingKeyPresets";
 import { usbStatusRules } from "./statusPresets";
 
@@ -78,5 +78,17 @@ describe("lighting control key presets", () => {
     };
     const result = await writeLightingKeyPreset(writer, [], preset, 3);
     expect(result).toMatchObject({ ok: false, message: expect.stringContaining("key action was written") });
+  });
+});
+
+describe("installedLightingKeyKind", () => {
+  it("reports the preset whose rules sit on the key and layer", () => {
+    const preset = { kind: "effects" as const, layer: 2, row: 1, col: 1, led: 9 };
+    const rules = replaceLightingKeyRules([], preset);
+    expect(installedLightingKeyKind(rules, 9, 2)).toBe("effects");
+    expect(installedLightingKeyKind(rules, 9, 1)).toBeNull();
+    expect(installedLightingKeyKind(rules, 8, 2)).toBeNull();
+    const cycled = replaceLightingKeyRules(rules, { ...preset, kind: "output-mode" });
+    expect(installedLightingKeyKind(cycled, 9, 2)).toBe("output-mode");
   });
 });

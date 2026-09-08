@@ -1,11 +1,17 @@
 import { useRef, useState } from "react";
 import type { KeyView } from "../../model/keyboard";
+import type { KeyAction } from "../../vendor/rynk-wasm/rynk_wasm";
 import { SectionLabel, cx } from "../kit";
 import { keyAddressLabel } from "../key-address";
 import { layerName } from "../layer-names";
 import { hasPendingConfigurationWrite, useWorkbench } from "../state";
 import { RUNTIME_LAYER_INDICATOR_CONDITIONS, hasLightingFeature } from "../../session/lighting-features";
-import { writeLightingKeyPreset, type LightingKeyKind } from "./lightingKeyPresets";
+import {
+  installedLightingKeyKind,
+  lightingKeyAction,
+  writeLightingKeyPreset,
+  type LightingKeyKind,
+} from "./lightingKeyPresets";
 import { maskHasLayer } from "./wakeLayers";
 
 const PRESETS: Array<{ kind: LightingKeyKind; label: string; hint: string }> = [
@@ -25,7 +31,15 @@ const PRESETS: Array<{ kind: LightingKeyKind; label: string; hint: string }> = [
  * Bind a lighting control action to the inspected key and install the
  * conditional rules that show its state on that key, in one step.
  */
-export function LightingKeyPresetPanel({ layer, target }: { layer: number; target: KeyView }) {
+export function LightingKeyPresetPanel({
+  layer,
+  target,
+  current,
+}: {
+  layer: number;
+  target: KeyView;
+  current: KeyAction;
+}) {
   const { bundle, state, io, dispatch } = useWorkbench();
   const [message, setMessage] = useState<string | null>(null);
   const installing = useRef(false);
@@ -72,13 +86,16 @@ export function LightingKeyPresetPanel({ layer, target }: { layer: number; targe
   };
 
   const blocked = state.batchMode || busy || status.capacity === 0;
+  const rulesKind = installedLightingKeyKind(state.runtimeConditionalDraft, led, layer);
+  const installed = (kind: LightingKeyKind) =>
+    rulesKind === kind && JSON.stringify(current) === JSON.stringify(lightingKeyAction(kind));
 
   return (
     <div>
       <SectionLabel>Key presets</SectionLabel>
       <p className="mt-1 text-[11.5px] leading-relaxed text-faint">
-        Bind the action and install status colors on this key for{" "}
-        {layerName(state.layerMetadata, layer)}. Repeating a preset replaces its rules.
+        One click binds the action and installs its status colors on this key for{" "}
+        {layerName(state.layerMetadata, layer)}. Repeating a preset reinstalls its rules.
       </p>
       <div className="mt-1.5 flex flex-col gap-1.5">
         {PRESETS.map((preset) => {
@@ -103,7 +120,14 @@ export function LightingKeyPresetPanel({ layer, target }: { layer: number; targe
                   : "cursor-not-allowed border-line opacity-50",
               )}
             >
-              <div className="text-[13px] font-medium text-accent">{preset.label}</div>
+              <div className="flex items-center gap-2 text-[13px] font-medium text-accent">
+                {preset.label}
+                {installed(preset.kind) && (
+                  <span className="rounded-full border border-ok/40 px-1.5 py-px text-[10px] font-medium text-ok">
+                    installed
+                  </span>
+                )}
+              </div>
               <div className="text-[11.5px] text-faint">{preset.hint}</div>
             </button>
           );

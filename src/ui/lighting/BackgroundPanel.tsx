@@ -107,8 +107,8 @@ export function BackgroundPanel() {
           />
         </label>
         <p className="text-[11.5px] leading-relaxed text-faint">
-          Applies to layer colors, effects, and indicators. To toggle from a key,
-          assign Output toggle (BacklightToggle) in Keymap.
+          Applies to layer colors, effects, and indicators. To toggle from a key, select
+          the key in Keymap and use its Lighting tab.
           {state.lightingOutputMode?.wake_layers ? " Wake layers can temporarily turn lighting back on; disable the wake setting for those layers below to keep it off on every layer." : ""}
         </p>
         <Slider

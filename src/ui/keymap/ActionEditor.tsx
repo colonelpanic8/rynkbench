@@ -548,6 +548,15 @@ function MorsePickerTab({ onCommit }: { onCommit: (action: KeyAction) => void })
   );
 }
 
+/** A lighting binding opens on the Lighting tab so its presets and status are in view. */
+function initialTab(current: KeyAction): Tab {
+  if (typeof current === "object" && "Single" in current) {
+    const single = current.Single;
+    if (typeof single === "object" && "Light" in single) return "lighting";
+  }
+  return "keys";
+}
+
 export function ActionEditor({
   current,
   numLayers,
@@ -561,7 +570,7 @@ export function ActionEditor({
   lightingKey?: { layer: number; key: KeyView };
 }) {
   const { bundle, state } = useWorkbench();
-  const [tab, setTab] = useState<Tab>("keys");
+  const [tab, setTab] = useState<Tab>(() => initialTab(current));
   const [query, setQuery] = useState("");
   const [keyMods, setKeyMods] = useState<ModifierCombination>(noModifiers);
   const [oneShot, setOneShot] = useState(false);
@@ -700,7 +709,11 @@ export function ActionEditor({
       {tab === "lighting" && (
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
           {lightingKey && (
-            <LightingKeyPresetPanel layer={lightingKey.layer} target={lightingKey.key} />
+            <LightingKeyPresetPanel
+              layer={lightingKey.layer}
+              target={lightingKey.key}
+              current={current}
+            />
           )}
           {boardLightingActions.length > 0 && (
             <div>

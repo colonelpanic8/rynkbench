@@ -44,6 +44,20 @@ export function lightingKeyRules(preset: LightingKeyPreset): StatusRule[] {
   }));
 }
 
+/** The preset whose indicator rules are already installed on this key and layer. */
+export function installedLightingKeyKind(
+  current: StatusRule[],
+  led: number,
+  layer: number,
+): LightingKeyKind | null {
+  const own = current.filter(
+    (entry) => entry.cell.led_id === led && entry.cell.conditions.layer?.layer === layer,
+  );
+  if (own.some((entry) => entry.effects !== undefined)) return "effects";
+  if (own.some((entry) => entry.cell.conditions.output_mode !== undefined)) return "output-mode";
+  return null;
+}
+
 export function replaceLightingKeyRules(current: StatusRule[], preset: LightingKeyPreset): StatusRule[] {
   const kept = current.filter((entry) =>
     entry.cell.led_id !== preset.led ||
