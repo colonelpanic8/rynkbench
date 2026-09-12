@@ -339,3 +339,26 @@ codec adapter if its file format differs. Keep product-name and matrix
 heuristics out of React components. Offline templates explicitly choose their
 board and expose that board's canonical identity; they are separate from
 generic device discovery.
+
+### Troubleshooting a disconnected configuration import
+
+Rynkbench parses configuration files before writing them and checks changed
+lighting tables against the connected firmware's capacity and supported
+conditional predicates before applying any part of the import. Layer-set
+conditions survive TOML import and export; contradictory gates are rejected
+on both input and device readback. A rejected file
+should show a configuration error and leave the session connected.
+
+A device request that receives no answer for five seconds closes the Rynk
+session to prevent a late response from being mistaken for the next request's
+answer. This does not by itself establish that the keyboard rebooted or lost
+its USB/Bluetooth connection. Imports use multiple writes; a timeout after
+writes begin can leave earlier changes applied. Reconnect and read the keyboard
+before retrying.
+
+For a failing import, retain the TOML, firmware build, Rynkbench build, and
+transport used. After reconnecting, copy **Device → Session diagnostics**. A
+request marked `timeout` identifies the unanswered operation; `device unplugged`
+records a transport disconnect notification. Note whether ordinary typing also
+stopped. Firmware updates alone do not update a cached Rynkbench page or its
+protocol client; reload the current site too.

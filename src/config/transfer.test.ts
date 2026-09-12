@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { initSync } from "../vendor/moergo-config-wasm/moergo_config_wasm";
 import { importDocument } from "./transfer";
+import { RUNTIME_EFFECTS_CONDITIONS } from "../session/lighting-features";
 import type { ExtensionCatalog } from "./document";
 import { renderDocument, snapshotFromState } from "./document";
 import { offlineGlove80Catalog, openOfflineGlove80 } from "../session/offline/glove80";
@@ -279,7 +280,7 @@ describe("importDocument pointing configuration", () => {
 
 
 describe("importDocument conditional rules", () => {
-  it("widens document rules for the session and skips an unchanged reimport", async () => {
+  it("preserves document rules for the session and skips an unchanged reimport", async () => {
     const session = openOfflineGlove80();
     try {
       const bundle = await openBundle(session);
@@ -293,6 +294,8 @@ describe("importDocument conditional rules", () => {
         },
         connection: undefined,
         effects: { enabled: true },
+          layers: undefined,
+          indicators: undefined,
       };
       snapshot.lighting!.conditional_scenes = [rule];
       const catalog = offlineGlove80Catalog();
@@ -313,4 +316,101 @@ describe("importDocument conditional rules", () => {
       await session.close();
     }
   });
+});
+
+describe("importDocument lighting preflight", () => {
+  it.each(["capacity", "unsupported", "predicates", "scenes", "layer predicates", "malformed"] as const)(
+    "rejects %s before writing earlier keymap or metadata changes",
+    async (failure) => {
+      const session = openOfflineGlove80();
+      try {
+        const bundle = await openBundle(session);
+        const state = initialWorkbenchState(bundle);
+        const snapshot = structuredClone(snapshotFromState(state));
+        snapshot.layers[0][0] = { Single: { Key: { Hid: "A" } } };
+        snapshot.layer_names![0].name = "Changed";
+        snapshot.lighting!.conditional_scenes = [{
+          cell: {
+            led_id: 0,
+            effect: { Solid: { color: { r: 255, g: 0, b: 0 } } },
+            conditions: { layer: undefined, battery: undefined, output_mode: undefined },
+          },
+          connection: undefined,
+          effects: { enabled: true },
+          layers: undefined,
+          indicators: undefined,
+        }];
+        const catalog = offlineGlove80Catalog();
+        let text = renderDocument(snapshot, catalog, "toml");
+        let message = /No settings were written/;
+        if (failure === "capacity") {
+          bundle.runtimeConditionalStatus = { ...bundle.runtimeConditionalStatus!, capacity: 0 };
+        } else if (failure === "unsupported") {
+          bundle.runtimeConditionalStatus = null;
+        } else if (failure === "predicates") {
+          bundle.lightingCaps = { ...bundle.lightingCaps!, features: 0 };
+        } else if (failure === "layer predicates") {
+          snapshot.lighting!.conditional_scenes![0].layers = { active: 2, inactive: 4 };
+          text = renderDocument(snapshot, catalog, "toml");
+          bundle.lightingCaps = { ...bundle.lightingCaps!, features: RUNTIME_EFFECTS_CONDITIONS };
+        } else if (failure === "scenes") {
+          snapshot.lighting!.scenes.push({
+            layer: 0, led_id: 0, effect: { Solid: { color: { r: 255, g: 0, b: 0 } } },
+          });
+          text = renderDocument(snapshot, catalog, "toml");
+          bundle.sceneStatus = { ...bundle.sceneStatus!, capacity: 0 };
+        } else {
+          text += "\n[lighting.invalid\n";
+          message = /./;
+        }
+        const before = await openBundle(session);
+        const dispatch = vi.fn();
+        await expect(importDocument({ text, session, bundle, state, dispatch, catalog }))
+          .rejects.toThrow(message);
+        expect(dispatch).not.toHaveBeenCalled();
+        const after = await openBundle(session);
+        expect(after.layers).toEqual(before.layers);
+        expect(after.layerMetadata).toEqual(before.layerMetadata);
+        expect(after.lightingState).toEqual(before.lightingState);
+        expect(after.runtimeConditionalScenes).toEqual(before.runtimeConditionalScenes);
+      } finally {
+        await session.close();
+      }
+    },
+  );
+});
+
+
+it("round-trips layer conditions through the browser configuration codec", async () => {
+  const session = openOfflineGlove80();
+  try {
+    const bundle = await openBundle(session);
+    const snapshot = structuredClone(snapshotFromState(initialWorkbenchState(bundle)));
+    snapshot.lighting!.conditional_scenes = [{
+      cell: {
+        led_id: 0,
+        effect: { Solid: { color: { r: 255, g: 0, b: 255 } } },
+        conditions: { layer: undefined, battery: undefined, output_mode: undefined },
+      },
+      connection: undefined,
+      effects: undefined,
+      layers: { active: 2, inactive: 4 },
+      indicators: undefined,
+    }];
+    const catalog = offlineGlove80Catalog();
+    const text = renderDocument(snapshot, catalog, "toml");
+    const { parseDocument } = await import("./document");
+    expect(parseDocument(text, catalog).snapshot.lighting!.conditional_scenes)
+      .toEqual(snapshot.lighting!.conditional_scenes);
+    const invalid = structuredClone(snapshot);
+    invalid.lighting!.conditional_scenes![0].layers!.inactive = 2;
+    expect(() => renderDocument(invalid, catalog, "toml")).toThrow(/active and inactive/);
+    await importDocument({
+      text, session, bundle, state: initialWorkbenchState(bundle), dispatch: vi.fn(), catalog,
+    });
+    expect((await openBundle(session)).runtimeConditionalScenes)
+      .toEqual(snapshot.lighting!.conditional_scenes);
+  } finally {
+    await session.close();
+  }
 });

@@ -10,6 +10,11 @@ import type { Dispatch } from "react";
 import { boardForTarget, transferSnapshot } from "../model/boards/transfer";
 import type { MoErgoBoard } from "../model/boards/transfer";
 import type { RynkSession } from "../session/types";
+import {
+  hasLightingFeature,
+  RUNTIME_EFFECTS_CONDITIONS,
+  RUNTIME_LAYER_INDICATOR_CONDITIONS,
+} from "../session/lighting-features";
 import { isUnsupportedError } from "../session/unsupported";
 import type { ConnectedBundle, WorkbenchAction, WorkbenchState } from "../ui/state";
 import { errorMessage } from "../ui/state";
@@ -66,6 +71,7 @@ export async function importDocument(args: ImportArgs): Promise<ImportResult> {
     bundle.model,
   );
   const snapshot = converted.snapshot;
+  preflightLighting(snapshot, bundle, state);
 
   // Behaviors go first. A `TD(n)` or `TriggerMacro(n)` cell resolves through its
   // slot as soon as the key is written, so writing the keymap first would leave
@@ -95,6 +101,46 @@ export async function importDocument(args: ImportArgs): Promise<ImportResult> {
       ...lighting.skipped,
     ],
   };
+}
+
+/** Check device-specific limits before any part of an import is written. */
+function preflightLighting(
+  snapshot: RuntimeSnapshot,
+  bundle: ConnectedBundle,
+  state: WorkbenchState,
+): void {
+  const desired = snapshot.lighting;
+  if (!desired) return;
+  const checkCapacity = (
+    label: string,
+    count: number,
+    status: { capacity: number } | null,
+  ) => {
+    if (!status) {
+      throw new Error(`${label}: runtime support is unavailable; check firmware support and reconnect before importing. No settings were written.`);
+    }
+    if (count > status.capacity) {
+      throw new Error(`${label}: configuration needs ${count} entries, but this keyboard holds ${status.capacity}. No settings were written.`);
+    }
+  };
+  if (!same(desired.scenes, state.scenes)) {
+    checkCapacity("Lighting scenes", desired.scenes.length, bundle.sceneStatus);
+  }
+  const rules = desired.conditional_scenes;
+  if (rules === undefined || same(rules, state.runtimeConditionalScenes)) return;
+  checkCapacity("Conditional lighting", rules.length, bundle.runtimeConditionalStatus);
+  const advanced = hasLightingFeature(bundle.lightingCaps, RUNTIME_LAYER_INDICATOR_CONDITIONS);
+  const extended = advanced || hasLightingFeature(bundle.lightingCaps, RUNTIME_EFFECTS_CONDITIONS);
+  for (const [index, rule] of rules.entries()) {
+    const unsupported = !advanced && (rule.layers !== undefined || rule.indicators !== undefined)
+      ? "layer-set or lock-indicator conditions"
+      : !extended && (rule.connection !== undefined || rule.effects !== undefined)
+        ? "connection or effects conditions"
+        : null;
+    if (unsupported) {
+      throw new Error(`Conditional rule ${index + 1}: this firmware cannot store ${unsupported}; update firmware or remove the condition. No settings were written.`);
+    }
+  }
 }
 
 async function writePointing(
@@ -519,11 +565,7 @@ async function writeLighting(
     applied.push(`${desired.scenes.length} scene cell${desired.scenes.length === 1 ? "" : "s"}`);
   }
 
-  const rules = desired.conditional_scenes?.map((cell) => ({
-    layers: undefined,
-    indicators: undefined,
-    ...cell,
-  }));
+  const rules = desired.conditional_scenes;
   if (rules !== undefined && !same(rules, state.runtimeConditionalScenes)) {
     const lightingState = await session.lighting.conditionalScenes.replace(rules);
     dispatch({ type: "conditionalApplied", state: lightingState, cells: rules });

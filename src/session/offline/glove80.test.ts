@@ -59,6 +59,8 @@ describe("offline Glove80 workspace", () => {
           },
           connection: undefined,
           effects: { enabled: true },
+          layers: undefined,
+          indicators: undefined,
         }],
       },
       behaviors: {
