@@ -1308,3 +1308,85 @@ describe("mock BLE connection state", () => {
     expect(glove80Board.connection).toEqual(initial);
   });
 });
+
+describe("storage reset", () => {
+  it("restores simulated firmware defaults before disconnecting", async () => {
+    const session = await mockProvider(glove80Board).connect();
+    const readState = async () => ({
+      layers: await session.keymap.readAll(),
+      layerMetadata: await Promise.all(
+        glove80Board.defaultLayers.map((_, layer) => session.keymap.getLayerMetadata(layer)),
+      ),
+      defaultLayer: await session.keymap.defaultLayer(),
+      lighting: await session.lighting.state(),
+      outputMode: await session.lighting.outputMode(),
+      scenes: await session.lighting.scenes.readScenes(),
+      conditionalScenes: await session.lighting.conditionalScenes.read(),
+      extension: await session.lighting.extension(),
+      extensionLayers: await session.lighting.extensionLayers(),
+      extensionParams: await session.lighting.extensionParams(5),
+      combos: await session.combos.readAll(),
+      macros: await session.macros.read(),
+      behavior: await session.behavior.get(),
+      behaviorOptions: await session.behavior.options(),
+      profiles: await session.behavior.profiles(),
+      holdTriggerPositions: await session.behavior.holdTriggerPositions(),
+      pointing: await session.pointing.get(),
+      ble: await session.device.bleStatus(),
+      splitLatency: await session.device.splitCentralLatency(),
+    });
+    const defaults = await readState();
+    const disconnected = vi.fn();
+    let stateAtDisconnect: ReturnType<typeof readState> | undefined;
+    session.onDisconnect(() => {
+      disconnected();
+      stateAtDisconnect = readState();
+    });
+
+    await session.keymap.setKey(0, 2, 1, { Single: { Key: { Hid: "X" } } });
+    await session.keymap.setLayerMetadata(0, { occupied: true, name: "Changed" });
+    await session.keymap.setDefaultLayer(0);
+    await session.lighting.setState({
+      output_enabled: false,
+      output_brightness: 1,
+      background: { enabled: true, hue: 2, saturation: 3, value: 4, speed: 5, mode: "Breathe" },
+    });
+    await session.lighting.setWakeLayers(0);
+    await session.lighting.replaceOverlay([
+      { led_id: glove80Board.topology.leds[0].id, effect: { Solid: { color: { r: 1, g: 2, b: 3 } } }, ttl_ms: undefined },
+    ]);
+    await session.lighting.scenes.replaceScenes([]);
+    await session.lighting.conditionalScenes.replace([]);
+    await session.lighting.setExtensionState({ effect: 4, palette: 1, value: 2, speed: 3 });
+    await session.lighting.setExtensionLayers(undefined);
+    await session.lighting.setExtensionParam(5, 0, 7);
+    await session.combos.set(0, {
+      Actions: { actions: [], output: { Single: { Key: { Hid: "Z" } } }, layer: undefined },
+    });
+    await session.macros.write(Uint8Array.of(9));
+    await session.behavior.set({ ...defaults.behavior, combo_timeout_ms: 99 });
+    await session.behavior.setOptions({
+      ...defaults.behaviorOptions,
+      oneshot_quick_release: !defaults.behaviorOptions.oneshot_quick_release,
+    });
+    await session.behavior.setProfile({
+      index: 2,
+      name: "changed",
+      profile: emptyMorseProfile(),
+    });
+    await session.behavior.setHoldTriggerPositions([]);
+    await session.pointing.set(defaults.pointing);
+    await session.device.switchBleProfile(1);
+    await session.device.setSplitCentralLatency({
+      powered: 2,
+      battery: 4,
+      override_latency: 9,
+    });
+
+    await session.device.resetStorage();
+
+    expect(disconnected).toHaveBeenCalledOnce();
+    expect(stateAtDisconnect).toBeDefined();
+    expect(await stateAtDisconnect!).toEqual(defaults);
+  });
+});

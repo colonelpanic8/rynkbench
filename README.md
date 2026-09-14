@@ -42,6 +42,8 @@ keymap and per-key lighting live — no install, nothing leaves your machine.
   import instead of dropping the link part-way through it.
 - **Split tuning** — inspect and adjust the volatile powered/battery BLE latency
   policy on compatible split centrals.
+- **Device recovery** — the Danger zone can reboot into the bootloader or wipe
+  every stored setting and Bluetooth pairing before restarting on stock defaults.
 - **Simulated boards** — demo a split ergo, an ortholinear 60, and a dev stub
   with no hardware attached, so the whole UI is explorable offline.
 

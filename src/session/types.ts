@@ -276,6 +276,10 @@ export interface DeviceOps {
   battery(): Promise<BatteryStatus>;
   connectionStatus(): Promise<ConnectionStatus>;
   rebootToBootloader(): Promise<void>;
+  /** Wipe all persisted settings, including Bluetooth bonds. The firmware
+   *  reboots on its compiled defaults once the erase finishes, which ends the
+   *  session; a rejected wipe leaves the keyboard running as it was. */
+  resetStorage(): Promise<void>;
   bleStatus(): Promise<BleStatus>;
   clearBleProfile(slot: number): Promise<void>;
   /** Make `slot` the active BLE profile. Drops any live link and

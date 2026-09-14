@@ -606,7 +606,13 @@ describe("request tracing", () => {
 
 describe("flash-bound requests", () => {
   it("names every write and the layer-metadata read", () => {
-    for (const op of ["set_key", "set_keymap_bulk", "commit_lighting_scene_replace", "get_layer_metadata"]) {
+    for (const op of [
+      "set_key",
+      "set_keymap_bulk",
+      "commit_lighting_scene_replace",
+      "get_layer_metadata",
+      "storage_reset",
+    ]) {
       expect(waitsForFlash(op)).toBe(true);
     }
     for (const op of ["get_key", "get_keymap_bulk", "get_matrix_state", "get_lighting_state"]) {

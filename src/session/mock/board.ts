@@ -230,6 +230,45 @@ function buildSlots<T>(count: number, empty: () => T, clone: (value: T) => T, se
   return slots;
 }
 
+function layerMetadataDefaults(spec: BoardSpec): LayerMetadata[] {
+  const names = spec.layerNames ?? spec.defaultLayers.map((_, layer) => `Layer ${layer}`);
+  if (names.length > spec.defaultLayers.length) {
+    throw new Error(
+      `layer names cover ${names.length} layers, capacity ${spec.defaultLayers.length}`,
+    );
+  }
+  return spec.defaultLayers.map((_, layer) =>
+    layer < names.length
+      ? { occupied: true, name: names[layer] }
+      : { occupied: false, name: "" },
+  );
+}
+
+function behaviorOptionsDefaults(spec: BoardSpec): BehaviorOptions {
+  return structuredClone(
+    spec.behaviorOptions ?? {
+      tri_layer: undefined,
+      combo_prior_idle_ms: undefined,
+      oneshot_activate_on_keypress: false,
+      oneshot_quick_release: false,
+      morse_enable_flow_tap: false,
+      morse_prior_idle_ms: 120,
+      morse_default_profile: emptyMorseProfile(),
+    },
+  );
+}
+
+function splitLatencyDefaults(spec: BoardSpec): SplitCentralLatencyState | null {
+  if (spec.splitCentralLatency) return structuredClone(spec.splitCentralLatency);
+  if (!spec.capabilities.is_split || !spec.capabilities.ble_enabled) return null;
+  const powered = spec.connection.usb === "Configured";
+  return {
+    policy: { powered: 0, battery: 1, override_latency: undefined },
+    powered,
+    effective: powered ? 0 : 1,
+  };
+}
+
 /** One simulated light: identity, matrix key, geometry, wiring, zones. */
 export interface SimLed {
   id: LightingLedId;
@@ -364,18 +403,8 @@ class MockSession implements RynkSession {
     this.kind = kind;
     this.spec = spec;
     this.label = spec.info.product_name;
-    this.layers = spec.defaultLayers.map((actions) => [...actions]);
-    const names = spec.layerNames ?? spec.defaultLayers.map((_, layer) => `Layer ${layer}`);
-    if (names.length > spec.defaultLayers.length) {
-      throw new Error(
-        `layer names cover ${names.length} layers, capacity ${spec.defaultLayers.length}`,
-      );
-    }
-    this.layerMetadata = spec.defaultLayers.map((_, layer) =>
-      layer < names.length
-        ? { occupied: true, name: names[layer] }
-        : { occupied: false, name: "" },
-    );
+    this.layers = structuredClone(spec.defaultLayers);
+    this.layerMetadata = layerMetadataDefaults(spec);
     this.base = this.checkLayer(spec.initialDefaultLayer ?? 0);
     this.activeLayers = new Set((spec.initialActiveLayers ?? [this.base]).map((layer) => this.checkLayer(layer)));
     this.activeLayers.add(this.base);
@@ -418,17 +447,7 @@ class MockSession implements RynkSession {
     this.macroBytes.set(spec.seedMacros ?? []);
     this.layerPolicy = spec.initialLayerPolicy ?? "EffectiveOnly";
     this.behaviorConfig = { ...spec.behavior };
-    this.behaviorOptions = structuredClone(
-      spec.behaviorOptions ?? {
-        tri_layer: undefined,
-        combo_prior_idle_ms: undefined,
-        oneshot_activate_on_keypress: false,
-        oneshot_quick_release: false,
-        morse_enable_flow_tap: false,
-        morse_prior_idle_ms: 120,
-        morse_default_profile: emptyMorseProfile(),
-      },
-    );
+    this.behaviorOptions = behaviorOptionsDefaults(spec);
     this.morseProfiles = structuredClone(spec.seedMorseProfiles ?? []);
     this.holdTriggerPositions = structuredClone(spec.seedHoldTriggerPositions ?? []);
     this.checkHoldTriggerPositions(this.holdTriggerPositions);
@@ -437,16 +456,7 @@ class MockSession implements RynkSession {
     this.indicator = { ...spec.ledIndicator };
     this.ble = { ...spec.connection.ble };
     this.matrixBitmap = new Uint8Array(caps.num_rows * Math.ceil(caps.num_cols / 8));
-    const powered = spec.connection.usb === "Configured";
-    this.splitLatency =
-      spec.splitCentralLatency ??
-      (caps.is_split && caps.ble_enabled
-        ? {
-            policy: { powered: 0, battery: 1, override_latency: undefined },
-            powered,
-            effective: powered ? 0 : 1,
-          }
-        : null);
+    this.splitLatency = splitLatencyDefaults(spec);
     this.batteryTimer = setInterval(() => this.pushBattery(), BATTERY_PUSH_MS);
   }
 
@@ -461,9 +471,12 @@ class MockSession implements RynkSession {
     // Bootloader entry drops the link, same as the real device would.
     rebootToBootloader: () =>
       latency(() => {
-        const handler = this.disconnectHandler;
-        void this.close();
-        handler?.();
+        this.endForReboot();
+      }),
+    resetStorage: () =>
+      latency(() => {
+        this.restoreSpecDefaults();
+        this.endForReboot();
       }),
     bleStatus: () => latency(() => ({ ...this.ble })),
     clearBleProfile: (slot) =>
@@ -864,6 +877,97 @@ class MockSession implements RynkSession {
     this.ttlTimer = null;
     if (this.matrixTimer !== null) clearInterval(this.matrixTimer);
     this.matrixTimer = null;
+  }
+
+  private endForReboot(): void {
+    const handler = this.disconnectHandler;
+    void this.close();
+    handler?.();
+  }
+
+  private restoreSpecDefaults(): void {
+    this.layers.splice(0, this.layers.length, ...structuredClone(this.spec.defaultLayers));
+    this.encoders.splice(0, this.encoders.length, ...structuredClone(this.spec.defaultEncoders));
+    this.layerMetadata.splice(
+      0,
+      this.layerMetadata.length,
+      ...layerMetadataDefaults(this.spec),
+    );
+    this.base = this.checkLayer(this.spec.initialDefaultLayer ?? 0);
+    this.activeLayers = new Set(
+      (this.spec.initialActiveLayers ?? [this.base]).map((layer) => this.checkLayer(layer)),
+    );
+    this.activeLayers.add(this.base);
+    this.current = Math.max(...this.activeLayers);
+
+    this.revision = 1;
+    this.outputEnabled = true;
+    this.outputModeState = this.spec.lightingOutputMode
+      ? structuredClone(this.spec.lightingOutputMode)
+      : null;
+    this.brightness = this.spec.brightness;
+    this.background = { ...this.spec.background };
+    this.overlay.clear();
+    this.extensionState = this.spec.extensionEffects
+      ? { ...this.spec.extensionEffects.initial }
+      : null;
+    this.extensionOverlay = this.spec.extensionEffects?.overlay ?? undefined;
+    this.extensionParamValues.clear();
+    for (const [effect, params] of Object.entries(this.spec.extensionEffects?.params ?? {})) {
+      params.forEach((param, index) =>
+        this.extensionParamValues.set(`${effect}:${index}`, param.default),
+      );
+    }
+    this.sceneTable.clear();
+    for (const cell of this.spec.seedScenes ?? []) {
+      this.sceneTable.set(sceneKey(cell), cloneScene(cell));
+    }
+    this.runtimeConditional = structuredClone(this.spec.seedRuntimeConditionalScenes ?? []);
+    this.layerPolicy = this.spec.initialLayerPolicy ?? "EffectiveOnly";
+
+    this.comboTable.splice(
+      0,
+      this.comboTable.length,
+      ...buildSlots(
+        this.spec.capabilities.max_combos,
+        emptyCombo,
+        cloneCombo,
+        this.spec.seedCombos,
+      ),
+    );
+    this.morseTable.splice(
+      0,
+      this.morseTable.length,
+      ...buildSlots(
+        this.spec.capabilities.max_morse,
+        emptyMorse,
+        cloneMorse,
+        this.spec.seedMorse,
+      ),
+    );
+    this.forkTable.splice(
+      0,
+      this.forkTable.length,
+      ...buildSlots(
+        this.spec.capabilities.max_forks,
+        emptyFork,
+        cloneFork,
+        this.spec.seedForks,
+      ),
+    );
+    this.macroBytes.fill(0);
+    this.macroBytes.set(this.spec.seedMacros ?? []);
+    this.behaviorConfig = { ...this.spec.behavior };
+    this.behaviorOptions = behaviorOptionsDefaults(this.spec);
+    this.morseProfiles = structuredClone(this.spec.seedMorseProfiles ?? []);
+    this.holdTriggerPositions = structuredClone(this.spec.seedHoldTriggerPositions ?? []);
+    this.autoMouseLayers = structuredClone(this.spec.seedAutoMouseLayers ?? []);
+    this.pointingConfig = this.spec.pointingConfig
+      ? structuredClone(this.spec.pointingConfig)
+      : null;
+    this.ble = { ...this.spec.connection.ble };
+    this.splitLatency = splitLatencyDefaults(this.spec);
+    this.matrixBitmap.fill(0);
   }
 
   private connectionStatus(): ConnectionStatus {

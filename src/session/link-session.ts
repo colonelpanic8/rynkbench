@@ -107,7 +107,11 @@ export const FLASH_TIMEOUT_MS = 120_000;
 /** Requests the firmware answers only once queued flash work lets it: every
  *  write, plus the layer-metadata read it serves behind queued writes. */
 export function waitsForFlash(op: string): boolean {
-  return /^(set|put|commit|begin|clear|unset|delete|write|reset)_/.test(op) || op === "get_layer_metadata";
+  return (
+    /^(set|put|commit|begin|clear|unset|delete|write|reset)_/.test(op) ||
+    op === "get_layer_metadata" ||
+    op === "storage_reset"
+  );
 }
 
 /** Whether a rejected request was the firmware's `Busy`: its flash queue had
@@ -717,6 +721,9 @@ export class LinkSession implements RynkSession {
       battery: () => this.run(() => client.get_battery_status()),
       connectionStatus: () => this.run(() => client.get_connection_status()),
       rebootToBootloader: () => this.run(() => client.bootloader_jump()),
+      // The firmware reboots itself once the erase finishes; a host-sent
+      // reboot would race the erase and win, leaving the store intact.
+      resetStorage: () => this.run(() => client.storage_reset("Full")),
       bleStatus: () => this.run(() => client.get_ble_status()),
       clearBleProfile: (slot) => this.run(() => client.clear_ble_profile(slot)),
       switchBleProfile: (slot) => this.run(() => client.switch_ble_profile(slot)),

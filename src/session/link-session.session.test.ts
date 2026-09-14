@@ -72,6 +72,32 @@ function harness(methods: Record<string, (...args: never[]) => unknown>, log?: S
 }
 
 describe("LinkSession", () => {
+  it("asks for a full storage wipe and leaves the reboot to the firmware", async () => {
+    const { session, spies } = harness({
+      storage_reset: async () => undefined,
+      reboot: async () => undefined,
+    });
+
+    await expect(session.device.resetStorage()).resolves.toBeUndefined();
+
+    expect(spies.storage_reset).toHaveBeenCalledWith("Full");
+    expect(spies.reboot).not.toHaveBeenCalled();
+    await session.close();
+  });
+
+  it("surfaces a rejected storage wipe", async () => {
+    const rejected = new Error("device rejected Unimplemented");
+    rejected.name = "Rejected";
+    const { session } = harness({
+      storage_reset: async () => {
+        throw rejected;
+      },
+    });
+
+    await expect(session.device.resetStorage()).rejects.toThrow("Unimplemented");
+    await session.close();
+  });
+
   it("reads each capabilities record once per session", async () => {
     const { session, spies } = harness({
       get_capabilities: async () => caps,

@@ -1398,6 +1398,7 @@ export interface WorkbenchIo {
   reloadPointingConfig(): Promise<IoWriteResult>;
   disconnect(): void;
   rebootToBootloader(): Promise<void>;
+  resetStorage(): Promise<void>;
 }
 
 /** What the connected firmware exposes, as far as the io facade needs to
@@ -2248,6 +2249,9 @@ export function makeIo(
     },
     rebootToBootloader() {
       return session.device.rebootToBootloader();
+    },
+    resetStorage() {
+      return session.device.resetStorage();
     },
   };
 }
