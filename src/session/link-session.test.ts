@@ -11,6 +11,8 @@ import type {
 } from "../vendor/rynk-wasm/rynk_wasm";
 import {
   decodeLayerState,
+  isBusyError,
+  waitsForFlash,
   readLightingExtensionNames,
   readLightingExtensionParams,
   readLightingOverlay,
@@ -498,6 +500,32 @@ describe("request watchdog", () => {
     expect(ended).toEqual(["commit_lighting_overlay_replace"]);
   });
 
+  it("gives a request that may wait on flash its own budget", async () => {
+    const ended: string[] = [];
+    const client = watchdogClient(
+      {
+        set_key: () => new Promise((resolve) => setTimeout(resolve, 40)),
+        get_layer_metadata: () => new Promise((resolve) => setTimeout(resolve, 40)),
+        get_key: () => new Promise(() => {}),
+      },
+      { timeoutMs: 20, flashTimeoutMs: 200, onTimeout: (op) => ended.push(op) },
+    );
+    await expect(client.set_key()).resolves.toBeUndefined();
+    await expect(client.get_layer_metadata()).resolves.toBeUndefined();
+    await expect(client.get_key()).rejects.toThrow(/did not answer get_key within 20ms/);
+    expect(ended).toEqual(["get_key"]);
+  });
+
+  it("holds a write to the request budget when no flash budget is set", async () => {
+    const ended: string[] = [];
+    const client = watchdogClient(
+      { set_key: () => new Promise(() => {}) },
+      opts((op) => ended.push(op)),
+    );
+    await expect(client.set_key()).rejects.toThrow(/within 20ms/);
+    expect(ended).toEqual(["set_key"]);
+  });
+
   it("leaves the parked topic pull alone", async () => {
     const ended: string[] = [];
     const client = watchdogClient(
@@ -573,5 +601,26 @@ describe("request tracing", () => {
       outcome: "error",
       detail: "StateRevisionConflict",
     });
+  });
+});
+
+describe("flash-bound requests", () => {
+  it("names every write and the layer-metadata read", () => {
+    for (const op of ["set_key", "set_keymap_bulk", "commit_lighting_scene_replace", "get_layer_metadata"]) {
+      expect(waitsForFlash(op)).toBe(true);
+    }
+    for (const op of ["get_key", "get_keymap_bulk", "get_matrix_state", "get_lighting_state"]) {
+      expect(waitsForFlash(op)).toBe(false);
+    }
+  });
+
+  it("recognizes only the firmware's Busy rejection", () => {
+    const busy = new Error("device rejected Busy");
+    busy.name = "Rejected";
+    expect(isBusyError(busy)).toBe(true);
+    const other = new Error("device rejected InvalidLayer");
+    other.name = "Rejected";
+    expect(isBusyError(other)).toBe(false);
+    expect(isBusyError(new Error("Busy"))).toBe(false);
   });
 });

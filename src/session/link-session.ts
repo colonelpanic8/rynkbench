@@ -84,6 +84,9 @@ export interface LinkSessionHooks {
   watchDisconnect(onUnplug: () => void): () => void;
   /** Override the request watchdog (tests). Defaults to REQUEST_TIMEOUT_MS. */
   requestTimeoutMs?: number;
+  /** Override the budget for requests that may wait on flash (tests).
+   *  Defaults to FLASH_TIMEOUT_MS, or to `requestTimeoutMs` when that is set. */
+  flashTimeoutMs?: number;
   /** Where to record the request trace. Defaults to the shared sessionLog. */
   log?: SessionLog;
 }
@@ -92,6 +95,51 @@ export interface LinkSessionHooks {
  *  dead. Requests settle in single-digit milliseconds on a healthy link, so
  *  this only ever fires on a device that has genuinely stopped answering. */
 export const REQUEST_TIMEOUT_MS = 5_000;
+
+/** Budget for a request the firmware may hold behind flash work. A keymap
+ *  write is queued for persistence before it is answered, and on a nearly
+ *  full settings store one write in a few dozen pays a sequential-storage
+ *  page migration of tens of seconds, during which the session answers
+ *  nothing at all. Firmware with the larger store and `Busy` backpressure
+ *  keeps every write under two seconds; this covers the older builds. */
+export const FLASH_TIMEOUT_MS = 120_000;
+
+/** Requests the firmware answers only once queued flash work lets it: every
+ *  write, plus the layer-metadata read it serves behind queued writes. */
+export function waitsForFlash(op: string): boolean {
+  return /^(set|put|commit|begin|clear|unset|delete|write|reset)_/.test(op) || op === "get_layer_metadata";
+}
+
+/** Whether a rejected request was the firmware's `Busy`: its flash queue had
+ *  no room for the write, nothing was applied, and the same request is welcome
+ *  again once the queue drains. */
+export function isBusyError(error: unknown): boolean {
+  return error instanceof Error && error.name === "Rejected" && /\bBusy\b/.test(error.message);
+}
+
+const BUSY_RETRY_DELAY_MS = 100;
+const BUSY_RETRY_LIMIT_MS = 300_000;
+
+/** Run a keymap write, sending it again while the firmware answers `Busy`.
+ *  The firmware waits about half a second for flash-queue room before saying
+ *  so, which paces the retries; the limit spans a page migration of minutes. */
+async function retryBusy<T>(op: () => Promise<T>): Promise<T> {
+  const started = performance.now();
+  for (;;) {
+    try {
+      return await op();
+    } catch (error) {
+      if (!isBusyError(error) || performance.now() - started >= BUSY_RETRY_LIMIT_MS) throw error;
+      await new Promise((resolve) => setTimeout(resolve, BUSY_RETRY_DELAY_MS));
+    }
+  }
+}
+
+/** Cells per keymap write page. Every cell is one flash item and the firmware
+ *  only accepts a page it can queue for flash whole, answering `Busy`
+ *  otherwise; a longer page streams through the queue and holds the session
+ *  for the length of a storage page migration. Matches the native client. */
+const KEYMAP_WRITE_PAGE_KEYS = 4;
 
 export class RequestTimeout extends Error {
   readonly op: string;
@@ -130,11 +178,14 @@ export function watchdogClient<T extends object>(
   client: T,
   {
     timeoutMs,
+    flashTimeoutMs,
     onTimeout,
     log,
     assertOpen,
   }: {
     timeoutMs: number;
+    /** Budget for ops `waitsForFlash` names; defaults to `timeoutMs`. */
+    flashTimeoutMs?: number;
     onTimeout: (op: string) => void;
     log?: SessionLog;
     assertOpen?: () => void;
@@ -146,6 +197,7 @@ export function watchdogClient<T extends object>(
       const value = Reflect.get(target, prop, receiver) as unknown;
       if (typeof value !== "function" || UNWATCHED_CALLS.has(String(prop))) return value;
       const op = String(prop);
+      const budgetMs = flashTimeoutMs !== undefined && waitsForFlash(op) ? flashTimeoutMs : timeoutMs;
       return (...args: unknown[]) => {
         assertOpen?.();
         const result = (value as (...a: unknown[]) => unknown).apply(target, args);
@@ -162,14 +214,14 @@ export function watchdogClient<T extends object>(
         return new Promise((resolve, reject) => {
           let finished = false;
           const timer =
-            timeoutMs > 0
+            budgetMs > 0
               ? setTimeout(() => {
                   finished = true;
-                  const failure = new RequestTimeout(op, timeoutMs);
+                  const failure = new RequestTimeout(op, budgetMs);
                   record("timeout", failure);
                   onTimeout(op);
                   reject(failure);
-                }, timeoutMs)
+                }, budgetMs)
               : undefined;
           result.then(
             (settled) => {
@@ -634,8 +686,11 @@ export class LinkSession implements RynkSession {
   constructor(client: RynkClient, link: RynkByteLink, hooks: LinkSessionHooks) {
     // Every op below closes over this binding, so the watchdog has to replace
     // it before any of them are built.
+    const requestTimeoutMs = hooks.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
     client = watchdogClient(client, {
-      timeoutMs: hooks.requestTimeoutMs ?? REQUEST_TIMEOUT_MS,
+      timeoutMs: requestTimeoutMs,
+      flashTimeoutMs:
+        hooks.flashTimeoutMs ?? (hooks.requestTimeoutMs === undefined ? FLASH_TIMEOUT_MS : requestTimeoutMs),
       onTimeout: () => this.failLink(),
       log: hooks.log ?? sessionLog,
       assertOpen: () => this.assertOpen(),
@@ -677,7 +732,8 @@ export class LinkSession implements RynkSession {
     this.keymap = {
       readAll: () => this.run(() => this.readAllLayers()),
       replaceAll: (layers) => this.run(() => this.replaceAllLayers(layers)),
-      setKey: (layer, row, col, action) => this.run(() => client.set_key(layer, row, col, action)),
+      setKey: (layer, row, col, action) =>
+        this.run(() => retryBusy(() => client.set_key(layer, row, col, action))),
       getEncoder: (encoderId, layer) => this.run(() => client.get_encoder(encoderId, layer)),
       setEncoder: (encoderId, layer, action) =>
         this.run(() => client.set_encoder(encoderId, layer, action)),
@@ -944,32 +1000,32 @@ export class LinkSession implements RynkSession {
     if (layers.length !== caps.num_layers) {
       throw new Error(`keymap write has ${layers.length} layers; expected ${caps.num_layers}`);
     }
-    let bulkCapacity = 0;
+    let pageKeys = 0;
     if (caps.bulk_transfer_supported && perLayer > 0) {
-      bulkCapacity = (await this.client.get_keymap_bulk(0, 0, 0)).actions.length;
+      const bulkCapacity = (await this.client.get_keymap_bulk(0, 0, 0)).actions.length;
       if (bulkCapacity < 1) throw new Error("keymap bulk endpoint returned an empty page");
+      pageKeys = Math.min(bulkCapacity, KEYMAP_WRITE_PAGE_KEYS);
     }
     for (let layer = 0; layer < caps.num_layers; layer += 1) {
       const actions = layers[layer]?.actions;
       if (layers[layer]?.layer !== layer || actions.length !== perLayer) {
         throw new Error(`keymap write omitted or malformed layer ${layer}`);
       }
-      if (bulkCapacity > 0) {
-        for (let start = 0; start < perLayer; start += bulkCapacity) {
-          await this.client.set_keymap_bulk({
-            layer,
-            start_row: Math.floor(start / caps.num_cols),
-            start_col: start % caps.num_cols,
-            actions: actions.slice(start, start + bulkCapacity),
-          });
+      if (pageKeys > 0) {
+        for (let start = 0; start < perLayer; start += pageKeys) {
+          await retryBusy(() =>
+            this.client.set_keymap_bulk({
+              layer,
+              start_row: Math.floor(start / caps.num_cols),
+              start_col: start % caps.num_cols,
+              actions: actions.slice(start, start + pageKeys),
+            }),
+          );
         }
       } else {
         for (let key = 0; key < perLayer; key += 1) {
-          await this.client.set_key(
-            layer,
-            Math.floor(key / caps.num_cols),
-            key % caps.num_cols,
-            actions[key],
+          await retryBusy(() =>
+            this.client.set_key(layer, Math.floor(key / caps.num_cols), key % caps.num_cols, actions[key]),
           );
         }
       }

@@ -36,6 +36,10 @@ keymap and per-key lighting live — no install, nothing leaves your machine.
   bindings without a destination are reported, and destination-only keys are
   preserved. Both paths use the same validation model as `moergo-control`;
   Morse, combo, fork, macro, and profile tables travel with the keymap.
+  Keymap writes are paged for the firmware's flash queue and resent while it
+  answers `Busy`, and any request that may wait on flash gets a two-minute
+  budget, so a settings-store page migration on older firmware slows an
+  import instead of dropping the link part-way through it.
 - **Split tuning** — inspect and adjust the volatile powered/battery BLE latency
   policy on compatible split centrals.
 - **Simulated boards** — demo a split ergo, an ortholinear 60, and a dev stub

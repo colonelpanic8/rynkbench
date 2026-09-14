@@ -91,6 +91,59 @@ describe("LinkSession", () => {
     await session.close();
   });
 
+  it("pages a whole-keymap write for the flash queue, not the read page", async () => {
+    const wide = { ...caps, num_cols: 10, bulk_transfer_supported: true };
+    const { session, spies } = harness({
+      get_capabilities: async () => wide,
+      get_keymap_bulk: async () => ({ actions: Array.from({ length: 10 }, () => "No") }),
+      set_keymap_bulk: async () => undefined,
+    });
+
+    await session.keymap.replaceAll([{ layer: 0, actions: Array.from({ length: 10 }, () => "No") }]);
+
+    const pages = spies.set_keymap_bulk.mock.calls.map(([request]) => request as {
+      start_col: number;
+      actions: string[];
+    });
+    expect(pages.map((page) => [page.start_col, page.actions.length])).toEqual([
+      [0, 4],
+      [4, 4],
+      [8, 2],
+    ]);
+    await session.close();
+  });
+
+  it("resends a key write the firmware answers Busy", async () => {
+    let answers = 0;
+    const { session, spies } = harness({
+      set_key: async () => {
+        if (answers++ === 0) {
+          const busy = new Error("device rejected Busy");
+          busy.name = "Rejected";
+          throw busy;
+        }
+      },
+    });
+
+    await expect(session.keymap.setKey(0, 0, 1, "No")).resolves.toBeUndefined();
+    expect(spies.set_key).toHaveBeenCalledTimes(2);
+    await session.close();
+  });
+
+  it("surfaces any other rejected key write at once", async () => {
+    const { session, spies } = harness({
+      set_key: async () => {
+        const rejected = new Error("device rejected InvalidLayer");
+        rejected.name = "Rejected";
+        throw rejected;
+      },
+    });
+
+    await expect(session.keymap.setKey(9, 0, 1, "No")).rejects.toThrow("InvalidLayer");
+    expect(spies.set_key).toHaveBeenCalledTimes(1);
+    await session.close();
+  });
+
   it("does not cache a capabilities read that failed", async () => {
     let attempts = 0;
     const { session, spies } = harness({

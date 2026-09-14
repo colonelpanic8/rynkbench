@@ -122,8 +122,11 @@ export interface LayerMetadata {
 export interface KeymapOps {
   /** Read every layer. Row-major within each layer. */
   readAll(): Promise<LayerKeymap[]>;
-  /** Rewrite every fixed-capacity layer, using bulk transfer when available. */
+  /** Rewrite every fixed-capacity layer, using bulk transfer when available.
+   *  Pages are sized for the firmware's flash queue and resent while it
+   *  answers `Busy`. */
   replaceAll(layers: LayerKeymap[]): Promise<void>;
+  /** Write one cell, resending while the firmware answers `Busy`. */
   setKey(layer: number, row: number, col: number, action: KeyAction): Promise<void>;
   getEncoder(encoderId: number, layer: number): Promise<EncoderAction>;
   setEncoder(encoderId: number, layer: number, action: EncoderAction): Promise<void>;
