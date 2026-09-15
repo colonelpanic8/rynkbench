@@ -18,7 +18,9 @@ export function BleCard() {
   const { caps, session } = bundle;
   const [peripherals, setPeripherals] = useState<Array<PeripheralStatus | null>>([]);
   const [arming, setArming] = useState<number | null>(null);
+  const [armingAll, setArmingAll] = useState(false);
   const [clearing, setClearing] = useState<number | null>(null);
+  const [clearingAll, setClearingAll] = useState(false);
   const [switching, setSwitching] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fallback, setFallback] = useState<BleStatus | null>(null);
@@ -66,7 +68,7 @@ export function BleCard() {
     else setFallback(result.ble);
   };
 
-  const busy = switching !== null || clearing !== null;
+  const busy = switching !== null || clearing !== null || clearingAll;
 
   const switchSlot = async (slot: number) => {
     setSwitching(slot);
@@ -95,6 +97,20 @@ export function BleCard() {
     }
   };
 
+  const clearAll = async () => {
+    setClearingAll(true);
+    setError(null);
+    try {
+      await session.device.clearAllBleProfiles();
+      await refreshConnection();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setClearingAll(false);
+      setArmingAll(false);
+    }
+  };
+
   return (
     <Panel className="p-4">
       <div className="flex items-center justify-between">
@@ -108,8 +124,43 @@ export function BleCard() {
       </div>
 
       <div className="mt-3">
-        <div className="text-[11px] font-medium uppercase tracking-wider text-faint">
-          Profiles
+        <div className="flex items-center justify-between">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-faint">
+            Profiles
+          </div>
+          {armingAll ? (
+            <span className="flex items-center gap-1.5">
+              <Button
+                variant="danger"
+                className="px-2 py-0.5 text-[11.5px]"
+                disabled={busy}
+                onClick={clearAll}
+              >
+                {clearingAll ? "Clearing…" : "Confirm clear all"}
+              </Button>
+              <Button
+                variant="ghost"
+                className="px-2 py-0.5 text-[11.5px]"
+                disabled={busy}
+                onClick={() => setArmingAll(false)}
+              >
+                Cancel
+              </Button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              title="Forget every Bluetooth host pairing"
+              disabled={busy}
+              className="cursor-pointer text-[11.5px] text-faint underline underline-offset-2 transition-colors duration-120 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => {
+                setArming(null);
+                setArmingAll(true);
+              }}
+            >
+              Clear all
+            </button>
+          )}
         </div>
         <div className="mt-1.5 flex flex-col gap-1">
           {Array.from({ length: caps.num_ble_profiles }, (_, slot) => {
@@ -168,7 +219,10 @@ export function BleCard() {
                     title={`Forget the pairing stored in profile ${slot}`}
                     disabled={busy}
                     className="cursor-pointer text-[11.5px] text-faint underline underline-offset-2 transition-colors duration-120 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
-                    onClick={() => setArming(slot)}
+                    onClick={() => {
+                      setArmingAll(false);
+                      setArming(slot);
+                    }}
                   >
                     Clear
                   </button>

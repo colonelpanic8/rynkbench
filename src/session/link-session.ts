@@ -792,6 +792,7 @@ export class LinkSession implements RynkSession {
       resetStorage: () => this.run(() => client.storage_reset("Full")),
       bleStatus: () => this.run(() => client.get_ble_status()),
       clearBleProfile: (slot) => this.run(() => client.clear_ble_profile(slot)),
+      clearAllBleProfiles: () => this.run(() => client.clear_all_ble_profiles()),
       switchBleProfile: (slot) => this.run(() => client.switch_ble_profile(slot)),
       peripheralStatus: (slot) => this.run(() => client.get_peripheral_status(slot)),
       matrixState: () => this.run(() => client.get_matrix_state()),

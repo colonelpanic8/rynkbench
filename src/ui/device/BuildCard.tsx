@@ -13,11 +13,9 @@ import { Panel, Row, SectionLabel } from "../kit";
 /**
  * What this client and the firmware were each built from.
  *
- * Neither version above answers that: the Rynk protocol version is frozen at
- * v0.1 upstream, and RMK's semver does not move when the fork changes an
- * encoding — so two builds that disagree about, say, the keycode table report
- * identical versions right until one fails to decode what the other wrote. The
- * source revisions do distinguish them, so they are shown plainly, and a
+ * Neither version above identifies exact source: Rynk's version describes wire
+ * compatibility, while RMK's semver can remain unchanged across downstream
+ * builds. Source revisions do distinguish them, so they are shown plainly, and a
  * divergence is marked rather than announced: the assembled branch is rebuilt on
  * every repin, so a mismatch is common and a banner would only teach you to
  * ignore it.
@@ -58,4 +56,3 @@ export function BuildCard({ build }: { build: BuildInfo | null }) {
     </Panel>
   );
 }
-

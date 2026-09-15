@@ -60,7 +60,8 @@ export function StockMagicLayerPanel({ layer }: { layer: number }) {
         Rebuild {name} as the factory Glove80 Magic layer. Bluetooth profiles 1–{profiles} sit
         on the thumbs (T4, T5, T1, T2) with USB output on T6; the Q–T and A–G rows adjust
         speed, saturation, hue, and brightness and toggle or advance effects; each half's
-        outer keys carry bootloader and reset; F1 forgets the active profile's pairing.
+        outer keys carry bootloader and reset; F1 forgets the active profile's pairing and
+        F10 forgets all host pairings. Hold F1 with a profile key to clear and activate that slot.
         Every other key is unbound.
       </p>
       <p className="mt-1 text-[11px] leading-relaxed text-faint">
@@ -71,8 +72,7 @@ export function StockMagicLayerPanel({ layer }: { layer: number }) {
         layer wakes lighting and keeps its view visible for 20 seconds after release. Brightness controls also adjust the indicators.
       </p>
       <p className="mt-1 text-[10.5px] leading-relaxed text-faint">
-        Not reproduced: the output-fallback indicator and clear-all-pairings, which this
-        firmware cannot express.
+        Not reproduced: the output-fallback indicator, which this firmware cannot express.
       </p>
       {state.batchMode && (
         <p className="mt-2 text-[11px] text-warn">

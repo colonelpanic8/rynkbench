@@ -490,6 +490,10 @@ class MockSession implements RynkSession {
       latency(() => {
         this.checkBleProfile(slot);
       }),
+    clearAllBleProfiles: () =>
+      latency(() => {
+        this.checkBleProfile(0);
+      }),
     switchBleProfile: (slot) =>
       latency(() => {
         this.checkBleProfile(slot);

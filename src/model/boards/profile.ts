@@ -52,6 +52,13 @@ export interface BoardProfile {
   enrichment: BoardEnrichment;
   documents?: BoardDocumentTools;
   presets: readonly string[];
+  /** Named board-reserved User actions that the key editor can bind safely. */
+  userActions?: readonly {
+    id: number;
+    label: string;
+    hint: string;
+    danger?: boolean;
+  }[];
   defaultStatusLayer?: number;
   /** Optional, declarative route from this device identity to trusted firmware. */
   firmware?: FirmwareUpdateProfile;
