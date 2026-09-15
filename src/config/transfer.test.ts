@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { initSync } from "../vendor/moergo-config-wasm/moergo_config_wasm";
 import { importDocument } from "./transfer";
-import { RUNTIME_EFFECTS_CONDITIONS } from "../session/lighting-features";
+import { RULES, RUNTIME_EFFECTS_CONDITIONS } from "../session/lighting-features";
 import type { ExtensionCatalog } from "./document";
 import { renderDocument, snapshotFromState } from "./document";
 import { offlineGlove80Catalog, openOfflineGlove80 } from "../session/offline/glove80";
@@ -384,6 +384,39 @@ describe("importDocument lighting preflight", () => {
       }
     },
   );
+
+  // Firmware built without the legacy conditional-scene endpoints advertises
+  // RULES alone, and stores layer-set and lock-indicator conditions as tagged
+  // predicates. Preflight used to demand the retired bit and refuse the import.
+  it("imports layer-set and lock-indicator conditions on rule-only firmware", async () => {
+    const session = openOfflineGlove80();
+    try {
+      const bundle = await openBundle(session);
+      const state = initialWorkbenchState(bundle);
+      const snapshot = structuredClone(snapshotFromState(state));
+      snapshot.lighting!.conditional_scenes = [ruleToWire({
+        cell: {
+          led_id: 0,
+          effect: { Solid: { color: { r: 255, g: 0, b: 0 } } },
+          conditions: { layer: undefined, battery: undefined, output_mode: undefined },
+        },
+        connection: undefined,
+        effects: undefined,
+        layers: { active: 2, inactive: 4 },
+        indicators: { num_lock: true, caps_lock: undefined, scroll_lock: undefined },
+      })];
+      const catalog = offlineGlove80Catalog();
+      const text = renderDocument(snapshot, catalog, "toml");
+      bundle.lightingCaps = { ...bundle.lightingCaps!, features: RULES };
+
+      await importDocument({ text, session, bundle, state, dispatch: vi.fn(), catalog });
+
+      expect((await openBundle(session)).runtimeConditionalScenes)
+        .toEqual(snapshot.lighting!.conditional_scenes.map(ruleFromWire));
+    } finally {
+      await session.close();
+    }
+  });
 });
 
 
