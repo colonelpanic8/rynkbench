@@ -32,7 +32,8 @@ describe("stock Magic layer bindings", () => {
     expect(at(grid, 0, 6)).toEqual({ Single: { User: 2 } });
     expect(at(grid, 1, 6)).toEqual({ Single: { User: 3 } });
     expect(at(grid, 5, 6)).toEqual({ Single: { KeyboardControl: "OutputUsb" } });
-    expect(at(grid, 0, 0)).toEqual({ Single: { User: 6 } });
+    expect(at(grid, 0, 0)).toEqual({ Single: { User: 10 } });
+    expect(at(grid, 0, 13)).toEqual({ Single: { User: 11 } });
     expect(at(grid, 3, 0)).toEqual({ Single: { KeyboardControl: "Bootloader" } });
     expect(at(grid, 3, 13)).toEqual({ Single: { User: 12 } });
     expect(at(grid, 4, 0)).toEqual({ Single: { KeyboardControl: "Reboot" } });
@@ -45,13 +46,14 @@ describe("stock Magic layer bindings", () => {
     expect([1, 2, 3, 4, 5].map((col) => at(grid, 3, col))).toEqual(
       ["RgbSpd", "RgbSad", "RgbHud", "BacklightDown", "RgbModeForward"].map((action) => ({ Single: { Light: action } })),
     );
-    expect(grid.filter((action) => action !== "No")).toHaveLength(20);
+    expect(grid.filter((action) => action !== "No")).toHaveLength(21);
   });
 
-  it("follows the firmware's slot count for the profile keys and clear-bond id", () => {
+  it("follows the firmware's slot count while keeping the board-reserved clear actions", () => {
     const grid = stockMagicLayerGrid(3);
     expect(at(grid, 1, 6)).toBe("No");
-    expect(at(grid, 0, 0)).toEqual({ Single: { User: 5 } });
+    expect(at(grid, 0, 0)).toEqual({ Single: { User: 10 } });
+    expect(at(grid, 0, 13)).toEqual({ Single: { User: 11 } });
   });
 });
 
@@ -196,7 +198,7 @@ describe("writing the stock Magic layer", () => {
     );
 
     expect(result).toEqual({ ok: true });
-    expect(calls.filter((call) => call.startsWith("key"))).toHaveLength(19);
+    expect(calls.filter((call) => call.startsWith("key"))).toHaveLength(20);
     expect(calls).not.toContain("key 3,6");
     expect(calls.slice(-3)).toEqual(["scenes 40", "rules 60", "wake 4"]);
   });

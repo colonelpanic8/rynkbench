@@ -126,7 +126,7 @@ transparent fallthrough to the default layer); Overlay follows the live layers.
   along its longer axis—bottom-to-top for a column, left-to-right for a row—and
   the fill direction can be overridden, including using the order the keys were
   selected in; the panel lists the resulting 20%→100% keys before installing.
-  On a Glove80, the complete Magic-layer layout—two battery bars, three BLE
+  On a Glove80, the complete Magic-layer layout—two battery bars, four BLE
   profile keys, and the USB key—is available as a single preset that targets
   the chosen layer. Its bars can run up each half's outer column (five
   segments each) or follow MoErgo's stock firmware, which draws both halves'
@@ -141,8 +141,9 @@ transparent fallthrough to the default layer); Overlay follows the live layers.
   toggle/effect keys on the Q–T and A–G rows (R is the maintenance-lock
   toggle; the lighting toggle is the lighting
   output toggle, which is what MoErgo's `RGB_TOG` does), bootloader and reset
-  on each half's outer keys, forget-active-pairing on F1, and every other key
-  unbound. It installs the stock indicator map from MoErgo's firmware on the
+  on each half's outer keys, forget-active-pairing on F1, forget-all-pairings
+  on F10, and every other key unbound. Hold F1 with a profile key to clear and
+  activate that specific slot. It installs the stock indicator map from MoErgo's firmware on the
   same layer: the left half goes dark, the number row shows in magenta which
   layers are held alongside Magic, F3–F5 show caps, num, and scroll lock in
   red, Magic+R shows maintenance unlocked in green or locked in red, rows 3
@@ -154,8 +155,8 @@ transparent fallthrough to the default layer); Overlay follows the live layers.
   adjust the whole output, including indicators.
   Unchanged keys are skipped, the template's own rules and the layer's scene
   are replaced on repeat runs, and rule and scene capacity are checked before
-  anything is written. Not reproduced, because the firmware has no matching
-  condition or action: the output-fallback indicator and clear-all-pairings.
+  anything is written. The output-fallback indicator is not reproduced because
+  the firmware has no matching condition.
 - **Rules use the self-describing rule table.** Current Glove80 and Go60
   firmware no longer carries the three fixed legacy conditional-scene
   formats. Rynkbench prefers the tagged rule API and preserves unknown tags;

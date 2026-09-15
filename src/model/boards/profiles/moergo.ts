@@ -15,6 +15,21 @@ const releaseSource = {
   label: "Rynkbench MoErgo releases",
 };
 
+const bleUserActions = [
+  {
+    id: 10,
+    label: "Bluetooth · clear active / selected",
+    hint: "Tap alone for the active profile; hold with a profile key to clear and activate that slot · U10",
+    danger: true,
+  },
+  {
+    id: 11,
+    label: "Bluetooth · clear all profiles",
+    hint: "Forget every host pairing while preserving split-half and dongle bonds · U11",
+    danger: true,
+  },
+] as const;
+
 export const MOERGO_PROFILES: readonly BoardProfile[] = [
   {
     id: "glove80",
@@ -24,6 +39,7 @@ export const MOERGO_PROFILES: readonly BoardProfile[] = [
     enrichment: glove80Enrichment,
     documents: documentTools("go60", "Go60"),
     presets: ["glove80-status", "glove80-stock-magic"],
+    userActions: bleUserActions,
     defaultStatusLayer: 2,
     firmware: {
       source: releaseSource,
@@ -55,6 +71,7 @@ export const MOERGO_PROFILES: readonly BoardProfile[] = [
     enrichment: go60Enrichment,
     documents: documentTools("glove80", "Glove80"),
     presets: [],
+    userActions: bleUserActions,
     firmware: {
       source: releaseSource,
       targets: [

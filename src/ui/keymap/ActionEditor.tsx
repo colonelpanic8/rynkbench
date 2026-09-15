@@ -602,6 +602,19 @@ export function ActionEditor({
     return actions;
   }, [state.lightingControls.output_toggle_user_action, state.lightingOutputMode?.cycle_user_action]);
 
+  const systemActions = [
+    ...(bundle.boardProfile?.userActions ?? []).map((item) => ({
+      ...item,
+      id: `user:${item.id}`,
+      action: { Single: { User: item.id } } as KeyAction,
+    })),
+    ...SYSTEM_ACTIONS.map((item) => ({
+      ...item,
+      id: `system:${item.id}`,
+      action: { Single: { KeyboardControl: item.id } } as KeyAction,
+    })),
+  ];
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <Segmented
@@ -699,8 +712,8 @@ export function ActionEditor({
 
       {tab === "system" && (
         <PickList
-          items={SYSTEM_ACTIONS}
-          onPick={(id) => onCommit({ Single: { KeyboardControl: id } })}
+          items={systemActions}
+          onPick={(id) => onCommit(systemActions.find((item) => item.id === id)!.action)}
         />
       )}
 

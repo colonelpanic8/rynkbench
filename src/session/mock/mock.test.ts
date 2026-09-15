@@ -1090,6 +1090,7 @@ describe("BLE and peripherals", () => {
       expect(caps.ble_enabled).toBe(true);
       expect(await session.device.bleStatus()).toEqual({ profile: 0, state: "Connected" });
       await session.device.clearBleProfile(caps.num_ble_profiles - 1);
+      await session.device.clearAllBleProfiles();
       await expect(session.device.clearBleProfile(caps.num_ble_profiles)).rejects.toThrow(/out of range/);
       await expect(session.device.clearBleProfile(-1)).rejects.toThrow(/out of range/);
     });
@@ -1099,6 +1100,7 @@ describe("BLE and peripherals", () => {
     await withSession(ortho60Board, async (session) => {
       expect((await session.device.capabilities()).ble_enabled).toBe(false);
       await expect(session.device.clearBleProfile(0)).rejects.toThrow(/out of range/);
+      await expect(session.device.clearAllBleProfiles()).rejects.toThrow(/out of range/);
     });
   });
 

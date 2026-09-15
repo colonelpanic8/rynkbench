@@ -61,6 +61,8 @@ export function stockMagicIndicatorKeys(): IndicatorKey[] {
 
 /** Board-reserved User action that forwards a bootloader request to the right half. */
 const PERIPHERAL_BOOTLOADER_ACTION = 12;
+const CLEAR_ACTIVE_BLE_PROFILE_ACTION = 10;
+const CLEAR_ALL_BLE_PROFILES_ACTION = 11;
 /** LEDs of the left half, the only half ZMK's status view draws on. */
 const LEFT_HALF_LEDS = 40;
 
@@ -69,14 +71,14 @@ const control = (action: KeyboardAction): KeyAction => ({ Single: { KeyboardCont
 const user = (id: number): KeyAction => ({ Single: { User: id } });
 
 /** The layer's 6x14 row-major actions. Every key the stock layer leaves as
- *  `&none` is unbound. `profiles` is the firmware's BLE slot count, which
- *  positions RMK's clear-bond action after the slot-select ids. */
+ *  `&none` is unbound. */
 export function stockMagicLayerGrid(profiles: number): KeyAction[] {
   const grid: KeyAction[] = Array.from({ length: GLOVE80_ROWS * GLOVE80_COLS }, () => "No");
   const set = (row: number, col: number, action: KeyAction) => {
     grid[row * GLOVE80_COLS + col] = action;
   };
-  set(0, 0, user(profiles + 2)); // BT_CLR: forget the active profile's bond
+  set(0, 0, user(CLEAR_ACTIVE_BLE_PROFILE_ACTION));
+  set(0, 13, user(CLEAR_ALL_BLE_PROFILES_ACTION));
   set(2, 1, light("RgbSpi"));
   set(2, 2, light("RgbSai"));
   set(2, 3, light("RgbHui"));

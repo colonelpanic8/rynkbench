@@ -2,16 +2,13 @@
  * Which sources this client and the connected firmware were built from.
  *
  * Neither version number the protocol exposes can answer that question.
- * `ProtocolVersion` is minted upstream and frozen at v0.1 — downstream forks
- * are forbidden from bumping it — and `DeviceInfo.rmk_version` is RMK's semver,
- * which does not move when the fork changes an encoding. So two builds that
- * disagree about, say, the keycode table report identical versions right up to
- * the point where one fails to decode what the other wrote.
+ * `ProtocolVersion` describes wire compatibility, while `DeviceInfo.rmk_version`
+ * is RMK's semver; neither identifies the exact source that produced a build.
  *
  * What does identify a build is its source revision. The firmware reports its
  * own in the application-defined `GetBuildInfo` label; this client's are
  * recorded by the flake into each vendored wasm package. Comparing them will
- * not prove compatibility, but it makes a mismatch visible, which is the
+ * not prove incompatibility, but it makes a mismatch visible, which is the
  * difference between a mystifying decode failure and an obvious one.
  */
 import configRev from "../vendor/moergo-config-wasm/build-rev.json";

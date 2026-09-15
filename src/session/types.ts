@@ -298,6 +298,8 @@ export interface DeviceOps {
   resetStorage(): Promise<void>;
   bleStatus(): Promise<BleStatus>;
   clearBleProfile(slot: number): Promise<void>;
+  /** Forget every BLE host profile while preserving split-half and dongle bonds. */
+  clearAllBleProfiles(): Promise<void>;
   /** Make `slot` the active BLE profile. Drops any live link and
    *  re-advertises, so the reported status settles a moment later. */
   switchBleProfile(slot: number): Promise<void>;
