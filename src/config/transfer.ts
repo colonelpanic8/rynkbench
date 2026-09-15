@@ -131,8 +131,12 @@ function preflightLighting(
   const rules = desired.conditional_scenes?.map(ruleFromWire);
   if (rules === undefined || same(rules, state.runtimeConditionalScenes)) return;
   checkCapacity("Conditional lighting", rules.length, bundle.runtimeConditionalStatus);
+  // The tagged rule API supersedes the legacy conditional-scene bits and carries
+  // every predicate these branches gate on, so it satisfies them all. Firmware
+  // that advertises RULES reports its supported tags in the rule status, and the
+  // write path rejects unknown tags there with a precise message.
   const tagged = hasLightingFeature(bundle.lightingCaps, RULES);
-  const advanced = hasLightingFeature(bundle.lightingCaps, RUNTIME_LAYER_INDICATOR_CONDITIONS);
+  const advanced = tagged || hasLightingFeature(bundle.lightingCaps, RUNTIME_LAYER_INDICATOR_CONDITIONS);
   const extended = advanced || hasLightingFeature(bundle.lightingCaps, RUNTIME_EFFECTS_CONDITIONS);
   for (const [index, rule] of rules.entries()) {
     const unsupported = !tagged && (rule.maintenance !== undefined || rule.split_transport !== undefined || (rule.unknown_predicates?.length ?? 0) > 0)
