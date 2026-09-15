@@ -45,7 +45,7 @@ import type {
   SplitTransportState,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import type { LayerMetadata, RuntimeLightingRule, RynkSession } from "../session/types";
-import type { BoardProfile } from "../model/boards";
+import type { BoardProfile, BootloaderTarget } from "../model/boards";
 import type { KeyboardModel } from "../model/keyboard";
 import {
   initialKeyEditHistory,
@@ -1404,7 +1404,7 @@ export interface WorkbenchIo {
   applyPointingConfig(): Promise<IoWriteResult>;
   reloadPointingConfig(): Promise<IoWriteResult>;
   disconnect(): void;
-  rebootToBootloader(): Promise<void>;
+  rebootToBootloader(target?: BootloaderTarget): Promise<void>;
   resetStorage(): Promise<void>;
 }
 
@@ -2254,8 +2254,8 @@ export function makeIo(
     disconnect() {
       onDisconnect();
     },
-    rebootToBootloader() {
-      return session.device.rebootToBootloader();
+    rebootToBootloader(target) {
+      return session.device.rebootToBootloader(target);
     },
     resetStorage() {
       return session.device.resetStorage();

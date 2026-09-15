@@ -9,6 +9,12 @@ const documentTools = (id: string, name: string): BoardDocumentTools => ({
   migrationTarget: { id, name },
 });
 
+const releaseSource = {
+  kind: "github-latest-release" as const,
+  repository: "colonelpanic8/moergo-config",
+  label: "Rynkbench MoErgo releases",
+};
+
 export const MOERGO_PROFILES: readonly BoardProfile[] = [
   {
     id: "glove80",
@@ -19,6 +25,27 @@ export const MOERGO_PROFILES: readonly BoardProfile[] = [
     documents: documentTools("go60", "Go60"),
     presets: ["glove80-status", "glove80-stock-magic"],
     defaultStatusLayer: 2,
+    firmware: {
+      source: releaseSource,
+      targets: [
+        {
+          id: "left",
+          label: "Left / central half",
+          locations: [{ assetPattern: "^glove80-rmk-.+-lh\\.uf2$" }],
+          uf2FamilyId: 0x9807b007,
+          bootloader: { kind: "central" },
+          volumeLabels: ["GLV80LHBOOT"],
+        },
+        {
+          id: "right",
+          label: "Right / peripheral half",
+          locations: [{ assetPattern: "^glove80-rmk-.+-rh\\.uf2$" }],
+          uf2FamilyId: 0x9808b007,
+          bootloader: { kind: "peripheral", slot: 0 },
+          volumeLabels: ["GLV80RHBOOT"],
+        },
+      ],
+    },
   },
   {
     id: "go60",
@@ -28,6 +55,32 @@ export const MOERGO_PROFILES: readonly BoardProfile[] = [
     enrichment: go60Enrichment,
     documents: documentTools("glove80", "Glove80"),
     presets: [],
+    firmware: {
+      source: releaseSource,
+      targets: [
+        {
+          id: "left",
+          label: "Left / central half",
+          locations: [
+            { assetPattern: "^go60-rmk-.+-lh\\.uf2$" },
+            { assetPattern: "^go60-rmk\\.zip$", archiveEntryPattern: "^go60-rmk-.+-lh\\.uf2$" },
+          ],
+          uf2FamilyId: 0x9809b007,
+          bootloader: { kind: "central" },
+          volumeLabels: ["GO60LHBOOT"],
+        },
+        {
+          id: "right",
+          label: "Right / peripheral half",
+          locations: [
+            { assetPattern: "^go60-rmk-.+-rh\\.uf2$" },
+            { assetPattern: "^go60-rmk\\.zip$", archiveEntryPattern: "^go60-rmk-.+-rh\\.uf2$" },
+          ],
+          uf2FamilyId: 0x980ab007,
+          bootloader: { kind: "peripheral", slot: 0 },
+          volumeLabels: ["GO60RHBOOT"],
+        },
+      ],
+    },
   },
 ];
-

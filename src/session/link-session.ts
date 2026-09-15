@@ -782,7 +782,11 @@ export class LinkSession implements RynkSession {
       layout: () => this.run(() => client.get_layout()),
       battery: () => this.run(() => client.get_battery_status()),
       connectionStatus: () => this.run(() => client.get_connection_status()),
-      rebootToBootloader: () => this.run(() => client.bootloader_jump()),
+      rebootToBootloader: (target = { kind: "central" }) => this.run(() =>
+        target.kind === "central"
+          ? client.bootloader_jump()
+          : client.peripheral_bootloader_jump(target.slot)
+      ),
       // The firmware reboots itself once the erase finishes; a host-sent
       // reboot would race the erase and win, leaving the store intact.
       resetStorage: () => this.run(() => client.storage_reset("Full")),

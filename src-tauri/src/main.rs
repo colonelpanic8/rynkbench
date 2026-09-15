@@ -15,6 +15,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod ble;
+mod firmware;
 mod transport;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -236,6 +237,7 @@ fn main() {
     tauri::Builder::default()
         .manage(LinkState::default())
         .manage(ble::BleState::default())
+        .manage(firmware::FirmwareState::default())
         .invoke_handler(tauri::generate_handler![
             rynk_list,
             rynk_open,
@@ -245,6 +247,8 @@ fn main() {
             ble::rynk_ble_open,
             ble::rynk_ble_send,
             ble::rynk_ble_close,
+            firmware::firmware_prepare,
+            firmware::firmware_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Rynkbench");

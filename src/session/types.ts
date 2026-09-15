@@ -81,6 +81,7 @@ import type {
   SplitTransportState,
   TopicEvent,
 } from "../vendor/rynk-wasm/rynk_wasm";
+import type { BootloaderTarget } from "../model/boards/profile";
 
 /** The editor's semantic view of a self-describing lighting rule. The first
  * seven fields deliberately retain the former advanced-cell shape so existing
@@ -290,7 +291,7 @@ export interface DeviceOps {
   layout(): Promise<LayoutInfo>;
   battery(): Promise<BatteryStatus>;
   connectionStatus(): Promise<ConnectionStatus>;
-  rebootToBootloader(): Promise<void>;
+  rebootToBootloader(target?: BootloaderTarget): Promise<void>;
   /** Wipe all persisted settings, including Bluetooth bonds. The firmware
    *  reboots on its compiled defaults once the erase finishes, which ends the
    *  session; a rejected wipe leaves the keyboard running as it was. */

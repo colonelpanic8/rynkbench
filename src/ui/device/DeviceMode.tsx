@@ -11,6 +11,7 @@ import { BleCard } from "./BleCard";
 import { BuildCard } from "./BuildCard";
 import { DangerZone } from "./DangerZone";
 import { DiagnosticsCard } from "./DiagnosticsCard";
+import { FirmwareUpdateCard } from "./FirmwareUpdateCard";
 import { MatrixTester } from "./MatrixTester";
 import { SplitLatencyCard } from "./SplitLatencyCard";
 
@@ -66,6 +67,8 @@ export function DeviceMode() {
           </Panel>
 
           <BuildCard build={build} />
+
+          <FirmwareUpdateCard />
 
           <Panel className="p-4">
             <SectionLabel>Capabilities</SectionLabel>

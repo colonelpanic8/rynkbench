@@ -2,7 +2,14 @@ import type { DeviceCapabilities, DeviceInfo } from "../../vendor/rynk-wasm/rynk
 import type { BoardProfile } from "./profile";
 import { MOERGO_PROFILES } from "./profiles/moergo";
 
-export type { BoardDocumentTools, BoardProfile } from "./profile";
+export type {
+  BoardDocumentTools,
+  BoardProfile,
+  BootloaderTarget,
+  FirmwareReleaseSource,
+  FirmwareTarget,
+  FirmwareUpdateProfile,
+} from "./profile";
 
 export const BOARD_PROFILES: readonly BoardProfile[] = [...MOERGO_PROFILES];
 

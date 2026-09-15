@@ -42,8 +42,12 @@ keymap and per-key lighting live — no install, nothing leaves your machine.
   import instead of dropping the link part-way through it.
 - **Split tuning** — inspect and adjust the volatile powered/battery BLE latency
   policy on compatible split centrals.
-- **Device recovery** — the Danger zone can reboot into the bootloader or wipe
-  every stored setting and Bluetooth pairing before restarting on stock defaults.
+- **Firmware updates and recovery** — recognized boards can map their identity
+  to a release channel and independently flashable processors. The desktop app
+  downloads the latest release, verifies its SHA-256 digest and UF2 family,
+  puts each processor into its bootloader through Rynk, and writes the mounted
+  UF2 volume. The Danger zone can also reboot into the bootloader or wipe every
+  stored setting and Bluetooth pairing before restarting on stock defaults.
 - **Simulated boards** — demo a split ergo, an ortholinear 60, and a dev stub
   with no hardware attached, so the whole UI is explorable offline.
 
@@ -252,7 +256,12 @@ just tauri-run                # dev loop: rebuild the frontend, cargo run
 ```
 
 On Linux the app opens `/dev/hidraw*` directly, so the usual udev rules for
-your keyboard's raw-HID interface apply (the same access WebHID needs).
+your keyboard's raw-HID interface apply (the same access WebHID needs). Its
+automatic UF2 installer also relies on the desktop automounter exposing the
+bootloader under `/run/media/$USER`, `/media/$USER`, `/media`, or `/Volumes`.
+Firmware channels are declarative board-profile data; Glove80 and Go60 use the
+latest `colonelpanic8/moergo-config` release, but the resolver and installer do
+not otherwise contain MoErgo-specific device logic.
 
 ## The Rynk WASM build artifact
 

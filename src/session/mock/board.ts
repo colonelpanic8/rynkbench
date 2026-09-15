@@ -472,9 +472,13 @@ class MockSession implements RynkSession {
     battery: () => latency(() => this.battery),
     connectionStatus: () => latency(() => this.connectionStatus()),
     // Bootloader entry drops the link, same as the real device would.
-    rebootToBootloader: () =>
+    rebootToBootloader: (target = { kind: "central" }) =>
       latency(() => {
-        this.endForReboot();
+        if (target.kind === "central") {
+          this.endForReboot();
+        } else if (target.slot < 0 || target.slot >= this.spec.capabilities.num_split_peripherals) {
+          throw new Error(`peripheral ${target.slot} out of range`);
+        }
       }),
     resetStorage: () =>
       latency(() => {

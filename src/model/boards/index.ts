@@ -3,7 +3,7 @@ import type { BoardEnrichment } from "../keyboard";
 import { profileForIdentity } from "./profiles";
 
 export { resolveBoardProfile } from "./profiles";
-export type { BoardProfile } from "./profiles";
+export type { BoardProfile, BootloaderTarget } from "./profiles";
 
 /** Legacy identity-only enrichment for callers without matrix capabilities. */
 export function enrichmentFor(info: DeviceInfo): BoardEnrichment | undefined {
