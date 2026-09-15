@@ -62,7 +62,8 @@ export function StockMagicLayerPanel({ layer }: { layer: number }) {
         speed, saturation, hue, and brightness and toggle or advance effects; each half's
         outer keys carry bootloader and reset; F1 forgets the active profile's pairing and
         F10 forgets all host pairings. Hold F1 with a profile key to clear and activate that slot.
-        Every other key is unbound.
+        Quickly double-tap a non-selected profile key to keep that host temporarily disconnected;
+        single-tap it later to reconnect. Every other key is unbound.
       </p>
       <p className="mt-1 text-[11px] leading-relaxed text-faint">
         While the layer is active the left half goes dark: the number row shows the layers

@@ -143,7 +143,9 @@ transparent fallthrough to the default layer); Overlay follows the live layers.
   output toggle, which is what MoErgo's `RGB_TOG` does), bootloader and reset
   on each half's outer keys, forget-active-pairing on F1, forget-all-pairings
   on F10, and every other key unbound. Hold F1 with a profile key to clear and
-  activate that specific slot. It installs the stock indicator map from MoErgo's firmware on the
+  activate that specific slot. Quickly double-tap a non-selected profile key
+  to keep that bonded host temporarily disconnected; a later single tap
+  reconnects it. It installs the stock indicator map from MoErgo's firmware on the
   same layer: the left half goes dark, the number row shows in magenta which
   layers are held alongside Magic, F3–F5 show caps, num, and scroll lock in
   red, Magic+R shows maintenance unlocked in green or locked in red, rows 3
