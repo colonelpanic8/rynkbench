@@ -11,6 +11,7 @@ import {
   glove80Enrichment,
 } from "./glove80";
 import { GO60_COLS, GO60_KEYS, GO60_ROWS } from "./go60";
+import { ruleFromWire, ruleToWire } from "../../session/lighting-rules";
 
 export type MoErgoBoard = "glove80" | "go60";
 
@@ -327,19 +328,20 @@ export function transferSnapshot(
 
     if (lighting.conditional_scenes) {
       const convertedRules = lighting.conditional_scenes.flatMap((rule, index) => {
-        const led = mapLed(rule.cell.led_id);
+        const semantic = ruleFromWire(rule);
+        const led = mapLed(semantic.cell.led_id);
         if (led !== undefined) {
-          return [{ ...rule, cell: { ...rule.cell, led_id: led } }];
+          return [ruleToWire({ ...semantic, cell: { ...semantic.cell, led_id: led } })];
         }
         notes.push({
           approximated: false,
-          location: `conditional lighting rule ${index}, LED ${rule.cell.led_id}`,
+          location: `conditional lighting rule ${index}, LED ${semantic.cell.led_id}`,
           message: `The ${source.name} light has no corresponding key on ${target.name}.`,
         });
         return [];
       });
       const preservedRules = (targetSnapshot.lighting?.conditional_scenes ?? []).filter(
-        (rule) => !mappedTargetLeds.has(rule.cell.led_id),
+        (rule) => !mappedTargetLeds.has(rule.led_id),
       );
       lighting.conditional_scenes = [...preservedRules, ...convertedRules];
     }

@@ -1,8 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { beforeAll, describe, expect, it } from "vitest";
+import { initSync } from "../../vendor/rynk-wasm/rynk_wasm";
 import type { RuntimeSnapshot } from "../../config/document";
 import { offlineGlove80Board, openOfflineGlove80 } from "./glove80";
+import { ruleFromWire, ruleToWire } from "../lighting-rules";
 
 const layer = () => Array.from({ length: 6 * 14 }, () => "No" as const);
+
+beforeAll(() => {
+  initSync({ module: readFileSync("src/vendor/rynk-wasm/rynk_wasm_bg.wasm") });
+});
 
 const snapshotBehaviors = (): NonNullable<RuntimeSnapshot["behaviors"]> => ({
   config: undefined,
@@ -51,7 +58,7 @@ describe("offline Glove80 workspace", () => {
         overlay: undefined,
         effect_params: [{ effect: 5, index: 0, value: 11 }],
         scenes: [],
-        conditional_scenes: [{
+        conditional_scenes: [ruleToWire({
           cell: {
             led_id: 0,
             effect: { Solid: { color: { r: 255, g: 0, b: 0 } } },
@@ -61,7 +68,7 @@ describe("offline Glove80 workspace", () => {
           effects: { enabled: true },
           layers: undefined,
           indicators: undefined,
-        }],
+        })],
       },
       behaviors: {
         config: undefined,
@@ -106,7 +113,7 @@ describe("offline Glove80 workspace", () => {
     const session = openOfflineGlove80(snapshot);
     expect(session.kind).toBe("offline");
     expect(await session.lighting.conditionalScenes.read()).toStrictEqual([
-      { ...snapshot.lighting!.conditional_scenes![0], layers: undefined, indicators: undefined },
+      ruleFromWire(snapshot.lighting!.conditional_scenes![0]),
     ]);
     // The document chose no overlay effect; the workspace still offers the
     // surface, which `overlay: undefined` on the spec would have withdrawn.

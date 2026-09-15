@@ -8,11 +8,11 @@
 
 import type {
   LightingEffect,
-  LightingAdvancedConditionalSceneCell,
   LightingLedId,
 } from "../../vendor/rynk-wasm/rynk_wasm";
+import type { RuntimeLightingRule } from "../../session/types";
 
-export type Rule = LightingAdvancedConditionalSceneCell;
+export type Rule = RuntimeLightingRule;
 export type Rules = Rule[];
 
 /** A fresh, unconditional rule — "always, on this LED". Conditions are added
@@ -28,6 +28,8 @@ export function newRule(ledId: LightingLedId, effect: LightingEffect): Rule {
     effects: undefined,
     layers: undefined,
     indicators: undefined,
+    maintenance: undefined,
+    split_transport: undefined,
   };
 }
 

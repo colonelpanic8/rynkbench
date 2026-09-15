@@ -32,6 +32,8 @@ export const STOCK_LAYER_KEYS = rowKeys(1, [35, 29, 23, 17, 11, 6]);
 /** Left battery on row 3, right battery on row 4, each filling inward. */
 export const STOCK_LEFT_BATTERY_KEYS = rowKeys(2, [36, 30, 24, 18, 12, 7]);
 export const STOCK_RIGHT_BATTERY_KEYS = rowKeys(3, [37, 31, 25, 19, 13, 8]);
+/** R on the Magic layer: the host-mutation lock toggle and its status LED. */
+export const STOCK_MAINTENANCE_KEY: IndicatorKey = { row: 2, col: 4, led: 12 };
 /** Bluetooth profiles 0-3 on T4, T5, T1, T2; USB on T6. */
 export const STOCK_PROFILE_KEYS = [thumb(3), thumb(4), thumb(0), thumb(1)];
 export const STOCK_USB_KEY = thumb(5);
@@ -78,7 +80,7 @@ export function stockMagicLayerGrid(profiles: number): KeyAction[] {
   set(2, 1, light("RgbSpi"));
   set(2, 2, light("RgbSai"));
   set(2, 3, light("RgbHui"));
-  set(2, 4, light("BacklightUp"));
+  set(2, 4, control("MaintenanceModeToggle"));
   // RGB_TOG turns all underglow off; on this firmware that is the output
   // toggle, while RgbTog only flips the uniform background band.
   set(2, 5, light("BacklightToggle"));
@@ -107,6 +109,8 @@ const MAGENTA = rgb(255, 0, 255);
 const WHITE = rgb(255, 255, 255);
 const LILAC = rgb(107, 31, 206);
 const BLACK = rgb(0, 0, 0);
+const MAINTENANCE_UNLOCKED = rgb(0, 128, 0);
+const MAINTENANCE_LOCKED = rgb(128, 0, 0);
 
 function rule(layer: number, led: number, effect: LightingEffect): StatusRule {
   return {
@@ -214,6 +218,11 @@ export function stockMagicLayerRules(layer: number, numLayers: number, profiles:
     rules.push(...profileRules(layer, key.led, slot)),
   );
   rules.push(...usbRules(layer, STOCK_USB_KEY.led));
+  const unlocked = rule(layer, STOCK_MAINTENANCE_KEY.led, MAINTENANCE_UNLOCKED);
+  unlocked.maintenance = { unlocked: true };
+  const locked = rule(layer, STOCK_MAINTENANCE_KEY.led, MAINTENANCE_LOCKED);
+  locked.maintenance = { unlocked: false };
+  rules.push(unlocked, locked);
   return rules;
 }
 

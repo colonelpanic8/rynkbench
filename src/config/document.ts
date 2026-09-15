@@ -22,8 +22,10 @@ import type {
 } from "../vendor/moergo-config-wasm/moergo_config_wasm";
 import { boardForMatrixCells } from "../model/boards/transfer";
 import type { RynkSession } from "../session/types";
+import { ruleToWire } from "../session/lighting-rules";
 import { normalizePointingConfig } from "../ui/pointing";
 import type { WorkbenchState } from "../ui/state";
+import { initWasm as initRynkWasm } from "../session/wasm";
 
 export type { ConfigFormat, ExtensionCatalog, ImportNote, ParsedConfig, RuntimeSnapshot };
 
@@ -32,7 +34,7 @@ let wasmReady: Promise<unknown> | null = null;
 /** One-shot loader for the vendored document module, mirroring the session's
  *  own wasm loader: a failed init is retryable on the next attempt. */
 export function initConfigWasm(): Promise<unknown> {
-  wasmReady ??= wasmInit().catch((error: unknown) => {
+  wasmReady ??= Promise.all([wasmInit(), initRynkWasm()]).catch((error: unknown) => {
     wasmReady = null;
     throw error;
   });
@@ -99,7 +101,7 @@ export function snapshotFromState(
           scenes: state.scenes,
           // Distinguish "no such table in this firmware" from an empty one; a
           // file naming rules conflicts with the former and not the latter.
-          conditional_scenes: state.runtimeConditionalScenes,
+          conditional_scenes: state.runtimeConditionalScenes.map(ruleToWire),
         };
   return {
     // The device reports no BLE advertising name and the renderer does not fall

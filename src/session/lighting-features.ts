@@ -20,6 +20,9 @@ export const RUNTIME_EFFECTS_CONDITIONS = 1 << 15;
 /** Advanced endpoints add layer-set and lock-indicator predicates while
  * preserving the original extended endpoint encoding. */
 export const RUNTIME_LAYER_INDICATOR_CONDITIONS = 1 << 16;
+/** Self-describing tagged runtime rule table. This supersedes all three fixed
+ * conditional-scene encodings and is the only surface current boards ship. */
+export const RULES = 1 << 17;
 
 export function hasLightingFeature(
   caps: Pick<LightingCapabilities, "features"> | null | undefined,

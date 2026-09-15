@@ -129,6 +129,8 @@ export function LightingMode() {
         effectsEnabled: state.lightingExtension
           ? state.lightingExtension.state.value !== 0
           : undefined,
+        maintenanceUnlocked: state.maintenanceMode?.enabled,
+        splitTransport: state.splitTransport ?? undefined,
       }),
     [
       activeLayers,
@@ -139,6 +141,8 @@ export function LightingMode() {
       state.lightingOutputMode,
       state.connection,
       state.lightingExtension,
+      state.maintenanceMode,
+      state.splitTransport,
     ],
   );
   const previewEffects = useMemo(

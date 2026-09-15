@@ -19,6 +19,8 @@ import type {
   LightingConditionalSceneCell,
   LightingConnectionCondition,
   LightingOutputMode,
+  LightingSplitForce,
+  LightingSplitLink,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import { conditionalTablesEqual, useWorkbench } from "../state";
 import { ApplyBar, Button, SectionLabel, Segmented, TextInput, cx } from "../kit";
@@ -39,7 +41,7 @@ import {
   rulesOnLayer,
 } from "./rules";
 import type { Rule, Rules } from "./rules";
-import { RUNTIME_LAYER_INDICATOR_CONDITIONS, hasLightingFeature } from "../../session/lighting-features";
+import { RULES, RUNTIME_LAYER_INDICATOR_CONDITIONS, hasLightingFeature } from "../../session/lighting-features";
 import { maskHasLayer, setLayerInMask } from "./wakeLayers";
 
 const CHARGE_STATES: LightingChargeCondition[] = ["Any", "Charging", "Discharging", "Unknown"];
@@ -191,7 +193,9 @@ export function ConditionalRulesPanel() {
   // Gate on the encoding bit, not on the connection bit: firmware advertising
   // only the earlier predicate bits speaks a shorter extended cell that this
   // build does not write.
-  const predicatesSupported = hasLightingFeature(bundle.lightingCaps, RUNTIME_LAYER_INDICATOR_CONDITIONS);
+  const rulesSupported = hasLightingFeature(bundle.lightingCaps, RULES);
+  const predicatesSupported =
+    rulesSupported || hasLightingFeature(bundle.lightingCaps, RUNTIME_LAYER_INDICATOR_CONDITIONS);
   const layerSet = rule?.layers;
   const setLayerSet = (target: Rule, next: { active: number; inactive: number }) => {
     if (selected === null) return;
@@ -742,6 +746,112 @@ export function ConditionalRulesPanel() {
                   </div>
                 )}
               </div>
+
+              {rulesSupported && (
+                <div className="flex flex-col gap-1.5 border-t border-line-soft pt-2">
+                  <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+                    Maintenance state
+                    <input
+                      type="checkbox"
+                      checked={rule.maintenance !== undefined}
+                      onChange={(e) =>
+                        edit(selected, {
+                          ...rule,
+                          maintenance: e.target.checked ? { unlocked: true } : undefined,
+                        })
+                      }
+                      className="accent-(--color-accent)"
+                    />
+                  </label>
+                  {rule.maintenance !== undefined && (
+                    <select
+                      value={rule.maintenance.unlocked ? "unlocked" : "locked"}
+                      onChange={(e) =>
+                        edit(selected, {
+                          ...rule,
+                          maintenance: { unlocked: e.target.value === "unlocked" },
+                        })
+                      }
+                      className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                    >
+                      <option value="unlocked">unlocked</option>
+                      <option value="locked">locked</option>
+                    </select>
+                  )}
+                </div>
+              )}
+
+              {rulesSupported && (
+                <div className="flex flex-col gap-1.5 border-t border-line-soft pt-2">
+                  <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+                    Split transport
+                    <input
+                      type="checkbox"
+                      checked={rule.split_transport !== undefined}
+                      onChange={(e) =>
+                        edit(selected, {
+                          ...rule,
+                          split_transport: e.target.checked
+                            ? { link: undefined, force: "Auto" }
+                            : undefined,
+                        })
+                      }
+                      className="accent-(--color-accent)"
+                    />
+                  </label>
+                  {rule.split_transport !== undefined && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="text-[11px] text-faint">
+                        Active link
+                        <select
+                          value={rule.split_transport.link ?? "any"}
+                          onChange={(e) =>
+                            edit(selected, {
+                              ...rule,
+                              split_transport: {
+                                ...rule.split_transport!,
+                                link:
+                                  e.target.value === "any"
+                                    ? undefined
+                                    : (e.target.value as LightingSplitLink),
+                              },
+                            })
+                          }
+                          className="mt-1 w-full rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                        >
+                          <option value="any">any</option>
+                          <option value="Wired">wired</option>
+                          <option value="Ble">Bluetooth</option>
+                        </select>
+                      </label>
+                      <label className="text-[11px] text-faint">
+                        Force
+                        <select
+                          value={rule.split_transport.force ?? "any"}
+                          onChange={(e) =>
+                            edit(selected, {
+                              ...rule,
+                              split_transport: {
+                                ...rule.split_transport!,
+                                force:
+                                  e.target.value === "any"
+                                    ? undefined
+                                    : (e.target.value as LightingSplitForce),
+                              },
+                            })
+                          }
+                          className="mt-1 w-full rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                        >
+                          <option value="any">any</option>
+                          <option value="Auto">automatic</option>
+                          <option value="Wired">forced wired</option>
+                          <option value="Ble">forced Bluetooth</option>
+                        </select>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Connection condition. Every named field must hold, so the
                   sub-toggles compose as a conjunction. */}

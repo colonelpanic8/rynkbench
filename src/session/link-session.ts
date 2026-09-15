@@ -31,9 +31,12 @@ import type {
   LightingOverlayPage,
   LightingOverlayPageRequest,
   LightingPageRequest,
+  LightingPredicate,
   LightingRuntimeConditionalScenePageRequest,
   LightingRuntimeConditionalScenesPage,
   LightingRuntimeConditionalSceneStatus,
+  LightingRuleStatus,
+  LightingRulesPage,
   LightingSceneCell,
   LightingSceneStatus,
   LightingState,
@@ -69,9 +72,19 @@ import {
   RUNTIME_CONDITIONAL_SCENES,
   RUNTIME_EFFECTS_CONDITIONS,
   RUNTIME_LAYER_INDICATOR_CONDITIONS,
+  RULES,
   hasLightingFeature,
 } from "./lighting-features";
 import { unsupported } from "./unsupported";
+import {
+  encodeRuleChunks,
+  ruleFromAdvanced,
+  ruleFromExtended,
+  ruleFromLegacy,
+  rulesFromWire,
+  ruleToWire,
+} from "./lighting-rules";
+import type { RuntimeLightingRule } from "./types";
 
 /** Transport-specific pieces a LinkSession cannot know itself. */
 export interface LinkSessionHooks {
@@ -301,6 +314,12 @@ interface RuntimeConditionalStatusClient {
   get_lighting_runtime_conditional_scene_status(): Promise<LightingRuntimeConditionalSceneStatus>;
   get_lighting_advanced_runtime_conditional_scene_status(): Promise<LightingRuntimeConditionalSceneStatus>;
   get_lighting_extended_runtime_conditional_scene_status(): Promise<LightingRuntimeConditionalSceneStatus>;
+  get_lighting_rule_status?(): Promise<LightingRuleStatus>;
+}
+
+interface LightingRuleClient {
+  get_lighting_rule_status(): Promise<LightingRuleStatus>;
+  get_lighting_rules(request: LightingRuntimeConditionalScenePageRequest): Promise<LightingRulesPage>;
 }
 
 interface OverlayReadClient {
@@ -644,10 +663,53 @@ export async function readLightingExtendedRuntimeConditionalScenes(
   );
 }
 
+export async function readLightingRules(
+  client: LightingRuleClient,
+  attempts = READ_ATTEMPTS,
+): Promise<RuntimeLightingRule[]> {
+  let lastRevision: number | undefined;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const status = await client.get_lighting_rule_status();
+    lastRevision = status.revision;
+    const rules: RuntimeLightingRule[] = [];
+    let restart = false;
+    while (rules.length < status.rule_len) {
+      const page = await client.get_lighting_rules({ revision: status.revision, offset: rules.length });
+      if (page.revision !== status.revision) {
+        restart = true;
+        break;
+      }
+      if (page.total_count !== status.rule_len || page.offset !== rules.length) {
+        throw new Error("lighting rule page metadata disagrees with the table status");
+      }
+      if (page.count === 0) {
+        throw new Error(`lighting rule read stalled at ${rules.length} of ${status.rule_len}`);
+      }
+      const decoded = rulesFromWire(page.rules, page.count);
+      if (decoded.length !== page.count || rules.length + decoded.length > status.rule_len) {
+        throw new Error("lighting rule page decoded to an invalid rule count");
+      }
+      rules.push(...decoded);
+    }
+    if (!restart) return rules;
+  }
+  throw new Error(`StateRevisionConflict: lighting rules kept changing at revision ${lastRevision}`);
+}
+
 export async function readLightingRuntimeConditionalStatus(
   client: RuntimeConditionalStatusClient,
 ): Promise<LightingRuntimeConditionalSceneStatus> {
   const caps = await client.get_lighting_capabilities();
+  if (hasLightingFeature(caps, RULES)) {
+    if (client.get_lighting_rule_status === undefined) throw unsupported("lighting rules");
+    const status = await client.get_lighting_rule_status();
+    return {
+      revision: status.revision,
+      capacity: status.capacity,
+      cell_len: status.rule_len,
+      chunk_capacity: 1,
+    };
+  }
   if (!hasLightingFeature(caps, RUNTIME_CONDITIONAL_SCENES)) {
     throw unsupported("runtime conditional scenes");
   }
@@ -734,6 +796,8 @@ export class LinkSession implements RynkSession {
       splitCentralLatency: () => this.run(() => client.get_split_central_latency()),
       setSplitCentralLatency: (policy) =>
         this.run(() => client.set_split_central_latency(policy)),
+      maintenanceMode: () => this.run(() => client.get_maintenance_mode()),
+      splitTransport: () => this.run(() => client.get_split_transport()),
     };
 
     this.keymap = {
@@ -1315,37 +1379,78 @@ export class LinkSession implements RynkSession {
         this.client.get_lighting_extended_runtime_conditional_scene_status(),
       get_lighting_advanced_runtime_conditional_scene_status: () =>
         this.client.get_lighting_advanced_runtime_conditional_scene_status(),
+      get_lighting_rule_status: () => this.client.get_lighting_rule_status(),
     });
   }
 
-  private async readAllRuntimeConditionalScenes(): Promise<
-    LightingAdvancedConditionalSceneCell[]
-  > {
+  private async readAllRuntimeConditionalScenes(): Promise<RuntimeLightingRule[]> {
     await this.readRuntimeConditionalStatus();
+    if (await this.hasLightingFeature(RULES)) {
+      return readLightingRules(this.client);
+    }
     if (await this.hasLightingFeature(RUNTIME_LAYER_INDICATOR_CONDITIONS)) {
-      return readLightingAdvancedRuntimeConditionalScenes(this.client);
+      return (await readLightingAdvancedRuntimeConditionalScenes(this.client)).map(ruleFromAdvanced);
     }
     if (await this.hasLightingFeature(RUNTIME_EFFECTS_CONDITIONS)) {
       const cells = await readLightingExtendedRuntimeConditionalScenes(this.client);
-      return cells.map((cell) => ({ ...cell, layers: undefined, indicators: undefined }));
+      return cells.map(ruleFromExtended);
     }
     // Legacy firmware stores none of the extended predicates, so widening
     // its cells loses nothing.
     const cells = await readLightingRuntimeConditionalScenes(this.client);
-    return cells.map((cell) => ({
-      cell,
-      connection: undefined,
-      effects: undefined,
-      layers: undefined,
-      indicators: undefined,
-    }));
+    return cells.map(ruleFromLegacy);
   }
 
   private async replaceRuntimeConditionalCells(
-    cells: LightingAdvancedConditionalSceneCell[],
+    cells: RuntimeLightingRule[],
   ): Promise<LightingState> {
     const status = await this.readRuntimeConditionalStatus();
     const client = this.client;
+    if (await this.hasLightingFeature(RULES)) {
+      const ruleStatus = await client.get_lighting_rule_status();
+      const wireRules = cells.map(ruleToWire);
+      for (let index = 0; index < wireRules.length; index += 1) {
+        if (wireRules[index].predicates.length > ruleStatus.max_predicates) {
+          throw new Error(
+            `rule ${index + 1} has ${wireRules[index].predicates.length} predicates; ` +
+              `firmware limit is ${ruleStatus.max_predicates}`,
+          );
+        }
+        const unsupportedTag = wireRules[index].predicates.find(
+          (predicate: LightingPredicate) => (ruleStatus.predicates & 2 ** predicate.tag) === 0,
+        );
+        if (unsupportedTag !== undefined) {
+          throw new Error(
+            `rule ${index + 1} uses predicate tag ${unsupportedTag.tag}, which this firmware cannot store`,
+          );
+        }
+      }
+      const chunks = encodeRuleChunks(cells, ruleStatus.page_bytes);
+      const transaction = await client.begin_lighting_rule_replace({
+        expected_revision: ruleStatus.revision,
+        cell_count: cells.length,
+      });
+      try {
+        for (const chunk of chunks) {
+          await client.put_lighting_rule_chunk({
+            transaction_id: transaction.id,
+            ...chunk,
+          });
+        }
+        return await client.commit_lighting_rule_replace({ transaction_id: transaction.id });
+      } catch (error) {
+        await client.abort_lighting_rule_replace({ transaction_id: transaction.id }).catch(() => undefined);
+        throw error;
+      }
+    }
+    const newPredicate = cells.findIndex(
+      (cell) => cell.maintenance !== undefined || cell.split_transport !== undefined || (cell.unknown_predicates?.length ?? 0) > 0,
+    );
+    if (newPredicate !== -1) {
+      throw new Error(
+        `rule ${newPredicate + 1} requires the self-describing lighting rule API; update firmware first`,
+      );
+    }
     if (await this.hasLightingFeature(RUNTIME_LAYER_INDICATOR_CONDITIONS)) {
       return replaceInChunks(
         {

@@ -134,13 +134,15 @@ transparent fallthrough to the default layer); Overlay follows the live layers.
   chosen layer as the factory ZMK Magic layer: Bluetooth profiles 1–4 on T4,
   T5, T1, and T2 (RMK's slot-select actions, which also prefer Bluetooth
   output), USB output on T6, RGB speed/saturation/hue/brightness and
-  toggle/effect keys on the Q–T and A–G rows (the toggle is the lighting
+  toggle/effect keys on the Q–T and A–G rows (R is the maintenance-lock
+  toggle; the lighting toggle is the lighting
   output toggle, which is what MoErgo's `RGB_TOG` does), bootloader and reset
   on each half's outer keys, forget-active-pairing on F1, and every other key
   unbound. It installs the stock indicator map from MoErgo's firmware on the
   same layer: the left half goes dark, the number row shows in magenta which
   layers are held alongside Magic, F3–F5 show caps, num, and scroll lock in
-  red, rows 3 and 4 fill green/yellow/red with the left and right battery
+  red, Magic+R shows maintenance unlocked in green or locked in red, rows 3
+  and 4 fill green/yellow/red with the left and right battery
   (all green while charging), and the profile and USB keys show lilac
   unpaired, red paired-but-idle, green connected, and white while carrying
   typing. The layer is designated a Magic layer so it wakes lighting; the
@@ -150,14 +152,18 @@ transparent fallthrough to the default layer); Overlay follows the live layers.
   are replaced on repeat runs, and rule and scene capacity are checked before
   anything is written. Not reproduced, because the firmware has no matching
   condition or action: the output-fallback indicator and clear-all-pairings.
-- **Rules can watch a layer set and the host's lock indicators.** Beyond the
+- **Rules use the self-describing rule table.** Current Glove80 and Go60
+  firmware no longer carries the three fixed legacy conditional-scene
+  formats. Rynkbench prefers the tagged rule API and preserves unknown tags;
+  read/write fallback remains only for connecting to older firmware.
+- **Rules can watch runtime status.** Beyond the
   single layer condition, a runtime rule can require every layer in a set to
   be active and every layer in another set to be inactive (**Other layers**),
-  and can gate on num, caps, and scroll lock (**Lock indicators**). Both ride
-  the advanced conditional endpoints, so firmware must advertise the
-  layer/indicator-conditions capability; the preview evaluates layer sets
-  against the live layer state and treats lock rules as unsatisfiable, since
-  the host does not see the keyboard's lock state.
+  and can gate on num, caps, and scroll lock (**Lock indicators**), whether
+  maintenance writes are locked, and the automatic split selector's active
+  link or force. The preview evaluates maintenance and split conditions from
+  their live Rynk reads. Lock-indicator rules remain unsatisfiable in preview,
+  since the host does not publish that state through this session surface.
 - **Lighting control key presets pair behavior and colors.** In Keymap, select
   a key and open the Lighting tab of its action editor. Under **Key presets**,
   **Toggle RGB effects** installs the effects toggle and green/dim-red
@@ -349,9 +355,10 @@ generic device discovery.
 ### Troubleshooting a disconnected configuration import
 
 Rynkbench parses configuration files before writing them and checks changed
-lighting tables against the connected firmware's capacity and supported
-conditional predicates before applying any part of the import. Layer-set
-conditions survive TOML import and export; contradictory gates are rejected
+lighting tables against the connected firmware's capacity and advertised
+tagged predicates before applying any part of the import. Layer-set,
+maintenance, and split-transport conditions survive TOML import and export;
+contradictory gates are rejected
 on both input and device readback. A rejected file
 should show a configuration error and leave the session connected.
 

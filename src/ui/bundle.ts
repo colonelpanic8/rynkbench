@@ -8,7 +8,6 @@ import type {
   LightingCapabilities,
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
-  LightingAdvancedConditionalSceneCell,
   LightingControls,
   LightingExtension,
   LightingExtensionLayers,
@@ -19,12 +18,14 @@ import type {
   LightingSceneStatus,
   LightingState,
   ModifierCombination,
+  MaintenanceMode,
   PointingCapabilities,
   PointingConfig,
+  SplitTransportState,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import { buildKeyboardModel } from "../model/keyboard";
 import { resolveBoardProfile } from "../model/boards";
-import type { LayerMetadata, LightingTopology, RynkSession } from "../session/types";
+import type { LayerMetadata, LightingTopology, RuntimeLightingRule, RynkSession } from "../session/types";
 import { isUnsupportedError } from "../session/unsupported";
 import type { ConnectedBundle } from "./state";
 import { errorMessage } from "./state";
@@ -87,7 +88,7 @@ export async function openBundle(session: RynkSession): Promise<ConnectedBundle>
     wake_layers: 0,
   };
   let runtimeConditionalStatus: LightingRuntimeConditionalSceneStatus | null = null;
-  let runtimeConditionalScenes: LightingAdvancedConditionalSceneCell[] = [];
+  let runtimeConditionalScenes: RuntimeLightingRule[] = [];
   let lightingExtension: LightingExtension | null = null;
   let lightingExtensionLayers: LightingExtensionLayers | null = null;
   let extensionEffectNames: string[] = [];
@@ -250,6 +251,10 @@ export async function openBundle(session: RynkSession): Promise<ConnectedBundle>
           .catch(() => "Unavailable" as const)
       : Promise.resolve("Unavailable" as const),
   ]);
+  const [maintenanceMode, splitTransport] = await Promise.all([
+    optionalRead<MaintenanceMode | null>("maintenance mode", session.device.maintenanceMode(), null),
+    optionalRead<SplitTransportState | null>("split transport", session.device.splitTransport(), null),
+  ]);
   const activeLayers = layerState.activeLayers.filter((layer) => layer < caps.num_layers);
   const defaultLayer = layerState.defaultLayer;
   const currentLayer = Math.max(defaultLayer, ...activeLayers);
@@ -312,6 +317,8 @@ export async function openBundle(session: RynkSession): Promise<ConnectedBundle>
     battery,
     peripheralBattery,
     connection,
+    maintenanceMode,
+    splitTransport,
     lightingState,
     lightingOutputMode,
     overlay,

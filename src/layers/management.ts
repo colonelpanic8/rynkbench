@@ -7,12 +7,11 @@ import type {
   Fork,
   KeyAction,
   LightingConditionalSceneCell,
-  LightingAdvancedConditionalSceneCell,
   LightingSceneCell,
   Morse,
   PointingConfig,
 } from "../vendor/rynk-wasm/rynk_wasm";
-import type { LayerMetadata } from "../session/types";
+import type { LayerMetadata, RuntimeLightingRule } from "../session/types";
 
 export interface LayerRewriteSnapshot {
   metadata: LayerMetadata[];
@@ -26,7 +25,7 @@ export interface LayerRewriteSnapshot {
   behaviorOptions: BehaviorOptions | null;
   autoMouseLayers: AutoMouseLayerConfig[];
   scenes: LightingSceneCell[];
-  runtimeConditionalScenes: LightingAdvancedConditionalSceneCell[];
+  runtimeConditionalScenes: RuntimeLightingRule[];
   compiledScenes: LightingSceneCell[];
   compiledConditionalScenes: LightingConditionalSceneCell[];
   wakeLayers: number;

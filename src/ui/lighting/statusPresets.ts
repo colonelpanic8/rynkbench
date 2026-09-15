@@ -1,10 +1,10 @@
 import type {
   KeyAction,
   LightingEffect,
-  LightingAdvancedConditionalSceneCell,
 } from "../../vendor/rynk-wasm/rynk_wasm";
+import type { RuntimeLightingRule } from "../../session/types";
 
-export type StatusRule = LightingAdvancedConditionalSceneCell;
+export type StatusRule = RuntimeLightingRule;
 
 /** How a bar colors itself as the level drops.
  *  - `bands`: each segment owns an equal band; the lowest lit segments turn

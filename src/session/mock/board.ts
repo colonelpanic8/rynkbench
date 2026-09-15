@@ -27,7 +27,6 @@ import type {
   LightingCapabilities,
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
-  LightingAdvancedConditionalSceneCell,
   LightingConditionalSceneStatus,
   LightingControls,
   LightingExtension,
@@ -56,6 +55,7 @@ import type {
   ProtocolVersion,
   SplitCentralLatencyPolicy,
   SplitCentralLatencyState,
+  SplitTransportState,
   StateBits,
   TopicEvent,
 } from "../../vendor/rynk-wasm/rynk_wasm";
@@ -74,6 +74,7 @@ import type {
   SessionKind,
   SessionProvider,
   LightingTopology,
+  RuntimeLightingRule,
 } from "../types";
 import {
   COMPILED_CONDITIONAL_SCENES,
@@ -86,6 +87,7 @@ import {
   RUNTIME_CONNECTION_CONDITIONS,
   RUNTIME_EFFECTS_CONDITIONS,
   RUNTIME_LAYER_INDICATOR_CONDITIONS,
+  RULES,
 } from "../lighting-features";
 import { unsupported } from "../unsupported";
 import {
@@ -157,7 +159,7 @@ export interface BoardSpec {
   runtimeConditionalCapacity?: number;
   /** Runtime conditional cells stored "in flash" when the session opens, in
    *  composition order. */
-  seedRuntimeConditionalScenes?: LightingAdvancedConditionalSceneCell[];
+  seedRuntimeConditionalScenes?: RuntimeLightingRule[];
   /** Advertise the extended conditional cell, so rules may carry connection
    *  and effects predicates. Firmware without it stores the base cell only. */
   runtimeConditionalPredicates?: boolean;
@@ -181,6 +183,7 @@ export interface BoardSpec {
   };
   /** Runtime split-link policy; defaults to 0/1/automatic on split BLE boards. */
   splitCentralLatency?: SplitCentralLatencyState;
+  splitTransport?: SplitTransportState;
 }
 
 /** A firmware-declared parameter: a name, its bounds, and its reset value.
@@ -374,7 +377,7 @@ class MockSession implements RynkSession {
   private readonly sceneTable = new Map<string, LightingSceneCell>();
   /** Mutable conditional table. A list, not a map: rules compose in table
    *  order, later rules win shared slots, and duplicates are legitimate. */
-  private runtimeConditional: LightingAdvancedConditionalSceneCell[] = [];
+  private runtimeConditional: RuntimeLightingRule[] = [];
   private layerPolicy: LightingLayerPolicy;
   private readonly comboTable: ComboDefinition[];
   private readonly morseTable: Morse[];
@@ -508,6 +511,18 @@ class MockSession implements RynkSession {
     ledIndicator: () => latency(() => ({ ...this.indicator })),
     splitCentralLatency: () => latency(() => this.readSplitLatency()),
     setSplitCentralLatency: (policy) => latency(() => this.writeSplitLatency(policy)),
+    maintenanceMode: () => latency(() => ({ enabled: true, default_enabled: true })),
+    splitTransport: () =>
+      latency(() =>
+        structuredClone(
+          this.spec.splitTransport ?? {
+            auto: false,
+            forced: "Auto",
+            cable_detected: false,
+            wired_active: false,
+          },
+        ),
+      ),
   };
 
   readonly keymap: KeymapOps = {
@@ -1067,7 +1082,8 @@ class MockSession implements RynkSession {
         ((this.spec.runtimeConditionalCapacity ?? 0) > 0 && this.spec.runtimeConditionalPredicates
           ? RUNTIME_CONNECTION_CONDITIONS |
             RUNTIME_EFFECTS_CONDITIONS |
-            RUNTIME_LAYER_INDICATOR_CONDITIONS
+            RUNTIME_LAYER_INDICATOR_CONDITIONS |
+            RULES
           : 0),
       effects: 0b111, // solid | blink | breathe
     };
@@ -1300,7 +1316,7 @@ class MockSession implements RynkSession {
    *  so this rejects instead — with the live backend's wording, since this is a
    *  document the user can fix rather than a missing command. */
   private checkExtendedConditionalCell(
-    cell: LightingAdvancedConditionalSceneCell,
+    cell: RuntimeLightingRule,
     index: number,
   ): void {
     this.checkConditionalCell(cell.cell);
@@ -1308,10 +1324,13 @@ class MockSession implements RynkSession {
       cell.connection !== undefined ||
       cell.effects !== undefined ||
       cell.layers !== undefined ||
-      cell.indicators !== undefined;
+      cell.indicators !== undefined ||
+      cell.maintenance !== undefined ||
+      cell.split_transport !== undefined ||
+      (cell.unknown_predicates?.length ?? 0) > 0;
     if (gated && !this.spec.runtimeConditionalPredicates) {
       throw new Error(
-        `rule ${index + 1} names a connection, effects, layers, or indicator condition, ` +
+        `rule ${index + 1} names a tagged condition, ` +
           `which this firmware cannot store; update the firmware or remove the condition`,
       );
     }

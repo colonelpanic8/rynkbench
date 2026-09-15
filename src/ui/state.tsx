@@ -20,7 +20,6 @@ import type {
   LightingCapabilities,
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
-  LightingAdvancedConditionalSceneCell,
   LightingControls,
   LightingExtension,
   LightingExtensionLayers,
@@ -35,6 +34,7 @@ import type {
   LightingSceneStatus,
   LightingState,
   ModifierCombination,
+  MaintenanceMode,
   Morse,
   MorseHoldTriggerPosition,
   MorseProfileEntry,
@@ -42,8 +42,9 @@ import type {
   ProtocolVersion,
   PointingConfig,
   PointingCapabilities,
+  SplitTransportState,
 } from "../vendor/rynk-wasm/rynk_wasm";
-import type { LayerMetadata, RynkSession } from "../session/types";
+import type { LayerMetadata, RuntimeLightingRule, RynkSession } from "../session/types";
 import type { BoardProfile } from "../model/boards";
 import type { KeyboardModel } from "../model/keyboard";
 import {
@@ -120,6 +121,8 @@ export interface ConnectedBundle {
   battery: BatteryStatus;
   peripheralBattery: BatteryStatus;
   connection: ConnectionStatus | null;
+  maintenanceMode: MaintenanceMode | null;
+  splitTransport: SplitTransportState | null;
   lightingState: LightingState | null;
   lightingOutputMode: LightingOutputModeState | null;
   overlay: LightingOverlayCell[];
@@ -135,7 +138,7 @@ export interface ConnectedBundle {
   /** Mutable ordered conditional table. null when the firmware has no such
    *  table at all — distinct from a supported-but-empty table ([] cells). */
   runtimeConditionalStatus: LightingRuntimeConditionalSceneStatus | null;
-  runtimeConditionalScenes: LightingAdvancedConditionalSceneCell[];
+  runtimeConditionalScenes: RuntimeLightingRule[];
   /** null when the firmware has no extension-effects support. */
   lightingExtension: LightingExtension | null;
   lightingExtensionLayers: LightingExtensionLayers | null;
@@ -244,6 +247,8 @@ export interface WorkbenchState {
   battery: BatteryStatus;
   peripheralBattery: BatteryStatus;
   connection: ConnectionStatus | null;
+  maintenanceMode: MaintenanceMode | null;
+  splitTransport: SplitTransportState | null;
   lightingState: LightingState | null;
   lightingOutputMode: LightingOutputModeState | null;
   /** Overlay as last known on-device, keyed by LED id. */
@@ -264,11 +269,11 @@ export interface WorkbenchState {
   lightingControls: LightingControls;
   /** The mutable ordered conditional table as last known on-device. Always
    *  empty when the firmware has no such table. */
-  runtimeConditionalScenes: LightingAdvancedConditionalSceneCell[];
+  runtimeConditionalScenes: RuntimeLightingRule[];
   /** The same table as the user wants it (staged). Order carries meaning, so
    *  this is a list, and a reorder is a real, applicable difference. Follows
    *  device pushes while it matches `runtimeConditionalScenes`. */
-  runtimeConditionalDraft: LightingAdvancedConditionalSceneCell[];
+  runtimeConditionalDraft: RuntimeLightingRule[];
   /** Extension-effects discovery + live selection; null when unsupported. */
   lightingExtension: LightingExtension | null;
   lightingExtensionLayers: LightingExtensionLayers | null;
@@ -432,6 +437,8 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     battery: bundle.battery,
     peripheralBattery: bundle.peripheralBattery,
     connection: bundle.connection,
+    maintenanceMode: bundle.maintenanceMode,
+    splitTransport: bundle.splitTransport,
     lightingState: bundle.lightingState,
     lightingOutputMode: bundle.lightingOutputMode,
     applied,
@@ -555,7 +562,7 @@ export type WorkbenchAction =
       extension?: LightingExtension | null;
       extensionLayers?: LightingExtensionLayers | null;
       /** Present only when the device has a mutable conditional table. */
-      runtimeConditional?: LightingAdvancedConditionalSceneCell[];
+      runtimeConditional?: RuntimeLightingRule[];
     }
   | { type: "lightingTarget"; target: LightingTarget }
   /** `target` edits a specific draft without moving Lighting mode's selected
@@ -566,12 +573,12 @@ export type WorkbenchAction =
   | { type: "lightingBusy"; busy: boolean; error?: string | null }
   | { type: "overlayApplied"; state: LightingState; cells: LightingOverlayCell[] }
   | { type: "scenesApplied"; state: LightingState; cells: LightingSceneCell[] }
-  | { type: "conditionalDraft"; cells: LightingAdvancedConditionalSceneCell[] }
+  | { type: "conditionalDraft"; cells: RuntimeLightingRule[] }
   | { type: "conditionalDraftReset" }
   | {
       type: "conditionalApplied";
       state: LightingState;
-      cells: LightingAdvancedConditionalSceneCell[];
+      cells: RuntimeLightingRule[];
     }
   | { type: "scenePolicySet"; state: LightingState; policy: LightingLayerPolicy }
   | {
@@ -1236,8 +1243,8 @@ export function overlaysEqual(
  *  design: these rules compose in table order and a later rule wins a shared
  *  slot, so permuting them is a real change the device must be told about. */
 export function conditionalTablesEqual(
-  a: LightingAdvancedConditionalSceneCell[],
-  b: LightingAdvancedConditionalSceneCell[],
+  a: RuntimeLightingRule[],
+  b: RuntimeLightingRule[],
 ): boolean {
   if (a.length !== b.length) return false;
   return a.every((cell, index) => same(cell, b[index]));
@@ -1374,7 +1381,7 @@ export interface WorkbenchIo {
   /** Atomically replace the mutable conditional table with this exact order
    *  (only when the firmware has such a table). */
   applyConditionalScenes(
-    cells: LightingAdvancedConditionalSceneCell[],
+    cells: RuntimeLightingRule[],
   ): Promise<IoWriteResult>;
   /** Select an extension effect/palette, then write any staged parameter
    *  values for the selected effect (only when the firmware supports it). */

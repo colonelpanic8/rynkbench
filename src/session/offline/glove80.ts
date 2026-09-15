@@ -2,6 +2,7 @@ import type { ExtensionCatalog, RuntimeSnapshot } from "../../config/document";
 import type { RynkSession } from "../types";
 import { memorySession, type BoardSpec } from "../mock/board";
 import { glove80Board } from "../mock/glove80";
+import { ruleFromWire } from "../lighting-rules";
 
 const NEW_CONFIG_LAYERS = 6;
 
@@ -108,7 +109,9 @@ export function offlineGlove80Board(snapshot?: RuntimeSnapshot): BoardSpec {
     lightingControls: { output_toggle_user_action: undefined, wake_layers: wakeLayers },
     runtimeConditionalCapacity: Math.max(64, lighting?.conditional_scenes?.length ?? 0),
     runtimeConditionalPredicates: true,
-    seedRuntimeConditionalScenes: structuredClone(lighting?.conditional_scenes ?? []),
+    seedRuntimeConditionalScenes: structuredClone(
+      lighting?.conditional_scenes?.map(ruleFromWire) ?? [],
+    ),
     lightingOutputMode: {
       ...structuredClone(glove80Board.lightingOutputMode!),
       mode: lighting?.output_mode ?? "PoweredOnly",

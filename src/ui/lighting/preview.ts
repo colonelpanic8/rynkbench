@@ -1,11 +1,11 @@
 import type {
   LightingConditionalSceneCell,
   LightingEffect,
-  LightingAdvancedConditionalSceneCell,
   LightingOutputModeState,
   LightingOverlayCell,
   LightingSceneCell,
 } from "../../vendor/rynk-wasm/rynk_wasm";
+import type { RuntimeLightingRule } from "../../session/types";
 import type { LightingTarget } from "../state";
 import type { FirmwareLightingPreview } from "./firmwareRules";
 import { firmwarePreviewCells } from "./firmwareRules";
@@ -64,7 +64,7 @@ export function previewActiveLayers(
  *  Previewing the *draft* makes the rules editor WYSIWYG before Apply. */
 export function conditionalPreviewCells(
   conditionalScenes: LightingConditionalSceneCell[],
-  runtimeConditionalDraft: LightingAdvancedConditionalSceneCell[],
+  runtimeConditionalDraft: RuntimeLightingRule[],
   preview: FirmwareLightingPreview,
 ): Map<number, LightingOverlayCell> {
   return firmwarePreviewCells([], conditionalScenes, runtimeConditionalDraft, preview);

@@ -137,6 +137,30 @@ describe("runtime rule predicates", () => {
     expect(runtimeConditionalRuleMatches(rule, preview)).toBe(false);
   });
 
+  it("matches maintenance and automatic split-selector state", () => {
+    const maintenance = { ...base, maintenance: { unlocked: false } };
+    expect(runtimeConditionalRuleMatches(maintenance, { ...preview, maintenanceUnlocked: false })).toBe(true);
+    expect(runtimeConditionalRuleMatches(maintenance, { ...preview, maintenanceUnlocked: true })).toBe(false);
+    expect(runtimeConditionalRuleMatches(maintenance, preview)).toBe(false);
+
+    const split = {
+      ...base,
+      split_transport: { link: "Wired" as const, force: "Auto" as const },
+    };
+    expect(runtimeConditionalRuleMatches(split, {
+      ...preview,
+      splitTransport: { auto: true, forced: "Auto", cable_detected: true, wired_active: true },
+    })).toBe(true);
+    expect(runtimeConditionalRuleMatches(split, {
+      ...preview,
+      splitTransport: { auto: true, forced: "Ble", cable_detected: true, wired_active: false },
+    })).toBe(false);
+    expect(runtimeConditionalRuleMatches(split, {
+      ...preview,
+      splitTransport: { auto: false, forced: "Auto", cable_detected: false, wired_active: false },
+    })).toBe(false);
+  });
+
   it("resolves the active transport the way the firmware does", () => {
     const usb = { ...base, connection: { ...EMPTY, transport: "Usb" as const } };
     const ble = { ...base, connection: { ...EMPTY, transport: "Ble" as const } };

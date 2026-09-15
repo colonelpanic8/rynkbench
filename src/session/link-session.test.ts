@@ -277,6 +277,27 @@ describe("WebHID runtime conditional readback", () => {
     chunk_capacity: 8,
   });
 
+  it("prefers the self-describing rule status over every fixed format", async () => {
+    const legacyStatus = vi.fn(async () => status(3, 12));
+    const ruleStatus = vi.fn(async () => ({
+      revision: 9,
+      capacity: 64,
+      rule_len: 17,
+      page_bytes: 224,
+      max_predicates: 8,
+      predicates: 0x3fe,
+    }));
+    await expect(readLightingRuntimeConditionalStatus({
+      get_lighting_capabilities: async () => ({ features: 1 << 17 }) as LightingCapabilities,
+      get_lighting_runtime_conditional_scene_status: legacyStatus,
+      get_lighting_extended_runtime_conditional_scene_status: legacyStatus,
+      get_lighting_advanced_runtime_conditional_scene_status: legacyStatus,
+      get_lighting_rule_status: ruleStatus,
+    })).resolves.toMatchObject({ revision: 9, capacity: 64, cell_len: 17 });
+    expect(ruleStatus).toHaveBeenCalledOnce();
+    expect(legacyStatus).not.toHaveBeenCalled();
+  });
+
   it("uses the advanced status endpoint for layer and indicator rules", async () => {
     const legacyStatus = vi.fn(async () => status(3, 12));
     const extendedStatus = vi.fn(async () => ({ ...status(3, 12), chunk_capacity: 5 }));

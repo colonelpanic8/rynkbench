@@ -14,7 +14,9 @@ import {
   hasLightingFeature,
   RUNTIME_EFFECTS_CONDITIONS,
   RUNTIME_LAYER_INDICATOR_CONDITIONS,
+  RULES,
 } from "../session/lighting-features";
+import { ruleFromWire } from "../session/lighting-rules";
 import { isUnsupportedError } from "../session/unsupported";
 import type { ConnectedBundle, WorkbenchAction, WorkbenchState } from "../ui/state";
 import { errorMessage } from "../ui/state";
@@ -126,13 +128,16 @@ function preflightLighting(
   if (!same(desired.scenes, state.scenes)) {
     checkCapacity("Lighting scenes", desired.scenes.length, bundle.sceneStatus);
   }
-  const rules = desired.conditional_scenes;
+  const rules = desired.conditional_scenes?.map(ruleFromWire);
   if (rules === undefined || same(rules, state.runtimeConditionalScenes)) return;
   checkCapacity("Conditional lighting", rules.length, bundle.runtimeConditionalStatus);
+  const tagged = hasLightingFeature(bundle.lightingCaps, RULES);
   const advanced = hasLightingFeature(bundle.lightingCaps, RUNTIME_LAYER_INDICATOR_CONDITIONS);
   const extended = advanced || hasLightingFeature(bundle.lightingCaps, RUNTIME_EFFECTS_CONDITIONS);
   for (const [index, rule] of rules.entries()) {
-    const unsupported = !advanced && (rule.layers !== undefined || rule.indicators !== undefined)
+    const unsupported = !tagged && (rule.maintenance !== undefined || rule.split_transport !== undefined || (rule.unknown_predicates?.length ?? 0) > 0)
+      ? "maintenance, split-transport, or unknown tagged conditions"
+      : !advanced && (rule.layers !== undefined || rule.indicators !== undefined)
       ? "layer-set or lock-indicator conditions"
       : !extended && (rule.connection !== undefined || rule.effects !== undefined)
         ? "connection or effects conditions"
@@ -565,7 +570,7 @@ async function writeLighting(
     applied.push(`${desired.scenes.length} scene cell${desired.scenes.length === 1 ? "" : "s"}`);
   }
 
-  const rules = desired.conditional_scenes;
+  const rules = desired.conditional_scenes?.map(ruleFromWire);
   if (rules !== undefined && !same(rules, state.runtimeConditionalScenes)) {
     const lightingState = await session.lighting.conditionalScenes.replace(rules);
     dispatch({ type: "conditionalApplied", state: lightingState, cells: rules });

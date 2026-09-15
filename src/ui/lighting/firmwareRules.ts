@@ -4,12 +4,13 @@ import type {
   ConnectionType,
   LightingConditionalSceneCell,
   LightingEffect,
-  LightingAdvancedConditionalSceneCell,
   LightingOverlayCell,
   LightingOutputMode,
   LightingRuntimeConditionalSceneStatus,
   LightingSceneCell,
+  SplitTransportState,
 } from "../../vendor/rynk-wasm/rynk_wasm";
+import type { RuntimeLightingRule } from "../../session/types";
 
 /** Whether this firmware has a mutable ordered conditional table at all.
  *  Firmware without one reports no table (the status read is rejected, which
@@ -37,6 +38,10 @@ export interface FirmwareLightingPreview {
   /** The host's lock indicators, when known; absent, indicator rules are
    *  unsatisfiable on the same grounds as `bondedSlots`. */
   indicators?: { num_lock: boolean; caps_lock: boolean; scroll_lock: boolean };
+  /** Live maintenance state, when the endpoint is available. */
+  maintenanceUnlocked?: boolean;
+  /** Live automatic split-selector state, when this board has one. */
+  splitTransport?: SplitTransportState;
 }
 
 /** Bit `layer` of a layer mask. Masks arrive as numbers, like `wake_layers`. */
@@ -77,7 +82,7 @@ function activeTransport(status: ConnectionStatus): ConnectionType | undefined {
  *  the same rule the firmware applies to a source that cannot see the state.
  *  Lighting a rule we cannot actually verify would be the worse error. */
 function connectionMatches(
-  cell: LightingAdvancedConditionalSceneCell,
+  cell: RuntimeLightingRule,
   preview: FirmwareLightingPreview,
 ): boolean {
   if (cell.effects !== undefined) {
@@ -92,6 +97,17 @@ function connectionMatches(
       const wanted = cell.indicators[lock];
       if (wanted !== undefined && actual[lock] !== wanted) return false;
     }
+  }
+  if (cell.maintenance !== undefined) {
+    if (preview.maintenanceUnlocked === undefined) return false;
+    if (preview.maintenanceUnlocked !== cell.maintenance.unlocked) return false;
+  }
+  if (cell.split_transport !== undefined) {
+    const actual = preview.splitTransport;
+    if (actual === undefined || !actual.auto) return false;
+    const link = actual.wired_active ? "Wired" : "Ble";
+    if (cell.split_transport.link !== undefined && cell.split_transport.link !== link) return false;
+    if (cell.split_transport.force !== undefined && cell.split_transport.force !== actual.forced) return false;
   }
   const condition = cell.connection;
   if (condition === undefined) return true;
@@ -137,7 +153,7 @@ export function conditionalRuleMatches(
 /** Whether a runtime rule matches: the base conditions plus the connection and
  *  effects predicates only the extended cell carries. */
 export function runtimeConditionalRuleMatches(
-  rule: LightingAdvancedConditionalSceneCell,
+  rule: RuntimeLightingRule,
   preview: FirmwareLightingPreview,
 ): boolean {
   return conditionalRuleMatches(rule.cell, preview) && connectionMatches(rule, preview);
@@ -149,7 +165,7 @@ export function runtimeConditionalRuleMatches(
 export function firmwarePreviewCells(
   layerScenes: LightingSceneCell[],
   conditionalScenes: LightingConditionalSceneCell[],
-  runtimeConditionalScenes: LightingAdvancedConditionalSceneCell[],
+  runtimeConditionalScenes: RuntimeLightingRule[],
   preview: FirmwareLightingPreview,
 ): Map<number, LightingOverlayCell> {
   const result = new Map<number, LightingOverlayCell>();
@@ -217,7 +233,7 @@ export function firmwareRuleGroups(
 /** Human summary of a runtime rule, including the predicates only the
  *  extended cell carries. */
 export function describeRuleConditions(
-  rule: LightingAdvancedConditionalSceneCell,
+  rule: RuntimeLightingRule,
   layerLabel?: (layer: number) => string,
 ): string {
   const parts: string[] = [];
@@ -247,6 +263,17 @@ export function describeRuleConditions(
   }
   if (rule.effects !== undefined) {
     parts.push(rule.effects.enabled ? "effects on" : "effects off");
+  }
+  if (rule.maintenance !== undefined) {
+    parts.push(rule.maintenance.unlocked ? "maintenance unlocked" : "maintenance locked");
+  }
+  if (rule.split_transport !== undefined) {
+    const { link, force } = rule.split_transport;
+    if (link !== undefined) parts.push(`${link.toLowerCase()} split link`);
+    if (force !== undefined) parts.push(`split force ${force.toLowerCase()}`);
+  }
+  if ((rule.unknown_predicates?.length ?? 0) > 0) {
+    parts.push(`unknown predicate ${rule.unknown_predicates!.map((predicate) => predicate.tag).join(", ")}`);
   }
   const connection = rule.connection;
   if (connection !== undefined) {

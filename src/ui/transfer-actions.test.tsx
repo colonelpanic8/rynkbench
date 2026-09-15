@@ -3,6 +3,7 @@ import type { ChangeEvent } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { initSync } from "../vendor/moergo-config-wasm/moergo_config_wasm";
+import { initSync as initRynkSync } from "../vendor/rynk-wasm/rynk_wasm";
 import { parseDocument, renderDocument, snapshotFromState } from "../config/document";
 import { openOfflineGlove80 } from "../session/offline/glove80";
 import { openBundle } from "./bundle";
@@ -11,6 +12,7 @@ import { useDocumentTransfer, type DocumentTransfer } from "./transfer-actions";
 
 beforeAll(() => {
   initSync({ module: readFileSync("src/vendor/moergo-config-wasm/moergo_config_wasm_bg.wasm") });
+  initRynkSync({ module: readFileSync("src/vendor/rynk-wasm/rynk_wasm_bg.wasm") });
 });
 afterEach(() => {
   vi.unstubAllGlobals();

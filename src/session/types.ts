@@ -41,6 +41,9 @@ import type {
   LightingCompiledSceneStatus,
   LightingConditionalSceneCell,
   LightingAdvancedConditionalSceneCell,
+  LightingMaintenanceCondition,
+  LightingPredicate,
+  LightingSplitTransportCondition,
   LightingConditionalSceneStatus,
   LightingExtension,
   LightingExtensionLayers,
@@ -62,6 +65,7 @@ import type {
   LightingZone,
   LightingZoneId,
   MatrixState,
+  MaintenanceMode,
   ModifierCombination,
   Morse,
   MorseHoldTriggerPosition,
@@ -74,8 +78,19 @@ import type {
   ProtocolVersion,
   SplitCentralLatencyPolicy,
   SplitCentralLatencyState,
+  SplitTransportState,
   TopicEvent,
 } from "../vendor/rynk-wasm/rynk_wasm";
+
+/** The editor's semantic view of a self-describing lighting rule. The first
+ * seven fields deliberately retain the former advanced-cell shape so existing
+ * controls and previews remain stable while the transport uses RULES. */
+export type RuntimeLightingRule = LightingAdvancedConditionalSceneCell & {
+  maintenance?: LightingMaintenanceCondition;
+  split_transport?: LightingSplitTransportCondition;
+  /** Preserved verbatim so a newer firmware's rule is never rewritten lossy. */
+  unknown_predicates?: LightingPredicate[];
+};
 
 /** Which backend produced a session. Drives labels, never behavior. */
 export type SessionKind =
@@ -195,12 +210,12 @@ export interface LightingRuntimeConditionalOps {
   status(): Promise<LightingRuntimeConditionalSceneStatus>;
   /** Read the whole ordered table (paging under one pinned revision, with a
    *  restart when the revision drifts, is the backend's job). */
-  read(): Promise<LightingAdvancedConditionalSceneCell[]>;
+  read(): Promise<RuntimeLightingRule[]>;
   /** Atomically replace the whole table, in the order given (wraps the
    *  begin/put-chunks/commit transaction and its revision handshake).
    *  Rejects cells carrying predicates the connected firmware cannot store
    *  rather than writing them away. */
-  replace(cells: LightingAdvancedConditionalSceneCell[]): Promise<LightingState>;
+  replace(cells: RuntimeLightingRule[]): Promise<LightingState>;
 }
 
 export interface LightingSceneOps {
@@ -294,6 +309,8 @@ export interface DeviceOps {
   /** Volatile active-mode BLE latency policy for a split central. */
   splitCentralLatency(): Promise<SplitCentralLatencyState>;
   setSplitCentralLatency(policy: SplitCentralLatencyPolicy): Promise<SplitCentralLatencyState>;
+  maintenanceMode(): Promise<MaintenanceMode>;
+  splitTransport(): Promise<SplitTransportState>;
 }
 
 export interface RynkSession {

@@ -62,6 +62,8 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     battery: "Unavailable",
     peripheralBattery: "Unavailable",
     connection: null,
+    maintenanceMode: null,
+    splitTransport: null,
     lightingState: LIGHTING,
     lightingOutputMode: null,
     applied: {},
