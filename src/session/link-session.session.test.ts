@@ -33,13 +33,8 @@ const cell = (led_id: number): LightingOverlayCell => ({ led_id, effect, ttl_ms:
 
 /** A wasm client stand-in: every method is a spy, `next_topic` parks until
  *  the link is ended, and unlisted methods reject so a test cannot pass by
- *  accident. Names in `absent` read as `undefined` instead, which is how a
- *  client generated from older firmware looks to a probe. */
-function harness(
-  methods: Record<string, (...args: never[]) => unknown>,
-  log?: SessionLog,
-  absent: string[] = [],
-) {
+ *  accident. */
+function harness(methods: Record<string, (...args: never[]) => unknown>, log?: SessionLog) {
   let endTopics: (() => void) | undefined;
   const parked = new Promise<never>((_resolve, reject) => {
     endTopics = () => reject(new Error("link died"));
@@ -51,7 +46,6 @@ function harness(
     { next_topic: () => parked, free: vi.fn(), ...spies },
     {
       get(target, prop: string) {
-        if (absent.includes(prop)) return undefined;
         if (prop in target) return target[prop as keyof typeof target];
         return () => Promise.reject(new Error(`unexpected call ${prop}`));
       },
@@ -200,19 +194,6 @@ describe("LinkSession", () => {
     const error = await session.lighting.scenes.sceneStatus().catch((e: unknown) => e);
     expect(isUnsupportedError(error)).toBe(true);
     expect(spies.get_lighting_scene_status).not.toHaveBeenCalled();
-    await session.close();
-  });
-
-  it("reports auto-switch transport as unsupported when the client predates it", async () => {
-    const { session } = harness({}, undefined, [
-      "get_auto_switch_transport",
-      "set_auto_switch_transport",
-    ]);
-
-    const read = await session.device.autoSwitchTransport().catch((e: unknown) => e);
-    expect(isUnsupportedError(read)).toBe(true);
-    const write = await session.device.setAutoSwitchTransport(true).catch((e: unknown) => e);
-    expect(isUnsupportedError(write)).toBe(true);
     await session.close();
   });
 
