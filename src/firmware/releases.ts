@@ -3,6 +3,7 @@ import type {
   FirmwareTarget,
   FirmwareUpdateProfile,
 } from "../model/boards/profile";
+import type { FirmwareBuild } from "../session/build-identity";
 
 export interface FirmwareReleaseAsset {
   name: string;
@@ -145,6 +146,27 @@ export function sameRevision(left: string | undefined, right: string): boolean {
   const a = left.toLowerCase();
   const b = right.toLowerCase();
   return a.startsWith(b) || b.startsWith(a);
+}
+
+export type FirmwareUpdateStatus = "current" | "outdated" | "unidentified";
+
+/**
+ * Whether the running firmware is the published one.
+ *
+ * The only thing a release can be compared against is the configuration commit
+ * the firmware names, and only when that commit fully identifies the build: a
+ * firmware built outside a configuration repository names none, and one built
+ * from a modified tree names a commit it does not match. Neither is evidence
+ * that an update exists, so both are `unidentified` — offering an update for
+ * them would dress a guess as a fact, and the user who just flashed the latest
+ * release is the one who sees it.
+ */
+export function firmwareUpdateStatus(
+  installed: FirmwareBuild | null,
+  release: FirmwareRelease | null,
+): FirmwareUpdateStatus {
+  if (!release || !installed?.config || installed.dirty) return "unidentified";
+  return sameRevision(installed.config, release.sourceRevision) ? "current" : "outdated";
 }
 
 /** Keep the control-bearing central alive until every peripheral is flashed. */
