@@ -317,6 +317,14 @@ interface RuntimeConditionalStatusClient {
   get_lighting_rule_status?(): Promise<LightingRuleStatus>;
 }
 
+/** The auto-switch policy endpoints (0x070D/0x070E) arrive with the firmware
+ *  that adds them, so a client generated from an older build has no method to
+ *  call and the session reports the surface as unsupported. */
+interface AutoSwitchClient {
+  get_auto_switch_transport?(): Promise<boolean>;
+  set_auto_switch_transport?(enabled: boolean): Promise<void>;
+}
+
 interface LightingRuleClient {
   get_lighting_rule_status(): Promise<LightingRuleStatus>;
   get_lighting_rules(request: LightingRuntimeConditionalScenePageRequest): Promise<LightingRulesPage>;
@@ -803,6 +811,18 @@ export class LinkSession implements RynkSession {
         this.run(() => client.set_split_central_latency(policy)),
       maintenanceMode: () => this.run(() => client.get_maintenance_mode()),
       splitTransport: () => this.run(() => client.get_split_transport()),
+      autoSwitchTransport: () =>
+        this.run(
+          () =>
+            (client as AutoSwitchClient).get_auto_switch_transport?.() ??
+            Promise.reject(unsupported("auto-switch transport")),
+        ),
+      setAutoSwitchTransport: (enabled) =>
+        this.run(
+          () =>
+            (client as AutoSwitchClient).set_auto_switch_transport?.(enabled) ??
+            Promise.reject(unsupported("auto-switch transport")),
+        ),
     };
 
     this.keymap = {

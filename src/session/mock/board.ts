@@ -394,6 +394,7 @@ class MockSession implements RynkSession {
   private readonly matrixBitmap: Uint8Array;
   private readonly modifiers = noModifiers();
   private splitLatency: SplitCentralLatencyState | null;
+  private autoSwitch = false;
   private matrixTimer: ReturnType<typeof setInterval> | null = null;
   private lastMatrixPoll = 0;
   private topicHandler: ((event: TopicEvent) => void) | null = null;
@@ -531,6 +532,11 @@ class MockSession implements RynkSession {
           },
         ),
       ),
+    autoSwitchTransport: () => latency(() => this.autoSwitch),
+    setAutoSwitchTransport: (enabled) =>
+      latency(() => {
+        this.autoSwitch = enabled;
+      }),
   };
 
   readonly keymap: KeymapOps = {
