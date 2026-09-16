@@ -5,7 +5,7 @@ import { SectionLabel, cx } from "../kit";
 import { keyAddressLabel } from "../key-address";
 import { layerName } from "../layer-names";
 import { hasPendingConfigurationWrite, useWorkbench } from "../state";
-import { RUNTIME_LAYER_INDICATOR_CONDITIONS, hasLightingFeature } from "../../session/lighting-features";
+import { hasLayerIndicatorConditions } from "../../session/lighting-features";
 import {
   installedLightingKeyKind,
   lightingKeyAction,
@@ -55,8 +55,7 @@ export function LightingKeyPresetPanel({
   const supported = (kind: LightingKeyKind) =>
     kind === "output-mode"
       ? state.lightingOutputMode !== null
-      : state.lightingExtension !== null &&
-        hasLightingFeature(bundle.lightingCaps, RUNTIME_LAYER_INDICATOR_CONDITIONS);
+      : state.lightingExtension !== null && hasLayerIndicatorConditions(bundle.lightingCaps);
 
   const install = async (kind: LightingKeyKind) => {
     if (installing.current || busy || state.batchMode || !supported(kind)) return;

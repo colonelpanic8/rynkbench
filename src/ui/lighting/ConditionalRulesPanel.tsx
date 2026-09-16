@@ -41,7 +41,7 @@ import {
   rulesOnLayer,
 } from "./rules";
 import type { Rule, Rules } from "./rules";
-import { RULES, RUNTIME_LAYER_INDICATOR_CONDITIONS, hasLightingFeature } from "../../session/lighting-features";
+import { RULES, hasLayerIndicatorConditions, hasLightingFeature } from "../../session/lighting-features";
 import { maskHasLayer, setLayerInMask } from "./wakeLayers";
 
 const CHARGE_STATES: LightingChargeCondition[] = ["Any", "Charging", "Discharging", "Unknown"];
@@ -194,8 +194,7 @@ export function ConditionalRulesPanel() {
   // only the earlier predicate bits speaks a shorter extended cell that this
   // build does not write.
   const rulesSupported = hasLightingFeature(bundle.lightingCaps, RULES);
-  const predicatesSupported =
-    rulesSupported || hasLightingFeature(bundle.lightingCaps, RUNTIME_LAYER_INDICATOR_CONDITIONS);
+  const predicatesSupported = hasLayerIndicatorConditions(bundle.lightingCaps);
   const layerSet = rule?.layers;
   const setLayerSet = (target: Rule, next: { active: number; inactive: number }) => {
     if (selected === null) return;

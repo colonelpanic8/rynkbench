@@ -11,9 +11,9 @@ import { boardForTarget, transferSnapshot } from "../model/boards/transfer";
 import type { MoErgoBoard } from "../model/boards/transfer";
 import type { RynkSession } from "../session/types";
 import {
+  hasLayerIndicatorConditions,
   hasLightingFeature,
   RUNTIME_EFFECTS_CONDITIONS,
-  RUNTIME_LAYER_INDICATOR_CONDITIONS,
   RULES,
 } from "../session/lighting-features";
 import { ruleFromWire } from "../session/lighting-rules";
@@ -136,7 +136,7 @@ function preflightLighting(
   // that advertises RULES reports its supported tags in the rule status, and the
   // write path rejects unknown tags there with a precise message.
   const tagged = hasLightingFeature(bundle.lightingCaps, RULES);
-  const advanced = tagged || hasLightingFeature(bundle.lightingCaps, RUNTIME_LAYER_INDICATOR_CONDITIONS);
+  const advanced = hasLayerIndicatorConditions(bundle.lightingCaps);
   const extended = advanced || hasLightingFeature(bundle.lightingCaps, RUNTIME_EFFECTS_CONDITIONS);
   for (const [index, rule] of rules.entries()) {
     const unsupported = !tagged && (rule.maintenance !== undefined || rule.split_transport !== undefined || (rule.unknown_predicates?.length ?? 0) > 0)
