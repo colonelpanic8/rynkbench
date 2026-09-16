@@ -314,6 +314,11 @@ export interface DeviceOps {
   setSplitCentralLatency(policy: SplitCentralLatencyPolicy): Promise<SplitCentralLatencyState>;
   maintenanceMode(): Promise<MaintenanceMode>;
   splitTransport(): Promise<SplitTransportState>;
+  /** Whether plugging or unplugging USB retargets the preferred transport. */
+  autoSwitchTransport(): Promise<boolean>;
+  /** Persist that policy. It applies from the next cable change, so the
+   *  current preferred transport is left where it is. */
+  setAutoSwitchTransport(enabled: boolean): Promise<void>;
 }
 
 export interface RynkSession {

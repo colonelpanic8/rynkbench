@@ -7,6 +7,7 @@ import { Chip, Panel, Row, SectionLabel } from "../kit";
 import { BatteryGlyph } from "../icons";
 import { KIND_LABEL } from "../session-labels";
 import { LockIndicators } from "../live/LockIndicators";
+import { AutoSwitchToggle } from "./AutoSwitchToggle";
 import { BleCard } from "./BleCard";
 import { BuildCard } from "./BuildCard";
 import { DangerZone } from "./DangerZone";
@@ -138,6 +139,7 @@ export function DeviceMode() {
               ) : (
                 <Row label="Status">unknown</Row>
               )}
+              <AutoSwitchToggle />
             </div>
           </Panel>
         </div>
