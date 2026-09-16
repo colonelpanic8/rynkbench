@@ -131,6 +131,14 @@ describe("Glove80 presets", () => {
     expect(html).toContain("Update firmware to install the stock Magic layer");
   });
 
+  // Boards built without the legacy conditional-scene endpoints advertise RULES
+  // alone. Gating on the retired bit told users on current firmware to update it.
+  it("offers the stock Magic layer on firmware advertising only the rule table", () => {
+    const html = renderGlove80("Glove80", 1 << 17);
+    expect(html).toContain("Install stock Magic layer on Layer 2");
+    expect(html).not.toContain("Update firmware to install the stock Magic layer");
+  });
+
   it("offers the stock Magic layer template only on a Glove80 with the stock LED map", () => {
     const html = renderGlove80("Glove80");
     expect(html).toContain("Install complete Glove80 setup on Layer 2");

@@ -30,3 +30,16 @@ export function hasLightingFeature(
 ): boolean {
   return ((caps?.features ?? 0) & flag) !== 0;
 }
+
+/** Whether the board can store layer-set and lock-indicator predicates.
+ *
+ * Two encodings carry them: the retired advanced conditional-scene endpoints,
+ * and the tagged rule table that replaced all three fixed encodings. Boards
+ * built without `lighting_legacy_conditional_scenes` advertise RULES alone, so
+ * a gate naming only the legacy bit rejects current firmware. Call this rather
+ * than testing either flag directly. */
+export function hasLayerIndicatorConditions(
+  caps: Pick<LightingCapabilities, "features"> | null | undefined,
+): boolean {
+  return hasLightingFeature(caps, RULES) || hasLightingFeature(caps, RUNTIME_LAYER_INDICATOR_CONDITIONS);
+}
