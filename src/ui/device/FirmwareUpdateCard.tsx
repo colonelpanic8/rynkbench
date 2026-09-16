@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import {
   firmwareInstallOrder,
+  firmwareUpdateStatus,
   latestFirmwareRelease,
-  sameRevision,
   type FirmwareRelease,
 } from "../../firmware/releases";
 import {
@@ -10,7 +10,7 @@ import {
   nativeFirmwareInstallerAvailable,
   prepareFirmware,
 } from "../../firmware/native";
-import { parseBuildLabel } from "../../session/build-identity";
+import { describeBuild, parseBuildLabel } from "../../session/build-identity";
 import { Button, Chip, Panel, Row, SectionLabel } from "../kit";
 import { errorMessage, useWorkbench } from "../state";
 
@@ -40,9 +40,8 @@ export function FirmwareUpdateCard() {
   if (!firmware) return null;
 
   const installed = bundle.build ? parseBuildLabel(bundle.build.label) : null;
-  const current = release !== null
-    && installed?.dirty === false
-    && sameRevision(installed.config, release.sourceRevision);
+  const status = firmwareUpdateStatus(installed, release);
+  const current = status === "current";
 
   const install = async () => {
     if (!release) return;
@@ -71,15 +70,23 @@ export function FirmwareUpdateCard() {
     <Panel className="col-span-2 p-4">
       <div className="flex items-center justify-between gap-3">
         <SectionLabel>Firmware update</SectionLabel>
-        {release && <Chip tone={current ? "ok" : "accent"}>{current ? "current" : "update available"}</Chip>}
+        {release && status !== "unidentified" && (
+          <Chip tone={current ? "ok" : "accent"}>{current ? "current" : "update available"}</Chip>
+        )}
       </div>
       <div className="mt-2 flex flex-col divide-y divide-line-soft">
         <Row label="Channel">{firmware.source.label}</Row>
-        <Row label="Installed" mono>{installed?.config?.slice(0, 8) ?? "unknown"}</Row>
+        <Row label="Installed" mono>{(installed && describeBuild(installed)) ?? "unknown"}</Row>
         <Row label="Latest" mono>{release?.tag ?? (loadError ? "unavailable" : "checking…")}</Row>
       </div>
 
       {loadError && <div className="mt-2 text-[12px] text-danger">{loadError}</div>}
+      {release && status === "unidentified" && (
+        <div className="mt-2 text-[12px] leading-relaxed text-faint">
+          This firmware names no revision that identifies it in this channel, so whether it
+          is current cannot be decided here.
+        </div>
+      )}
       {release && (
         <div className="mt-3 text-[12px] leading-relaxed text-mute">
           {release.targets.length} verified UF2 {release.targets.length === 1 ? "image" : "images"} from{" "}

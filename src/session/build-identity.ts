@@ -66,6 +66,23 @@ export function parseBuildLabel(label: string): FirmwareBuild {
   return build;
 }
 
+/**
+ * Name the running build in one line.
+ *
+ * The downstream configuration commit comes first because that is what a
+ * release channel is keyed on. A firmware built outside a configuration
+ * repository has none — moergo-rmk writes the literal `config standalone`
+ * there — but the application package and source revision it does name
+ * identify the build just as exactly, so that is the fallback rather than
+ * admitting no identity at all.
+ */
+export function describeBuild(build: FirmwareBuild): string | undefined {
+  if (build.config) return build.config.slice(0, 8);
+  if (!build.app || !build.appVersion) return undefined;
+  const app = `${build.app} ${build.appVersion}`;
+  return build.appRev ? `${app} (${build.appRev})` : app;
+}
+
 /** Whether a revision the firmware named is the one this client was built on. */
 function namesSameCommit(firmware: string, pinned: string): boolean {
   // The firmware abbreviates its own commit to eight characters, and reports
