@@ -43,3 +43,14 @@ export function hasLayerIndicatorConditions(
 ): boolean {
   return hasLightingFeature(caps, RULES) || hasLightingFeature(caps, RUNTIME_LAYER_INDICATOR_CONDITIONS);
 }
+
+/** Whether the board can store connection and effects predicates.
+ *
+ * Same shape as [hasLayerIndicatorConditions]: the extended conditional-scene
+ * encoding carried these, and the tagged rule table carries them now. Boards
+ * shipping RULES alone advertise neither legacy bit. */
+export function hasConnectionEffectsConditions(
+  caps: Pick<LightingCapabilities, "features"> | null | undefined,
+): boolean {
+  return hasLightingFeature(caps, RULES) || hasLightingFeature(caps, RUNTIME_EFFECTS_CONDITIONS);
+}

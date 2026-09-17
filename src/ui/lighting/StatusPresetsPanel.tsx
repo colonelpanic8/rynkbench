@@ -28,7 +28,7 @@ import {
 } from "./statusPresets";
 import type { BarOrder, BarStyle, Glove80BarLayout } from "./statusPresets";
 import { layersInMask } from "./wakeLayers";
-import { RUNTIME_EFFECTS_CONDITIONS, hasLayerIndicatorConditions, hasLightingFeature } from "../../session/lighting-features";
+import { hasConnectionEffectsConditions, hasLayerIndicatorConditions } from "../../session/lighting-features";
 
 const selectClass =
   "mt-1 w-full rounded-md border border-line bg-raised px-2 py-1.5 text-[12px] text-ink";
@@ -94,7 +94,7 @@ export function StatusPresetsPanel({
   if (status === null) return null;
 
   const nameOf = (n: number) => layerName(state.layerMetadata, n);
-  const predicatesSupported = hasLightingFeature(bundle.lightingCaps, RUNTIME_EFFECTS_CONDITIONS);
+  const predicatesSupported = hasConnectionEffectsConditions(bundle.lightingCaps);
   // The tagged rule API carries the layer and lock-indicator predicates the
   // stock Magic layer needs, so firmware shipping RULES alone qualifies. Gating
   // on the retired bit told users on current firmware to update it.
