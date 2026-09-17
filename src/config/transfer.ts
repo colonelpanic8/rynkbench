@@ -11,9 +11,9 @@ import { boardForTarget, transferSnapshot } from "../model/boards/transfer";
 import type { MoErgoBoard } from "../model/boards/transfer";
 import type { RynkSession } from "../session/types";
 import {
+  hasConnectionEffectsConditions,
   hasLayerIndicatorConditions,
   hasLightingFeature,
-  RUNTIME_EFFECTS_CONDITIONS,
   RULES,
 } from "../session/lighting-features";
 import { ruleFromWire } from "../session/lighting-rules";
@@ -137,7 +137,7 @@ function preflightLighting(
   // write path rejects unknown tags there with a precise message.
   const tagged = hasLightingFeature(bundle.lightingCaps, RULES);
   const advanced = hasLayerIndicatorConditions(bundle.lightingCaps);
-  const extended = advanced || hasLightingFeature(bundle.lightingCaps, RUNTIME_EFFECTS_CONDITIONS);
+  const extended = advanced || hasConnectionEffectsConditions(bundle.lightingCaps);
   for (const [index, rule] of rules.entries()) {
     const unsupported = !tagged && (rule.maintenance !== undefined || rule.split_transport !== undefined || (rule.unknown_predicates?.length ?? 0) > 0)
       ? "maintenance, split-transport, or unknown tagged conditions"

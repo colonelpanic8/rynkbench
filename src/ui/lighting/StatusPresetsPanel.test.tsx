@@ -133,6 +133,13 @@ describe("Glove80 presets", () => {
 
   // Boards built without the legacy conditional-scene endpoints advertise RULES
   // alone. Gating on the retired bit told users on current firmware to update it.
+  // Connection and effects predicates ride the same tagged rule table, so RULES
+  // alone must not be told to update firmware before installing status keys.
+  it("installs connection status keys on firmware advertising only the rule table", () => {
+    const html = renderGlove80("Glove80", 1 << 17);
+    expect(html).not.toContain("but not connection predicates");
+  });
+
   it("offers the stock Magic layer on firmware advertising only the rule table", () => {
     const html = renderGlove80("Glove80", 1 << 17);
     expect(html).toContain("Install stock Magic layer on Layer 2");
