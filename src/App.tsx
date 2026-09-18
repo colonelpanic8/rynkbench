@@ -114,7 +114,13 @@ export default function App() {
         await initConfigWasm();
         const sourceText = file ? await file.text() : null;
         const parsed =
-          sourceText === null ? null : parseDocument(sourceText, offline.offlineGlove80Catalog());
+          sourceText === null
+            ? null
+            : parseDocument(
+                sourceText,
+                offline.offlineGlove80Catalog(),
+                offline.offlineGlove80Topology(),
+              );
         session = offline.openOfflineGlove80(parsed?.snapshot);
         const loaded = await openBundle(session);
         loaded.workspace = {

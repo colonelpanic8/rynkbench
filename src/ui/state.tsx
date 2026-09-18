@@ -44,7 +44,12 @@ import type {
   PointingCapabilities,
   SplitTransportState,
 } from "../vendor/rynk-wasm/rynk_wasm";
-import type { LayerMetadata, RuntimeLightingRule, RynkSession } from "../session/types";
+import type {
+  LayerMetadata,
+  LightingTopology,
+  RuntimeLightingRule,
+  RynkSession,
+} from "../session/types";
 import type { BoardProfile, BootloaderTarget } from "../model/boards";
 import type { KeyboardModel } from "../model/keyboard";
 import {
@@ -95,6 +100,9 @@ export interface ConnectedBundle {
     format: "toml" | "moergo-json";
   };
   model: KeyboardModel;
+  /** The advertised emitter topology, kept alongside the derived model: it is
+   *  what lets a document's `key`, zone and `all` lighting targets resolve. */
+  topology: LightingTopology;
   info: DeviceInfo;
   caps: DeviceCapabilities;
   protocol: ProtocolVersion;

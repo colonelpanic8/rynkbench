@@ -186,6 +186,7 @@ export function useDocumentTransfer(): DocumentTransfer {
         format,
         imported.current ?? undefined,
         bundle.incompleteReads ?? [],
+        bundle.topology,
       );
       const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
       const link = document.createElement("a");

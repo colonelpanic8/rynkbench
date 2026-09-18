@@ -6,6 +6,8 @@ import { detectFormat, parseDocument, renderDocument, snapshotFromState } from "
 import { exportDocument } from "./transfer";
 import type { WorkbenchState } from "../ui/state";
 import type { Morse } from "../vendor/rynk-wasm/rynk_wasm";
+import { GO60_KEYS } from "../model/boards/go60";
+import type { LightingTopology } from "../session/types";
 
 // The document module is a wasm binding, so the tests load the same package the
 // app does. `--target web` init wants a fetch; under Node the bytes are handed
@@ -96,6 +98,46 @@ KC_A KC_B KC_C KC_D KC_E KC_F -- -- KC_I KC_J KC_K KC_L KC_M KC_N
 """
 `;
 
+// A Go60 lighting rule addressed the way the personal configurations address
+// them: by the key it paints, not by an emitter id. Only the board's own
+// topology says which LED that is.
+const KEY_ADDRESSED_GO60 = `${MINIMAL_GO60}
+[lighting]
+brightness = 255
+output_mode = "powered-only"
+scene_policy = "active-stack"
+conditional_scene = [
+  { key = [2, 0], color = "#ff2000", indicators = { caps_lock = true } },
+]
+
+[lighting.background]
+enabled = false
+hue = 0
+saturation = 0
+value = 0
+speed = 128
+mode = "solid"
+`;
+
+// The LED chain behind each Go60 matrix position, in the shape the firmware
+// advertises it. Cross-checked against a connected Go60: row 2 column 0 is
+// LED 28 there too.
+const GO60_TOPOLOGY: LightingTopology = {
+  revision: 1,
+  keys: GO60_KEYS.map(({ row, col }) => ({ row, col })),
+  physicalKeys: [],
+  leds: GO60_KEYS.map(({ led, row, col }) => ({
+    id: led,
+    key: { row, col },
+    position: undefined,
+    zone_start: 0,
+    zone_len: 0,
+  })),
+  routes: [],
+  zones: [],
+  zoneMemberships: [],
+};
+
 const POINTING_GO60 = `${MINIMAL_GO60}
 [pointing]
 
@@ -151,6 +193,15 @@ describe("parseDocument", () => {
     expect(snapshot).toMatchObject({ rows: 5, cols: 14 });
     expect(snapshot.layers).toHaveLength(1);
     expect(snapshot.layers[0]).toHaveLength(70);
+  });
+
+  it("lowers a key-addressed lighting rule through the advertised topology", () => {
+    const { snapshot } = parseDocument(KEY_ADDRESSED_GO60, CATALOG, GO60_TOPOLOGY);
+    expect(snapshot.lighting?.conditional_scenes).toMatchObject([{ led_id: 28 }]);
+  });
+
+  it("says what is missing when a key-addressed document has no topology", () => {
+    expect(() => parseDocument(KEY_ADDRESSED_GO60, CATALOG)).toThrow(/addresses lighting by key/);
   });
 
   it("round-trips Go60 pointing devices and layer overrides", () => {
