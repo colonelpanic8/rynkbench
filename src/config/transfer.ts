@@ -9,7 +9,7 @@
 import type { Dispatch } from "react";
 import { boardForTarget, transferSnapshot } from "../model/boards/transfer";
 import type { MoErgoBoard } from "../model/boards/transfer";
-import type { RynkSession } from "../session/types";
+import type { LightingTopology, RynkSession } from "../session/types";
 import {
   hasConnectionEffectsConditions,
   hasLayerIndicatorConditions,
@@ -59,7 +59,11 @@ export async function importDocument(args: ImportArgs): Promise<ImportResult> {
   const { text, session, bundle, state, dispatch, catalog } = args;
   boardForTarget(bundle.info, bundle.caps.num_rows, bundle.caps.num_cols);
 
-  const { format, snapshot: sourceSnapshot, notes: parseNotes } = parseDocument(text, catalog);
+  const { format, snapshot: sourceSnapshot, notes: parseNotes } = parseDocument(
+    text,
+    catalog,
+    bundle.topology,
+  );
   if (sourceSnapshot.layers.length > bundle.caps.num_layers) {
     throw new Error(
       `Layout has ${sourceSnapshot.layers.length} layers; this keyboard supports ${bundle.caps.num_layers}`,
@@ -638,6 +642,7 @@ export function exportDocument(
   format: ConfigFormat,
   previous?: string,
   incompleteReads: string[] = [],
+  topology?: LightingTopology,
 ): string {
   if (incompleteReads.length > 0) {
     throw new Error(
@@ -645,7 +650,7 @@ export function exportDocument(
     );
   }
   return renderDocument(
-    snapshotFromState(state, bluetoothNameOf(previous, catalog)),
+    snapshotFromState(state, bluetoothNameOf(previous, catalog, topology)),
     catalog,
     format,
     previous,
@@ -656,10 +661,14 @@ export function exportDocument(
  *  does not report it over this seam and the renderer does not take it from
  *  `previous`, so without this an export drops the name a file arrived with.
  *  A `previous` that no longer parses is ignored, as the renderer ignores it. */
-function bluetoothNameOf(previous: string | undefined, catalog: ExtensionCatalog): string | undefined {
+function bluetoothNameOf(
+  previous: string | undefined,
+  catalog: ExtensionCatalog,
+  topology?: LightingTopology,
+): string | undefined {
   if (previous === undefined) return undefined;
   try {
-    return parseDocument(previous, catalog).snapshot.bluetooth_name;
+    return parseDocument(previous, catalog, topology).snapshot.bluetooth_name;
   } catch {
     return undefined;
   }

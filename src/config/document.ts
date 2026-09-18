@@ -17,11 +17,12 @@ import type {
   EffectParamSet,
   ExtensionCatalog,
   ImportNote,
+  KeyTopologyInput,
   ParsedConfig,
   RuntimeSnapshot,
 } from "../vendor/moergo-config-wasm/moergo_config_wasm";
 import { boardForMatrixCells } from "../model/boards/transfer";
-import type { RynkSession } from "../session/types";
+import type { LightingTopology, RynkSession } from "../session/types";
 import { ruleToWire } from "../session/lighting-rules";
 import { normalizePointingConfig } from "../ui/pointing";
 import type { WorkbenchState } from "../ui/state";
@@ -140,11 +141,36 @@ export function detectFormat(text: string): ConfigFormat {
   return detect_config_format(text);
 }
 
+/** The advertised topology in the shape the parser reads it in. A document that
+ *  addresses lighting by `key`, by zone, or with `all` can only be lowered to
+ *  emitter ids against the board that has them, so every parse that can reach a
+ *  keyboard passes this; a device with no lighting advertises no LEDs, and
+ *  omitting it there keeps the parser's own "no topology" wording. */
+export function topologyInput(topology: LightingTopology): KeyTopologyInput | undefined {
+  if (topology.leds.length === 0) return undefined;
+  return {
+    revision: topology.revision,
+    keys: topology.keys,
+    leds: topology.leds.map(({ id, key, zone_start, zone_len }) => ({
+      id,
+      key,
+      zone_start,
+      zone_len,
+    })),
+    zones: topology.zones,
+    zone_memberships: topology.zoneMemberships,
+  };
+}
+
 /** Parse and fully validate a document before anything is written. A document
  *  that cannot be represented fails here, naming the exact layer and key, so a
  *  bad file never leaves the keyboard half-written. */
-export function parseDocument(text: string, catalog: ExtensionCatalog): ParsedConfig {
-  return parse_config_document(text, catalog);
+export function parseDocument(
+  text: string,
+  catalog: ExtensionCatalog,
+  topology?: LightingTopology,
+): ParsedConfig {
+  return parse_config_document(text, catalog, topology && topologyInput(topology));
 }
 
 /** Render live state as a document. `previous` is the file being replaced: it

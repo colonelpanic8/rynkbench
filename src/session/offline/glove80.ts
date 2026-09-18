@@ -1,5 +1,5 @@
 import type { ExtensionCatalog, RuntimeSnapshot } from "../../config/document";
-import type { RynkSession } from "../types";
+import type { LightingTopology, RynkSession } from "../types";
 import { memorySession, type BoardSpec } from "../mock/board";
 import { glove80Board } from "../mock/glove80";
 import { ruleFromWire } from "../lighting-rules";
@@ -25,6 +25,12 @@ export function offlineGlove80Catalog(): ExtensionCatalog {
       params: params.map((param) => ({ ...param, value: param.default })),
     })),
   };
+}
+
+/** Topology of the offline template, used to lower a document's `key`, zone and
+ *  `all` lighting targets before a session exists to advertise them. */
+export function offlineGlove80Topology(): LightingTopology {
+  return glove80Board.topology;
 }
 
 /** Build a Glove80-shaped editing surface from a parsed configuration snapshot. */

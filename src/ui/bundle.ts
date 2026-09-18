@@ -299,6 +299,7 @@ export async function openBundle(session: RynkSession): Promise<ConnectedBundle>
     incompleteReads,
     boardProfile,
     model,
+    topology,
     info,
     caps,
     protocol,
