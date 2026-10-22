@@ -576,7 +576,7 @@ describe("snapshotFromState", () => {
       autoMouseLayers: [],
       combos: [],
       forks: liveForks,
-      macroBytes: new Uint8Array(),
+      macroOps: [],
       layerMetadata: [{ occupied: true, name: "Renamed" }],
       pointingConfig: {
         revision: 9,
@@ -588,6 +588,8 @@ describe("snapshotFromState", () => {
               Cursor: {
                 multiplier_x: 1,
                 multiplier_y: 1,
+                divisor_x: 1,
+                divisor_y: 1,
                 invert_x: false,
                 invert_y: false,
               },
@@ -650,7 +652,7 @@ describe("snapshotFromState", () => {
       morse: [],
       combos: [],
       forks: [],
-      macroBytes: new Uint8Array(),
+      macroOps: [],
       layerMetadata: null,
     } as unknown as WorkbenchState;
 

@@ -295,6 +295,7 @@ export function planLayerRewrite(
     })),
     forks: snapshot.forks.map((fork, index) => ({
       ...structuredClone(fork),
+      layers: fork.layers === 0xffffffff ? fork.layers : remapMask(fork.layers, mapping),
       trigger: remapKeyAction(fork.trigger, mapping, `fork ${index} trigger`),
       negative_output: remapKeyAction(fork.negative_output, mapping, `fork ${index} negative`),
       positive_output: remapKeyAction(fork.positive_output, mapping, `fork ${index} positive`),

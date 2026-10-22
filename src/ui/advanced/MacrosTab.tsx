@@ -1,7 +1,3 @@
-// Macros: the flat RMK byte region decoded into an ordered list of
-// op sequences (text / tap / press / release / delay). All macros share one
-// region, so saving writes the whole thing back.
-
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { hidLabel } from "../labels";
@@ -32,6 +28,8 @@ function stepSummary(step: MacroStep): { tag: string; body: string } {
       return { tag: "press", body: hidLabel(step.code) };
     case "release":
       return { tag: "release", body: hidLabel(step.code) };
+    case "native":
+      return { tag: "native", body: step.op === "PauseForRelease" ? "Wait for key release" : JSON.stringify(step.op) };
     case "delay":
       return { tag: "delay", body: `${step.ms} ms` };
   }
@@ -106,7 +104,7 @@ function AddStep({ onAdd }: { onAdd: (step: MacroStep) => void }) {
           <TextInput
             type="number"
             min={1}
-            max={65000}
+            max={65535}
             value={delay}
             onChange={(e) => setDelay(Number(e.target.value))}
             className="w-24 text-right"
@@ -129,13 +127,13 @@ export function MacrosTab({ nav }: { nav: ReactNode }) {
   const { bundle, state, io } = useWorkbench();
   const capacity = bundle.caps.macro_space_size;
 
-  const savedMacros = useMemo(() => decodeMacros(state.macroBytes), [state.macroBytes]);
+  const savedMacros = useMemo(() => decodeMacros(state.macroOps), [state.macroOps]);
   const pending = state.pending.macros?.status === "pending";
   const { draft: drafts, setDraft: setDrafts, dirty, reset } = useDeviceDraft(savedMacros, pending);
   const [sel, setSel] = useState<number | null>(null);
 
-  const usedBytes = drafts.reduce((n, m) => n + macroByteCost(m), 0);
-  const overCapacity = usedBytes > capacity;
+  const usedBytes = drafts.reduce((n, m) => n + macroByteCost(m), Math.max(0, bundle.caps.max_macros - drafts.length));
+  const overCapacity = usedBytes > capacity || drafts.length > bundle.caps.max_macros || !bundle.caps.macros_writable;
 
   const updateMacro = (index: number, next: DecodedMacro) => {
     setDrafts(drafts.map((m, i) => (i === index ? next : m)));

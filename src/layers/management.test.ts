@@ -62,6 +62,7 @@ function snapshot(): LayerRewriteSnapshot {
         match_none: {} as never,
         kept_modifiers: {} as never,
         bindable: true,
+        layers: 0xffffffff,
       },
     ],
     behaviorOptions: behavior([0, 1, 2]),
@@ -127,6 +128,16 @@ describe("layer rewrite planning", () => {
     expect(plan.wakeLayers).toBe((1 << 1) | (1 << 2));
     expect(plan.pointing?.overrides[0].layer).toBe(1);
     expect(plan.pointing?.revision).toBe(4);
+  });
+
+  it("remaps restricted fork layers and keeps unrestricted forks unrestricted", () => {
+    const input = snapshot();
+    input.forks[0].layers = 1 << 2;
+    const restricted = planLayerRewrite(input, { type: "move", layer: 1, to: 2 });
+    expect(restricted.forks[0].layers).toBe(1 << 1);
+    input.forks[0].layers = 0xffffffff;
+    const unrestricted = planLayerRewrite(input, { type: "move", layer: 1, to: 2 });
+    expect(unrestricted.forks[0].layers).toBe(0xffffffff);
   });
 
   it("rejects deletion when retained runtime data still targets the layer", () => {

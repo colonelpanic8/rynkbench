@@ -1,21 +1,5 @@
-// RMK macro byte-region codec. Pure functions, no React.
-//
-// Format (rmk/src/keyboard_macros.rs): the flat region is a series of
-// 0x00-terminated op sequences packed back-to-back; macro n is the nth
-// sequence. Ops:
-//   0x00            — end of macro
-//   0x01 0x01 kc    — Tap    (kc = low byte of the HID keycode)
-//   0x01 0x02 kc    — Press
-//   0x01 0x03 kc    — Release
-//   0x01 0x04 b1 b2 — Delay; the firmware decodes
-//                     ms = (max(b1,1)-1) + (max(b2,1)-1)*255
-//   anything else   — one ASCII character, typed via from_ascii (en-US)
-//
-// Note: RMK's own `serialize` writes Delay as a big-endian u16, which its
-// decoder would misread; we encode to match the *decoder*, since that is
-// what executes at runtime (and it matches Vial's encoding).
-
-import type { HidKeyCode } from "../vendor/rynk-wasm/rynk_wasm";
+import { macro_storage_size } from "../vendor/moergo-config-wasm/moergo_config_wasm";
+import type { Action, HidKeyCode, MacroOp } from "../vendor/rynk-wasm/rynk_wasm";
 
 /* ------------------------------------------------------------------ */
 /* HID keycode numeric values (rmk-types keycode/hid.rs)               */
@@ -94,7 +78,8 @@ export type MacroStep =
   | { kind: "tap"; code: HidKeyCode }
   | { kind: "press"; code: HidKeyCode }
   | { kind: "release"; code: HidKeyCode }
-  | { kind: "delay"; ms: number };
+  | { kind: "delay"; ms: number }
+  | { kind: "native"; op: MacroOp };
 
 export interface DecodedMacro {
   steps: MacroStep[];
@@ -107,92 +92,65 @@ export function isEncodableText(text: string): boolean {
   return TEXT_OK.test(text);
 }
 
-const MAX_DELAY_MS = 254 + 254 * 255; // what the two-byte scheme can carry
+const MAX_DELAY_MS = 65535;
 
 export function clampDelay(ms: number): number {
   return Math.max(0, Math.min(MAX_DELAY_MS, Math.round(ms)));
 }
 
-function stepBytes(step: MacroStep): number[] {
+function stepOps(step: MacroStep): MacroOp[] {
   switch (step.kind) {
-    case "text":
-      return [...step.text].map((ch) => {
-        const b = ch.charCodeAt(0);
-        // 0x00/0x01 would collide with op-codes; from_ascii maps them to No
-        // anyway, so refuse them here (isEncodableText already excludes them).
-        return b > 1 && b < 128 ? b : 0x20;
-      });
-    case "tap":
-      return [0x01, 0x01, hidValue(step.code) & 0xff];
-    case "press":
-      return [0x01, 0x02, hidValue(step.code) & 0xff];
-    case "release":
-      return [0x01, 0x03, hidValue(step.code) & 0xff];
-    case "delay": {
-      const ms = clampDelay(step.ms);
-      return [0x01, 0x04, (ms % 255) + 1, Math.floor(ms / 255) + 1];
-    }
+    case "text": return [...step.text].map((ch) => ({ Char: ch.charCodeAt(0) }));
+    case "tap": return [{ Tap: { Key: { Hid: step.code } } }];
+    case "press": return [{ Press: { Key: { Hid: step.code } } }];
+    case "release": return [{ Release: { Key: { Hid: step.code } } }];
+    case "delay": return [{ Delay: clampDelay(step.ms) }];
+    case "native": return [structuredClone(step.op)];
   }
 }
 
 export function macroByteCost(macro: DecodedMacro): number {
-  // steps + the 0x00 terminator
-  return macro.steps.reduce((n, s) => n + stepBytes(s).length, 0) + 1;
+  return macro_storage_size(macro.steps.flatMap(stepOps));
 }
 
-export function encodeMacros(macros: DecodedMacro[]): Uint8Array {
-  const out: number[] = [];
-  for (const macro of macros) {
-    for (const step of macro.steps) out.push(...stepBytes(step));
-    out.push(0x00);
+export function macroTableSize(macros: MacroOp[][], slots = macros.length): number {
+  return macros.reduce((size, ops) => size + macro_storage_size(ops), 0) + Math.max(0, slots - macros.length);
+}
+
+export function encodeMacros(macros: DecodedMacro[]): MacroOp[][] {
+  return macros.map((macro) => macro.steps.flatMap(stepOps));
+}
+
+function actionStep(kind: "tap" | "press" | "release", action: Action, op: MacroOp): MacroStep {
+  if (typeof action === "object" && "Key" in action && typeof action.Key === "object" && "Hid" in action.Key) {
+    return { kind, code: action.Key.Hid };
   }
-  return new Uint8Array(out);
+  return { kind: "native", op: structuredClone(op) };
 }
 
-/**
- * Decode the flat region into macros. Sequences are read until the rest of
- * the region is zero padding; consecutive Text bytes fold into one step.
- */
-export function decodeMacros(bytes: Uint8Array): DecodedMacro[] {
-  const macros: DecodedMacro[] = [];
-  let i = 0;
-  const restIsZero = (from: number): boolean => {
-    for (let j = from; j < bytes.length; j++) if (bytes[j] !== 0) return false;
-    return true;
-  };
-  while (i < bytes.length && !restIsZero(i)) {
+export function decodeMacros(macros: MacroOp[][]): DecodedMacro[] {
+  return macros.map((ops) => {
     const steps: MacroStep[] = [];
-    let text = "";
-    const flushText = () => {
-      if (text) steps.push({ kind: "text", text });
-      text = "";
-    };
-    while (i < bytes.length && bytes[i] !== 0x00) {
-      const b = bytes[i];
-      if (b === 0x01 && i + 1 < bytes.length && bytes[i + 1] >= 1 && bytes[i + 1] <= 4) {
-        flushText();
-        const op = bytes[i + 1];
-        if (op === 4) {
-          const b1 = Math.max(bytes[i + 2] ?? 1, 1);
-          const b2 = Math.max(bytes[i + 3] ?? 1, 1);
-          steps.push({ kind: "delay", ms: b1 - 1 + (b2 - 1) * 255 });
-          i += 4;
-        } else {
-          const code = hidFromValue(bytes[i + 2] ?? 0);
-          const kind = op === 1 ? "tap" : op === 2 ? "press" : "release";
-          steps.push({ kind, code });
-          i += 3;
-        }
+    for (const op of ops) {
+      if (typeof op === "string") {
+        steps.push({ kind: "native", op });
+      } else if ("Char" in op) {
+        const last = steps.at(-1);
+        const text = String.fromCharCode(op.Char);
+        if (last?.kind === "text") last.text += text;
+        else steps.push({ kind: "text", text });
+      } else if ("Delay" in op) {
+        steps.push({ kind: "delay", ms: op.Delay });
+      } else if ("Tap" in op) {
+        steps.push(actionStep("tap", op.Tap, op));
+      } else if ("Press" in op) {
+        steps.push(actionStep("press", op.Press, op));
       } else {
-        text += String.fromCharCode(b);
-        i += 1;
+        steps.push(actionStep("release", op.Release, op));
       }
     }
-    flushText();
-    i += 1; // the 0x00 terminator
-    macros.push({ steps });
-  }
-  return macros;
+    return { steps };
+  });
 }
 
 /** Short human label for a macro: its leading text, else a step summary. */
@@ -203,6 +161,7 @@ export function macroPreview(macro: DecodedMacro): string {
     return t.length > 18 ? `${t.slice(0, 17)}…` : t || "(spaces)";
   }
   if (!first) return "empty";
+  if (first.kind === "native") return first.op === "PauseForRelease" ? "wait for release" : "native action";
   if (first.kind === "delay") return `delay ${first.ms}ms…`;
   return `${first.kind} ${first.code}…`;
 }

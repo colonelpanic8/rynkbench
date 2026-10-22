@@ -1,3 +1,4 @@
+import type { MacroOp } from "../vendor/rynk-wasm/rynk_wasm";
 // RynkSession over a live wasm RynkClient and a RynkByteLink — the shared
 // core of every transport (WebHID, Web Serial, Web Bluetooth, native Tauri
 // HID and BLE). Transports supply the link plus a disconnect watcher;
@@ -1178,39 +1179,32 @@ export class LinkSession implements RynkSession {
     return items;
   }
 
-  private async readMacroRegion(): Promise<Uint8Array> {
+  private async readMacroRegion(): Promise<MacroOp[][]> {
     const caps = await this.capabilities();
-    if (caps.macro_space_size === 0) return new Uint8Array(0);
-    const region = new Uint8Array(caps.macro_space_size);
-    let offset = 0;
-    while (offset < caps.macro_space_size) {
-      const chunk = await this.client.get_macro(offset);
-      if (chunk.data.length === 0) {
-        throw new Error(`macro read stalled at byte ${offset} of ${caps.macro_space_size}`);
-      }
-      const take = chunk.data.slice(0, caps.macro_space_size - offset);
-      region.set(take, offset);
-      offset += take.length;
+    const macros: MacroOp[][] = [];
+    for (let index = 0; index < caps.max_macros; index++) {
+      macros.push(await this.client.read_macro(index));
     }
-    return region;
+    while (macros.at(-1)?.length === 0) macros.pop();
+    return macros;
   }
 
-  private async writeMacroRegion(data: Uint8Array): Promise<void> {
+  private async writeMacroRegion(macros: MacroOp[][]): Promise<void> {
     const caps = await this.capabilities();
-    if (caps.macro_space_size === 0) {
-      if (data.length > 0) throw new Error("device has no macro storage");
-      return;
-    }
-    if (data.length > caps.macro_space_size) {
-      throw new Error(
-        `macro data (${data.length} bytes) exceeds device region (${caps.macro_space_size} bytes)`,
-      );
-    }
-    const step = Math.max(1, caps.macro_chunk_size);
-    for (let offset = 0; offset < data.length; offset += step) {
-      await this.client.set_macro(offset, {
-        data: Array.from(data.subarray(offset, offset + step)),
-      });
+    if (!caps.macros_writable) throw new Error("device macros are read-only");
+    if (macros.length > caps.max_macros) throw new Error("macro slot capacity exceeded");
+    const size = macros.reduce((total, ops) => total + this.client.macro_size(ops), caps.max_macros - macros.length);
+    if (size > caps.macro_space_size) throw new Error("macro storage capacity exceeded");
+    const before = await this.readMacroRegion();
+    // Free shrinking slots first so a replacement can reuse their storage.
+    const indices = Array.from({ length: Math.max(before.length, macros.length) }, (_, index) => index);
+    const growth = (index: number) =>
+      this.client.macro_size(macros[index] ?? []) - this.client.macro_size(before[index] ?? []);
+    indices.sort((a, b) => growth(a) - growth(b));
+    for (const index of indices) {
+      if (JSON.stringify(before[index] ?? []) !== JSON.stringify(macros[index] ?? [])) {
+        await this.client.write_macro(index, macros[index] ?? []);
+      }
     }
   }
 

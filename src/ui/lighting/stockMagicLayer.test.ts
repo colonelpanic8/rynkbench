@@ -120,16 +120,16 @@ describe("stock Magic layer indicators", () => {
   it("colors profile and USB keys by pairing, connection, and output", () => {
     const connection = (ble: ConnectionStatus["ble"], usb: ConnectionStatus["usb"], preferred: "Usb" | "Ble" = "Ble") =>
       ({ ble, usb, preferred }) as ConnectionStatus;
-    const unpaired = preview({ bondedSlots: new Set([1]), connection: connection({ profile: 1, state: "Connected" }, "Enabled") });
+    const unpaired = preview({ bondedSlots: new Set([1]), connection: connection({ profile: 1, state: "Connected", bonded: true, }, "Enabled") });
     expect(unpaired.get(3)?.effect).toEqual(solid(107, 31, 206));
     expect(unpaired.get(4)?.effect).toEqual(solid(255, 255, 255));
     expect(unpaired.get(5)?.effect).toEqual(solid(107, 31, 206));
 
-    const usbTyping = preview({ bondedSlots: new Set([0]), connection: connection({ profile: 0, state: "Connected" }, "Configured", "Usb") });
+    const usbTyping = preview({ bondedSlots: new Set([0]), connection: connection({ profile: 0, state: "Connected", bonded: true, }, "Configured", "Usb") });
     expect(usbTyping.get(3)?.effect).toEqual(solid(0, 255, 104));
     expect(usbTyping.get(5)?.effect).toEqual(solid(255, 255, 255));
 
-    const idle = preview({ bondedSlots: new Set([0]), connection: connection({ profile: 1, state: "Advertising" }, "Configured", "Ble") });
+    const idle = preview({ bondedSlots: new Set([0]), connection: connection({ profile: 1, state: "Advertising", bonded: false, }, "Configured", "Ble") });
     expect(idle.get(3)?.effect).toEqual(solid(255, 0, 0));
     expect(idle.get(5)?.effect).toEqual(solid(255, 255, 255));
   });

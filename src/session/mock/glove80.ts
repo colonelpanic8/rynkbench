@@ -182,7 +182,8 @@ const capabilities: DeviceCapabilities = {
   max_payload_size: 256,
   max_bulk_keys: 28,
   max_bulk_items: 4,
-  macro_chunk_size: 28,
+  max_macros: 32,
+  macros_writable: true,
   bulk_transfer_supported: true,
 };
 
@@ -501,7 +502,7 @@ export const glove80Board: BoardSpec = {
   build: { label: "config 0e70aaf9 / glove80-rmk v0.1.0 (mockbuil) / RMK rmk-v0.8.2-992-gmockbuil" },
   connection: {
     usb: "Suspended",
-    ble: { profile: 0, state: "Connected" },
+    ble: { profile: 0, state: "Connected", bonded: true, },
     preferred: "Ble",
   },
   layout: {

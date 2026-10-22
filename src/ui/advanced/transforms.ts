@@ -1,3 +1,4 @@
+import type { MacroOp } from "../../vendor/rynk-wasm/rynk_wasm";
 // Keymap-wide transforms: the dual-OS Ctrl↔GUI swap and QWERTY→alternate
 // alpha-layout remaps. Pure planning logic — the Transforms tab executes a
 // plan through the ordinary optimistic write path.
@@ -163,7 +164,7 @@ export interface TransformPlan {
   morse: SlotEdit<Morse>[];
   forks: SlotEdit<Fork>[];
   /** Re-encoded macro region, when any step changed. */
-  macroBytes: Uint8Array | null;
+  macroOps: MacroOp[][] | null;
 }
 
 /** Every write the plan will issue: keys, slot tables, and the macro region. */
@@ -173,7 +174,7 @@ export function planSize(plan: TransformPlan): number {
     plan.combos.length +
     plan.morse.length +
     plan.forks.length +
-    (plan.macroBytes ? 1 : 0)
+    (plan.macroOps ? 1 : 0)
   );
 }
 
@@ -204,7 +205,7 @@ export interface TransformInput {
   combos: ComboDefinition[];
   morse: Morse[];
   forks: Fork[];
-  macroBytes: Uint8Array;
+  macroOps: MacroOp[][];
 }
 
 function planKeys(
@@ -273,7 +274,7 @@ function planSlots<T>(slots: T[], map: (value: T) => T): SlotEdit<T>[] {
  *  combos, morse slots, forks, and macro steps. */
 export function planOsSwap(input: TransformInput): TransformPlan {
   const spec = CTRL_GUI_SWAP;
-  const macros = decodeMacros(input.macroBytes);
+  const macros = decodeMacros(input.macroOps);
   const mappedMacros = macros.map((macro) => ({
     steps: macro.steps.map((step) =>
       step.kind === "tap" || step.kind === "press" || step.kind === "release"
@@ -281,13 +282,13 @@ export function planOsSwap(input: TransformInput): TransformPlan {
         : step,
     ),
   }));
-  const macroBytes = same(macros, mappedMacros) ? null : encodeMacros(mappedMacros);
+  const macroOps = same(macros, mappedMacros) ? null : encodeMacros(mappedMacros);
   return {
     keys: planKeys(input.layers, input.cols, spec, null),
     combos: planSlots(input.combos, (combo) => mapCombo(spec, combo)),
     morse: planSlots(input.morse, (morse) => mapMorse(spec, morse)),
     forks: planSlots(input.forks, (fork) => mapFork(spec, fork)),
-    macroBytes,
+    macroOps,
   };
 }
 
@@ -374,5 +375,5 @@ export function planLayoutSwitch(
     });
   });
 
-  return { keys, combos: [], morse: [], forks: [], macroBytes: null };
+  return { keys, combos: [], morse: [], forks: [], macroOps: null };
 }

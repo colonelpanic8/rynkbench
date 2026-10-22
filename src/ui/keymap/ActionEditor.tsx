@@ -472,7 +472,7 @@ function PickList<T extends string>({
 
 function MacroPickerTab({ onCommit }: { onCommit: (action: KeyAction) => void }) {
   const { state } = useWorkbench();
-  const macros = useMemo(() => decodeMacros(state.macroBytes), [state.macroBytes]);
+  const macros = useMemo(() => decodeMacros(state.macroOps), [state.macroOps]);
   if (macros.length === 0) {
     return (
       <div className="py-6 text-center text-[12.5px] leading-relaxed text-faint">

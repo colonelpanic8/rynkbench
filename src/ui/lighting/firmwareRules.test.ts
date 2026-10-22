@@ -97,7 +97,7 @@ describe("runtime rule predicates", () => {
   };
   const connected: ConnectionStatus = {
     usb: "Configured",
-    ble: { profile: 2, state: "Connected" },
+    ble: { profile: 2, state: "Connected", bonded: true, },
     preferred: "Ble",
   };
   const preview = {

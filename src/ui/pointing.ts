@@ -25,6 +25,8 @@ export type PointingModeKind =
 const CURSOR_DEFAULT: CursorConfig = {
   multiplier_x: 1,
   multiplier_y: 1,
+  divisor_x: 1,
+  divisor_y: 1,
   invert_x: false,
   invert_y: false,
 };

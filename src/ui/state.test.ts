@@ -100,7 +100,7 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     combos: [],
     morse: [],
     forks: [],
-    macroBytes: new Uint8Array(),
+    macroOps: [],
     behavior: null,
     behaviorOptions: null,
     morseProfileCapacity: 0,
@@ -1043,7 +1043,7 @@ describe("pointing configuration state", () => {
       {
         device_id: 0,
         mode: {
-          Cursor: { multiplier_x: multiplier, multiplier_y: 1, invert_x: false, invert_y: false },
+          Cursor: { multiplier_x: multiplier, multiplier_y: 1, divisor_x: 1, divisor_y: 1, invert_x: false, invert_y: false },
         },
       },
     ],
@@ -1180,7 +1180,7 @@ describe("layer management state", () => {
         {
           device_id: 3,
           mode: {
-            Cursor: { multiplier_x: 1, multiplier_y: 1, invert_x: false, invert_y: false },
+            Cursor: { multiplier_x: 1, multiplier_y: 1, divisor_x: 1, divisor_y: 1, invert_x: false, invert_y: false },
           },
         },
       ],
@@ -1191,7 +1191,7 @@ describe("layer management state", () => {
           device_id: 3,
           mode: {
             Press: {
-              cursor: { multiplier_x: 1, multiplier_y: 1, invert_x: false, invert_y: false },
+              cursor: { multiplier_x: 1, multiplier_y: 1, divisor_x: 1, divisor_y: 1, invert_x: false, invert_y: false },
               holds: 1,
             },
           },

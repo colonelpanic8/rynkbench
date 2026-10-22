@@ -4,6 +4,7 @@ import type {
   LightingCapabilities,
   LightingOverlayCell,
   LightingState,
+  MacroOp,
   RynkClient,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import { SessionLog } from "./diagnostics";
@@ -72,6 +73,40 @@ function harness(methods: Record<string, (...args: never[]) => unknown>, log?: S
 }
 
 describe("LinkSession", () => {
+  it("replaces macro slots without transiently exceeding storage", async () => {
+    const slots: MacroOp[][] = [[], [{ Char: 65 }, { Char: 66 }], [{ Char: 67 }]];
+    const size = (ops: MacroOp[]) => 1 + 2 * ops.length;
+    const { session } = harness({
+      get_capabilities: async () => ({ ...caps, max_macros: 3, macro_space_size: 9, macros_writable: true }),
+      macro_size: size,
+      read_macro: async (index: number) => structuredClone(slots[index]),
+      write_macro: async (index: number, ops: MacroOp[]) => {
+        const used = slots.reduce((total, slot) => total + size(slot), 0);
+        if (used - size(slots[index]) + size(ops) > 9) throw new Error("out of storage");
+        slots[index] = structuredClone(ops);
+      },
+    });
+    const replacement: MacroOp[][] = [[{ Char: 68 }, { Char: 69 }, { Char: 70 }]];
+
+    await session.macros.write(replacement);
+
+    expect(slots).toEqual([...replacement, [], []]);
+    expect(await session.macros.read()).toEqual(replacement);
+    await session.close();
+  });
+
+  it("rejects an oversized macro table before writing any slot", async () => {
+    const { session, spies } = harness({
+      get_capabilities: async () => ({ ...caps, max_macros: 3, macro_space_size: 4, macros_writable: true }),
+      macro_size: (ops: MacroOp[]) => 1 + 2 * ops.length,
+      write_macro: async () => undefined,
+    });
+
+    await expect(session.macros.write([[{ Char: 65 }]])).rejects.toThrow("capacity");
+    expect(spies.write_macro).not.toHaveBeenCalled();
+    await session.close();
+  });
+
   it("asks for a full storage wipe and leaves the reboot to the firmware", async () => {
     const { session, spies } = harness({
       storage_reset: async () => undefined,

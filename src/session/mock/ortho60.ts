@@ -101,7 +101,8 @@ const capabilities: DeviceCapabilities = {
   max_payload_size: 256,
   max_bulk_keys: 28,
   max_bulk_items: 4,
-  macro_chunk_size: 28,
+  max_macros: 32,
+  macros_writable: true,
   bulk_transfer_supported: true,
 };
 
@@ -123,7 +124,7 @@ export const ortho60Board: BoardSpec = {
   build: { label: "ortho60-rmk v0.3.1 (mockbuil) / RMK rmk-v0.8.2-992-gmockbuil" },
   connection: {
     usb: "Configured",
-    ble: { profile: 0, state: "Inactive" },
+    ble: { profile: 0, state: "Inactive", bonded: false, },
     preferred: "Usb",
   },
   layout: {
@@ -159,7 +160,7 @@ export const ortho60Board: BoardSpec = {
       {
         device_id: 1,
         mode: {
-          Cursor: { multiplier_x: 1, multiplier_y: 1, invert_x: false, invert_y: false },
+          Cursor: { multiplier_x: 1, multiplier_y: 1, divisor_x: 1, divisor_y: 1, invert_x: false, invert_y: false },
         },
       },
     ],
@@ -189,7 +190,7 @@ export const ortho60Board: BoardSpec = {
         device_id: 1,
         mode: {
           Press: {
-            cursor: { multiplier_x: 1, multiplier_y: 1, invert_x: false, invert_y: false },
+            cursor: { multiplier_x: 1, multiplier_y: 1, divisor_x: 1, divisor_y: 1, invert_x: false, invert_y: false },
             holds: 1,
           },
         },

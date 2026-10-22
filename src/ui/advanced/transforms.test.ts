@@ -35,7 +35,7 @@ function baseInput(overrides: Partial<TransformInput>): TransformInput {
     combos: [],
     morse: [],
     forks: [],
-    macroBytes: new Uint8Array(),
+    macroOps: [],
     ...overrides,
   };
 }
@@ -85,9 +85,10 @@ describe("CTRL_GUI_SWAP", () => {
             match_none: noStateBits(),
             kept_modifiers: { ...NO_MODS, left_ctrl: true },
             bindable: false,
+            layers: 0xffffffff,
           },
         ],
-        macroBytes: encodeMacros([
+        macroOps: encodeMacros([
           { steps: [{ kind: "press", code: "LCtrl" }, { kind: "tap", code: "C" }] },
         ]),
       }),
@@ -96,15 +97,15 @@ describe("CTRL_GUI_SWAP", () => {
     expect(plan.combos).toHaveLength(1); // the LCtrl combo only
     expect(plan.morse).toHaveLength(1);
     expect(plan.forks).toHaveLength(1); // kept_modifiers changed
-    expect(plan.macroBytes).not.toBeNull();
-    const macros = decodeMacros(plan.macroBytes!);
+    expect(plan.macroOps).not.toBeNull();
+    const macros = decodeMacros(plan.macroOps!);
     expect(macros[0].steps[0]).toEqual({ kind: "press", code: "LGui" });
   });
 
   it("plans nothing on an already-neutral keymap", () => {
     const plan = planOsSwap(baseInput({ layers: [[key("A"), key("LShift")]] }));
     expect(plan.keys).toHaveLength(0);
-    expect(plan.macroBytes).toBeNull();
+    expect(plan.macroOps).toBeNull();
   });
 
   it("swaps fork modifier conditions along with their outputs", () => {
@@ -248,7 +249,7 @@ describe("plan sizing", () => {
     baseInput({
       layers: [[key("LCtrl"), key("A")]],
       combos: [{ Actions: { actions: [key("LGui")], output: key("C"), layer: undefined } }],
-      macroBytes: encodeMacros([{ steps: [{ kind: "press", code: "LCtrl" }] }]),
+      macroOps: encodeMacros([{ steps: [{ kind: "press", code: "LCtrl" }] }]),
     }),
   );
 

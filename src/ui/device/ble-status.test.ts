@@ -5,7 +5,7 @@ import { unsupported } from "../../session/unsupported";
 import { readBleStatus } from "./ble-status";
 
 const connection = (profile: number): ConnectionStatus => ({
-  usb: "Configured", preferred: "Usb", ble: { profile, state: "Advertising" },
+  usb: "Configured", preferred: "Usb", ble: { profile, state: "Advertising", bonded: false },
 });
 
 function session(connectionStatus: () => Promise<ConnectionStatus>) {

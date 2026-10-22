@@ -1,3 +1,5 @@
+import { macroTableSize } from "../../ui/macros";
+import type { MacroOp } from "../../vendor/rynk-wasm/rynk_wasm";
 // The mock backend's engine: a BoardSpec is one simulated device (static
 // identity, geometry, topology, defaults); MockSession drives its mutable
 // in-memory state behind the RynkSession seam. Every op resolves through a
@@ -139,8 +141,8 @@ export interface BoardSpec {
   seedCombos?: ComboDefinition[];
   seedMorse?: Morse[];
   seedForks?: Fork[];
-  /** Initial macro bytes, zero-filled to macro_space_size after this prefix. */
-  seedMacros?: number[];
+  /** Initial macro operations by slot. */
+  seedMacros?: MacroOp[][];
   /** Max stored layer-scene cells; 0/absent simulates pre-scene firmware. */
   sceneCapacity?: number;
   /** Scene cells stored "in flash" when the session opens. */
@@ -382,7 +384,7 @@ class MockSession implements RynkSession {
   private readonly comboTable: ComboDefinition[];
   private readonly morseTable: Morse[];
   private readonly forkTable: Fork[];
-  private readonly macroBytes: Uint8Array;
+  private macroOps: MacroOp[][];
   private behaviorConfig: BehaviorConfig;
   private behaviorOptions: BehaviorOptions;
   private morseProfiles: MorseProfileEntry[];
@@ -442,13 +444,7 @@ class MockSession implements RynkSession {
     this.comboTable = buildSlots(caps.max_combos, emptyCombo, cloneCombo, spec.seedCombos);
     this.morseTable = buildSlots(caps.max_morse, emptyMorse, cloneMorse, spec.seedMorse);
     this.forkTable = buildSlots(caps.max_forks, emptyFork, cloneFork, spec.seedForks);
-    this.macroBytes = new Uint8Array(caps.macro_space_size);
-    if ((spec.seedMacros?.length ?? 0) > this.macroBytes.length) {
-      throw new Error(
-        `macro seed has ${spec.seedMacros!.length} bytes, capacity ${this.macroBytes.length}`,
-      );
-    }
-    this.macroBytes.set(spec.seedMacros ?? []);
+    this.macroOps = structuredClone(spec.seedMacros ?? []);
     this.layerPolicy = spec.initialLayerPolicy ?? "EffectiveOnly";
     this.behaviorConfig = { ...spec.behavior };
     this.behaviorOptions = behaviorOptionsDefaults(spec);
@@ -499,7 +495,7 @@ class MockSession implements RynkSession {
       latency(() => {
         this.checkBleProfile(slot);
         // Selecting a slot drops any live link and re-advertises on it.
-        this.ble = { profile: slot, state: "Advertising" };
+        this.ble = { profile: slot, state: "Advertising", bonded: false, };
         this.emit({ ConnectionChange: this.connectionStatus() });
       }),
     peripheralStatus: (slot) =>
@@ -782,15 +778,15 @@ class MockSession implements RynkSession {
   };
 
   readonly macros: MacroOps = {
-    read: () => latency(() => new Uint8Array(this.macroBytes)),
-    write: (data) =>
-      latency(() => {
-        if (data.length > this.macroBytes.length) {
-          throw new Error(`macro data is ${data.length} bytes, capacity ${this.macroBytes.length}`);
-        }
-        this.macroBytes.fill(0);
-        this.macroBytes.set(data);
-      }),
+    read: () => latency(() => structuredClone(this.macroOps)),
+    write: (data) => latency(() => {
+      const caps = this.spec.capabilities;
+      if (!caps.macros_writable) throw new Error("device macros are read-only");
+      if (data.length > caps.max_macros || macroTableSize(data, caps.max_macros) > caps.macro_space_size) {
+        throw new Error("macro capacity exceeded");
+      }
+      this.macroOps = structuredClone(data);
+    }),
   };
 
   readonly behavior: BehaviorOps = {
@@ -984,8 +980,7 @@ class MockSession implements RynkSession {
         this.spec.seedForks,
       ),
     );
-    this.macroBytes.fill(0);
-    this.macroBytes.set(this.spec.seedMacros ?? []);
+    this.macroOps = structuredClone(this.spec.seedMacros ?? []);
     this.behaviorConfig = { ...this.spec.behavior };
     this.behaviorOptions = behaviorOptionsDefaults(this.spec);
     this.morseProfiles = structuredClone(this.spec.seedMorseProfiles ?? []);

@@ -64,7 +64,7 @@ export function offlineGlove80Board(snapshot?: RuntimeSnapshot): BoardSpec {
     },
     connection: {
       usb: "Disabled",
-      ble: { profile: 0, state: "Inactive" },
+      ble: { profile: 0, state: "Inactive", bonded: false, },
       preferred: "Usb",
     },
     defaultLayers: layers,

@@ -1,3 +1,4 @@
+import type { MacroOp } from "../vendor/rynk-wasm/rynk_wasm";
 // The Rynkbench session seam.
 //
 // Everything above this interface is backend-neutral UI; everything below it
@@ -254,11 +255,10 @@ export interface ForkOps {
   set(index: number, fork: Fork): Promise<void>;
 }
 
-/** The flat macro byte region (capabilities.macro_space_size bytes; 0 = no
- *  macro support). Chunked transfer is the backend's job. */
+/** Ordered macro slots; empty entries preserve later slot indices. */
 export interface MacroOps {
-  read(): Promise<Uint8Array>;
-  write(data: Uint8Array): Promise<void>;
+  read(): Promise<MacroOp[][]>;
+  write(data: MacroOp[][]): Promise<void>;
 }
 
 export interface BehaviorOps {

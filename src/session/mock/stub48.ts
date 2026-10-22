@@ -144,7 +144,8 @@ const capabilities: DeviceCapabilities = {
   max_payload_size: 64,
   max_bulk_keys: 16,
   max_bulk_items: 4,
-  macro_chunk_size: 32,
+  max_macros: 32,
+  macros_writable: true,
   bulk_transfer_supported: true,
 };
 
@@ -166,7 +167,7 @@ export const stub48Board: BoardSpec = {
   build: { label: "stub-rmk v0.0.0 (stubbuil) / RMK rmk-v0.8.2-992-gstubbuil" },
   connection: {
     usb: "Configured",
-    ble: { profile: 0, state: "Inactive" },
+    ble: { profile: 0, state: "Inactive", bonded: false, },
     preferred: "Usb",
   },
   layout: {

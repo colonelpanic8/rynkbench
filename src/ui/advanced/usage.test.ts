@@ -25,7 +25,7 @@ function baseInput(overrides: Partial<UsageInput>): UsageInput {
     combos: [],
     morse: [],
     forks: [],
-    macroBytes: new Uint8Array(),
+    macroOps: [],
     morseProfiles: [],
     ...overrides,
   };
@@ -89,7 +89,7 @@ describe("analyzeUsage", () => {
     const report = analyzeUsage(
       baseInput({
         layers: [[{ Single: { TriggerMacro: 0 } }, key("A")]],
-        macroBytes: encodeMacros([
+        macroOps: encodeMacros([
           { steps: [{ kind: "tap", code: "Home" }] },
           { steps: [{ kind: "tap", code: "End" }] },
         ]),
@@ -116,6 +116,7 @@ describe("analyzeUsage", () => {
             match_none: noStateBits(),
             kept_modifiers: noStateBits().modifiers,
             bindable: false,
+            layers: 0xffffffff,
           },
         ],
       }),

@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { initSync } from "../../vendor/moergo-config-wasm/moergo_config_wasm";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import type {
   ComboDefinition,
   LightingConditionalSceneCell,
@@ -16,6 +18,8 @@ import { emptyMorseProfile } from "../../model/slots";
 import { isUnsupportedError } from "../unsupported";
 import { mockProvider, type BoardSpec } from "./board";
 import { stub48Board } from "./stub48";
+
+beforeAll(() => initSync({ module: readFileSync("src/vendor/moergo-config-wasm/moergo_config_wasm_bg.wasm") }));
 
 const boards: Array<[string, BoardSpec]> = [
   ["Glove80", glove80Board],
@@ -913,29 +917,22 @@ describe("fork slots", () => {
 });
 
 describe("macros", () => {
-  it("exposes a zeroed region sized by capabilities and round-trips writes", async () => {
+  it("preserves empty slots and replaces a longer table", async () => {
     await withSession(glove80Board, async (session) => {
-      const caps = await session.device.capabilities();
-      const initial = await session.macros.read();
-      expect(initial).toHaveLength(caps.macro_space_size);
-      expect(initial.every((byte) => byte === 0)).toBe(true);
-      const data = Uint8Array.from([1, 2, 3, 250]);
-      await session.macros.write(data);
-      const readBack = await session.macros.read();
-      expect([...readBack.slice(0, 4)]).toEqual([1, 2, 3, 250]);
-      expect(readBack.slice(4).every((byte) => byte === 0)).toBe(true);
+      expect(await session.macros.read()).toEqual([]);
+      await session.macros.write([[{ Char: 65 }], [], ["PauseForRelease"]]);
+      expect(await session.macros.read()).toEqual([[{ Char: 65 }], [], ["PauseForRelease"]]);
+      await session.macros.write([[{ Delay: 100 }]]);
+      expect(await session.macros.read()).toEqual([[{ Delay: 100 }]]);
     });
   });
-
-  it("rejects writes past the macro region", async () => {
+  it("enforces both slot and encoded storage capacity", async () => {
     await withSession(ortho60Board, async (session) => {
       const caps = await session.device.capabilities();
-      await expect(
-        session.macros.write(new Uint8Array(caps.macro_space_size + 1)),
-      ).rejects.toThrow(/capacity/);
-      // A full-capacity write is fine.
-      await session.macros.write(new Uint8Array(caps.macro_space_size).fill(7));
-      expect((await session.macros.read()).every((byte) => byte === 7)).toBe(true);
+      await expect(session.macros.write(Array.from({ length: caps.max_macros + 1 }, () => []))).rejects.toThrow(/capacity/);
+      await expect(session.macros.write([Array.from({ length: caps.macro_space_size }, () => ({ Char: 65 }))])).rejects.toThrow(/capacity/);
+      await session.macros.write([[{ Delay: 65535 }]]);
+      expect(await session.macros.read()).toEqual([[{ Delay: 65535 }]]);
     });
   });
 });
@@ -1088,7 +1085,7 @@ describe("BLE and peripherals", () => {
     await withSession(glove80Board, async (session) => {
       const caps = await session.device.capabilities();
       expect(caps.ble_enabled).toBe(true);
-      expect(await session.device.bleStatus()).toEqual({ profile: 0, state: "Connected" });
+      expect(await session.device.bleStatus()).toEqual({ profile: 0, state: "Connected", bonded: true, });
       await session.device.clearBleProfile(caps.num_ble_profiles - 1);
       await session.device.clearAllBleProfiles();
       await expect(session.device.clearBleProfile(caps.num_ble_profiles)).rejects.toThrow(/out of range/);
@@ -1281,11 +1278,11 @@ describe("providers", () => {
           layer: undefined,
         },
       });
-      await first.macros.write(Uint8Array.of(9));
+      await first.macros.write([[{ Char: 9 }]]);
       expect((await second.combos.readAll())[0]).toEqual({
         Actions: { actions: [], output: "No", layer: undefined },
       });
-      expect((await second.macros.read())[0]).toBe(0);
+      expect(await second.macros.read()).toEqual([]);
     } finally {
       await first.close();
       await second.close();
@@ -1301,7 +1298,7 @@ describe("mock BLE connection state", () => {
       session.onTopic((event) => topics.push(event));
       await session.device.switchBleProfile(1);
       const connection = await session.device.connectionStatus();
-      expect(connection.ble).toEqual({ profile: 1, state: "Advertising" });
+      expect(connection.ble).toEqual({ profile: 1, state: "Advertising", bonded: false, });
       expect(await session.device.bleStatus()).toEqual(connection.ble);
       expect(topics).toContainEqual({ ConnectionChange: connection });
       connection.ble.profile = 2;
@@ -1365,7 +1362,7 @@ describe("storage reset", () => {
     await session.combos.set(0, {
       Actions: { actions: [], output: { Single: { Key: { Hid: "Z" } } }, layer: undefined },
     });
-    await session.macros.write(Uint8Array.of(9));
+    await session.macros.write([[{ Char: 9 }]]);
     await session.behavior.set({ ...defaults.behavior, combo_timeout_ms: 99 });
     await session.behavior.setOptions({
       ...defaults.behaviorOptions,

@@ -1,3 +1,4 @@
+import type { MacroOp } from "../../vendor/rynk-wasm/rynk_wasm";
 // Behavior usage analysis: where every layer, morse slot, macro, morse
 // profile, fork, and combo is referenced, which are orphaned, and which
 // layers cannot be reached from the default layer. Pure logic — the Usage
@@ -25,7 +26,7 @@ export interface UsageInput {
   combos: ComboDefinition[];
   morse: Morse[];
   forks: Fork[];
-  macroBytes: Uint8Array;
+  macroOps: MacroOp[][];
   morseProfiles: MorseProfileEntry[];
 }
 
@@ -296,7 +297,7 @@ export function analyzeUsage(input: UsageInput): UsageReport {
   });
 
   // Macros.
-  const decodedMacros = decodeMacros(input.macroBytes);
+  const decodedMacros = decodeMacros(input.macroOps);
   const macros: MacroUsage[] = decodedMacros.map((macro, index) => ({
     index,
     refs: [],

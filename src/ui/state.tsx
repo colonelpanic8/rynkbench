@@ -1,3 +1,4 @@
+import type { MacroOp } from "../vendor/rynk-wasm/rynk_wasm";
 // Workbench state: one reducer, one context. Topic events and optimistic
 // writes both funnel through dispatch; components read via useWorkbench().
 
@@ -157,7 +158,7 @@ export interface ConnectedBundle {
   combos: ComboDefinition[];
   morse: Morse[];
   forks: Fork[];
-  macroBytes: Uint8Array;
+  macroOps: MacroOp[][];
   /** null when the device rejected the read (feature-gated out). */
   behavior: BehaviorConfig | null;
   behaviorOptions: BehaviorOptions | null;
@@ -221,7 +222,7 @@ export function morseProfilePendingId(index: number): string {
 const FIELD_STATE_KEY = {
   behavior: "behavior",
   behaviorOptions: "behaviorOptions",
-  macros: "macroBytes",
+  macros: "macroOps",
   morseHoldTriggerPositions: "morseHoldTriggerPositions",
   autoMouseLayers: "autoMouseLayers",
 } as const satisfies Record<string, keyof WorkbenchState>;
@@ -326,7 +327,7 @@ export interface WorkbenchState {
   combos: ComboDefinition[];
   morse: Morse[];
   forks: Fork[];
-  macroBytes: Uint8Array;
+  macroOps: MacroOp[][];
   behavior: BehaviorConfig | null;
   behaviorOptions: BehaviorOptions | null;
   morseProfileCapacity: number;
@@ -483,7 +484,7 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     combos: bundle.combos,
     morse: bundle.morse,
     forks: bundle.forks,
-    macroBytes: bundle.macroBytes,
+    macroOps: bundle.macroOps,
     behavior: bundle.behavior,
     behaviorOptions: bundle.behaviorOptions,
     morseProfileCapacity: bundle.morseProfileCapacity,
@@ -1404,7 +1405,7 @@ export interface WorkbenchIo {
   /** Optimistic single-value writes. Each resolves once the device has
    *  answered; the reducer already reflects the outcome by then. */
   setSlot<K extends SlotKind>(kind: K, index: number, value: SlotValueOf<K>): Promise<IoWriteResult>;
-  writeMacros(bytes: Uint8Array): Promise<IoWriteResult>;
+  writeMacros(ops: MacroOp[][]): Promise<IoWriteResult>;
   setBehavior(config: BehaviorConfig): Promise<IoWriteResult>;
   setMorseProfile(entry: MorseProfileEntry): Promise<IoWriteResult>;
   deleteMorseProfile(index: number): Promise<IoWriteResult>;

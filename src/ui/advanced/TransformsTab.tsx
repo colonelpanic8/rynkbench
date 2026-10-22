@@ -53,7 +53,7 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
       combos: state.combos,
       morse: state.morse,
       forks: state.forks,
-      macroBytes: state.macroBytes,
+      macroOps: state.macroOps,
     }),
     [
       state.layers,
@@ -61,7 +61,7 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
       state.combos,
       state.morse,
       state.forks,
-      state.macroBytes,
+      state.macroOps,
     ],
   );
 
@@ -111,7 +111,7 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
       for (const edit of plan.combos) step(await io.setSlot("combos", edit.index, edit.after));
       for (const edit of plan.morse) step(await io.setSlot("morse", edit.index, edit.after));
       for (const edit of plan.forks) step(await io.setSlot("forks", edit.index, edit.after));
-      if (plan.macroBytes) step(await io.writeMacros(plan.macroBytes));
+      if (plan.macroOps) step(await io.writeMacros(plan.macroOps));
       setRun({ phase: "done", written: total - failed, failed });
     } catch (err) {
       setRun({ phase: "error", message: err instanceof Error ? err.message : String(err) });

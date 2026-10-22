@@ -95,7 +95,7 @@ describe("offline Glove80 workspace", () => {
         auto_mouse_layers: [],
         morses: [],
         combos: [],
-        macros: [1, 2, 3],
+        macros: [[{ Char: 65 }]],
         forks: [],
       },
     };
@@ -123,7 +123,7 @@ describe("offline Glove80 workspace", () => {
       total: 1,
       entries: snapshot.behaviors?.morse_profiles,
     });
-    expect(await session.macros.read()).toEqual(new Uint8Array([1, 2, 3, ...Array(509).fill(0)]));
+    expect(await session.macros.read()).toEqual([[{ Char: 65 }]]);
     expect(await session.lighting.outputMode()).toMatchObject({ wake_layers: 2 ** 1 });
     await session.close();
   });

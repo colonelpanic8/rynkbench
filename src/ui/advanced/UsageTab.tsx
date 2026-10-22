@@ -92,7 +92,7 @@ export function UsageTab({ nav }: { nav: ReactNode }) {
         combos: state.combos,
         morse: state.morse,
         forks: state.forks,
-        macroBytes: state.macroBytes,
+        macroOps: state.macroOps,
         morseProfiles: state.morseProfiles,
       }),
     [
@@ -103,7 +103,7 @@ export function UsageTab({ nav }: { nav: ReactNode }) {
       state.combos,
       state.morse,
       state.forks,
-      state.macroBytes,
+      state.macroOps,
       state.morseProfiles,
     ],
   );

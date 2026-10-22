@@ -266,7 +266,7 @@ export async function openBundle(session: RynkSession): Promise<ConnectedBundle>
     combos,
     morse,
     forks,
-    macroBytes,
+    macroOps,
     behavior,
     behaviorOptions,
     morseProfiles,
@@ -279,8 +279,8 @@ export async function openBundle(session: RynkSession): Promise<ConnectedBundle>
     caps.max_morse > 0 ? requiredRead("morse table", session.morse.readAll(), []) : [],
     caps.max_forks > 0 ? requiredRead("fork table", session.forks.readAll(), []) : [],
     caps.macro_space_size > 0
-      ? requiredRead("macro buffer", session.macros.read(), new Uint8Array(0))
-      : new Uint8Array(0),
+      ? requiredRead("macros", session.macros.read(), [])
+      : [],
     optionalRead("behavior timing", session.behavior.get(), null),
     optionalRead("behavior options", session.behavior.options(), null),
     optionalRead("morse profiles", session.behavior.profiles(), {
@@ -338,7 +338,7 @@ export async function openBundle(session: RynkSession): Promise<ConnectedBundle>
     combos,
     morse,
     forks,
-    macroBytes,
+    macroOps,
     behavior,
     behaviorOptions,
     morseProfileCapacity: morseProfiles.capacity,

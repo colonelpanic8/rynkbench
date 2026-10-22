@@ -81,5 +81,6 @@ export function emptyFork(): Fork {
     match_none: noStateBits(),
     kept_modifiers: noModifiers(),
     bindable: true,
+    layers: 0xffffffff,
   };
 }

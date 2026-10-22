@@ -132,7 +132,7 @@ export function snapshotFromState(
       morses: state.morse,
       combos: state.combos,
       forks: state.forks,
-      macros: [...state.macroBytes],
+      macros: [...state.macroOps],
     },
   };
 }

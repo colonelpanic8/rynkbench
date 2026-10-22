@@ -40,7 +40,7 @@ describe("pointing configuration helpers", () => {
     expect(kinds.map((kind) => pointingModeKind(defaultPointingMode(kind)))).toEqual(kinds);
     expect(defaultPointingMode("Press")).toEqual({
       Press: {
-        cursor: { multiplier_x: 1, multiplier_y: 1, invert_x: false, invert_y: false },
+        cursor: { multiplier_x: 1, multiplier_y: 1, divisor_x: 1, divisor_y: 1, invert_x: false, invert_y: false },
         holds: 1,
       },
     });
@@ -48,7 +48,7 @@ describe("pointing configuration helpers", () => {
     // cannot decode a device using it — the bug this coverage guards.
     expect(defaultPointingMode("CursorRemap")).toEqual({
       CursorRemap: {
-        cursor: { multiplier_x: 1, multiplier_y: 1, invert_x: false, invert_y: false },
+        cursor: { multiplier_x: 1, multiplier_y: 1, divisor_x: 1, divisor_y: 1, invert_x: false, invert_y: false },
         primary_button: 1,
       },
     });

@@ -1,3 +1,4 @@
+import { macroTableSize } from "../ui/macros";
 // Moving a configuration document between a file and the keyboard.
 //
 // Every document is parsed and fully validated before a single write goes out,
@@ -384,18 +385,19 @@ async function writeBehaviors(
   }
 
   if (macros !== undefined) {
-    const bytes = new Uint8Array(macros);
-    if (bytes.length > bundle.caps.macro_space_size) {
+    const bytes = structuredClone(macros);
+    const size = macroTableSize(macros, bundle.caps.max_macros);
+    if (macros.length > bundle.caps.max_macros || size > bundle.caps.macro_space_size) {
       skipped.push(
-        `macros (${bytes.length} B; this keyboard holds ${bundle.caps.macro_space_size} B)`,
+        `macros (${size} B; this keyboard holds ${bundle.caps.macro_space_size} B)`,
       );
-    } else if (!same([...bytes], [...state.macroBytes])) {
-      const prev = state.macroBytes;
+    } else if (!same([...bytes], [...state.macroOps])) {
+      const prev = state.macroOps;
       dispatch({ type: "fieldWriteStart", field: "macros", value: bytes });
       try {
         await session.macros.write(bytes);
         dispatch({ type: "fieldWriteOk", field: "macros" });
-        applied.push(`${bytes.length} B of macro space`);
+        applied.push(`${macros.length} macro slots`);
       } catch (error) {
         dispatch({ type: "fieldWriteErr", field: "macros", prev, message: errorMessage(error) });
         throw new Error(`Writing macro space: ${errorMessage(error)}`);
