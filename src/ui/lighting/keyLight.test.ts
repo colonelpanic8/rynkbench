@@ -56,7 +56,7 @@ describe("lock and battery lights", () => {
     expect(statusLightOf(withStatusLight([], 2, 7, ownHalf, 1), 2, 7)).toEqual(right);
   });
 
-  it("replace a key's own rules, and leave the Lighting screen's rules alone", () => {
+  it("replace a key's own rules, and leave the condition rules alone", () => {
     const other = newRule(7, solid(BLUE));
     const rules = withStatusLight([other], 2, 7, lock);
     const replaced = withStatusLight(rules, 2, 7, battery);

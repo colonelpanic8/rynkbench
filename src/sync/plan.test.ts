@@ -37,6 +37,12 @@ const withKeys = (base: KeyboardImage, layer: number, cells: KeyAction[]) => ({
 });
 
 describe("the planner", () => {
+  it("ignores key order, which means nothing in a value read back", () => {
+    const built = { layer: 0, led_id: 3, effect: { Solid: { color: { r: 9, g: 0, b: 0 } } } };
+    const read = { effect: { Solid: { color: { b: 0, g: 0, r: 9 } } }, led_id: 3, layer: 0 };
+    expect(planSync(image({ scenes: [read] }), image({ scenes: [built] }))).toEqual([]);
+  });
+
   it("compares scene tables by their cells, not their order, as the keyboard keeps its own", () => {
     const cell = (layer: number, led_id: number, r = 9) => ({ layer, led_id, effect: { Solid: { color: { r, g: 0, b: 0 } } } });
     // What Rynkbench wants after editing layer 0 (its cells last) and what RMK reads back (grouped by layer).

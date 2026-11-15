@@ -7,7 +7,7 @@ import { useMemo, useRef } from "react";
 import { askConfirm, showToast } from "../messages/store";
 import { useWorkbench } from "../state";
 import { draftGroups, draftSize, lightingLayers, type DraftGroup } from "./changes";
-import { resetDraftHistory } from "./useDraftHistory";
+import { discardDraftHistory, resetDraftHistory } from "./useDraftHistory";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -96,7 +96,7 @@ export function useDraft() {
   };
 
   function discardAll() {
-    resetDraftHistory();
+    discardDraftHistory();
     dispatch({ type: "batchDiscard" });
     for (const layer of lightingLayers(latest.current).keys()) dispatch({ type: "draftReset", target: layer });
     dispatch({ type: "conditionalDraftReset" });

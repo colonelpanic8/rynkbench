@@ -8,6 +8,7 @@
 // drives it is in useDraftHistory.ts.
 
 import type { KeyAction } from "../../model/action-types";
+import { sameValue } from "../../model/deep-equal";
 import type { LightingOverlayCell } from "../../model/lighting-types";
 import type { StagedKeyEdit } from "../../model/workbench-state";
 import type { Rules } from "../lighting/rules";
@@ -55,15 +56,9 @@ export interface DraftImage {
 export const emptyHistory = (): DraftHistory => ({ past: [], future: [] });
 export const isEmptyStep = (step: Step) => step.keys.length === 0 && step.lights.length === 0 && step.rules === null;
 
-/** Values compared as values: key order does not matter. */
-function canonical(value: unknown): string {
-  return JSON.stringify(value, (_, v: unknown) =>
-    v && typeof v === "object" && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)))
-      : v,
-  );
-}
-const same = (a: unknown, b: unknown) => a === b || canonical(a) === canonical(b);
+// Cells and rules are built by Rynkbench and read back from the keyboard, so
+// they are compared without regard to key order.
+const same = sameValue;
 
 /** What a state transition changed: the keys among those staged before or
  *  after it, each layer's lighting, and the rules. */

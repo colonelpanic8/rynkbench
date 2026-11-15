@@ -9,6 +9,9 @@ import { useCapabilities } from "../use-capabilities";
 import { LightingIcon } from "../icons";
 import { cx } from "../kit";
 
+/** A menu row's height, to open the menu above the button. */
+const ROW_HEIGHT = 36;
+
 export function LightsButton({ shown, onShown }: {
   /** Whether the canvas shows the layer's lights; undefined when it has none to show. */
   shown: boolean | undefined;
@@ -16,6 +19,7 @@ export function LightsButton({ shown, onShown }: {
 }) {
   const capabilities = useCapabilities();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  if (!capabilities.has("lighting.state")) return null;
   const items: MenuEntry[] = [
     ...(shown === undefined ? [] : [{ id: "show", label: shown ? "Hide lights" : "Show lights" }, "-" as const]),
     { id: "lighting", label: "RGB settings…" },
@@ -31,7 +35,7 @@ export function LightsButton({ shown, onShown }: {
         aria-label="Lights"
         onClick={(event) => {
           const box = event.currentTarget.getBoundingClientRect();
-          setMenu({ x: box.right - 230, y: box.top - 8 - 36 * items.length });
+          setMenu({ x: box.right - 230, y: box.top - 8 - ROW_HEIGHT * items.length });
         }}
         className={cx(
           "flex size-9 cursor-pointer items-center justify-center rounded-xl border bg-raised shadow-2xl transition-colors",

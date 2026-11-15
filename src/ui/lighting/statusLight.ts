@@ -11,6 +11,7 @@
 // on its LED belongs to the condition rules (Layout properties) and is never
 // touched. Pure.
 
+import { canonicalJson, same } from "../../model/deep-equal";
 import type { LightingEffect, LightingRgb8 } from "../../model/lighting-types";
 import { effectRgb } from "./effect";
 import type { Rule, Rules } from "./rules";
@@ -55,15 +56,8 @@ function onKey(rule: Rule, layer: number, led: number): boolean {
 const isLockOrBattery = (rule: Rule) => !rule.connection && Boolean(rule.indicators) !== Boolean(rule.cell.conditions.battery);
 const isConnection = (rule: Rule) => Boolean(rule.connection) && !rule.indicators && !rule.cell.conditions.battery;
 
-/** Rules compared as values: key order and unset fields do not matter. */
-function canonical(value: unknown): string {
-  return JSON.stringify(value, (_, v: unknown) =>
-    v && typeof v === "object" && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v).filter(([, x]) => x !== undefined).sort(([a], [b]) => a.localeCompare(b)))
-      : v,
-  );
-}
-const sameSet = (a: Rules, b: Rules) => canonical(a.map(canonical).sort()) === canonical(b.map(canonical).sort());
+/** The same rules, in any order (the key's own rules can sit anywhere in the table). */
+const sameSet = (a: Rules, b: Rules) => same(a.map(canonicalJson).sort(), b.map(canonicalJson).sort());
 
 /** The connection light the key's connection rules are exactly, if any. */
 function connectionLight(own: Rules, layer: number, led: number): Extract<StatusLight, { kind: "bluetooth" | "usb" }> | null {

@@ -37,16 +37,18 @@ export function useEffectsDraft() {
   const { draft: overlayDraft, setDraft: setOverlayDraft, dirty: overlayDirty, reset: resetOverlay } = useDeviceDraft(
     extensionLayers?.overlay,
   );
-  // The brightness to turn effects back on at: the last one above zero, kept
-  // in the browser so it outlives this window (the keyboard stores the 0).
+  // The brightness to turn effects back on at: the last one the keyboard had
+  // above zero, kept in the browser so it outlives this window (the keyboard
+  // stores the 0 while they are off).
   const onKey = SETTING_KEYS.effectsOnValue(bundle.info.serial_number);
   const lastOn = useRef(Math.min(255, Number(readSetting(onKey))) || ON_VALUE);
+  const applied = device?.value ?? 0;
   useEffect(() => {
-    if (draft && draft.value > 0 && draft.value !== lastOn.current) {
-      lastOn.current = draft.value;
-      writeSetting(onKey, String(draft.value));
+    if (applied > 0 && applied !== lastOn.current) {
+      lastOn.current = applied;
+      writeSetting(onKey, String(applied));
     }
-  }, [draft, onKey]);
+  }, [applied, onKey]);
 
   // Parameters belong to the *staged* effects: the protocol serves any effect's
   // list, so picking one previews its parameters before Apply.

@@ -5,7 +5,7 @@
 // pointer up) is one step. In Live and in a file only lighting is staged, so
 // its steps are lighting; the Workbench undoes them in turn with key writes.
 
-import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { keyActionGlyph } from "../labels";
 import { layerName, layerNamesOf } from "../layer-names";
 import { showToast } from "../messages/store";
@@ -16,7 +16,9 @@ import { layerLightingActions } from "./changes";
 import { emptyHistory, isEmptyStep, record, redo, stepBetween, undo, type DraftHistory, type DraftImage, type Step } from "./draftHistory";
 
 let history: DraftHistory = emptyHistory();
-/** The next change is not an edit (a send, a discard, an undo): skip it. */
+/** The next change is not an edit but a discard or an undo, which always
+ *  change something: skip it. Never armed when nothing may change, or it would
+ *  swallow the next real edit. */
 let skipNext = false;
 /** An open Paint stroke; once it has a step, what it changes joins that step. */
 let stroke: { recorded: boolean } | null = null;
@@ -30,8 +32,15 @@ const subscribe = (listener: () => void) => {
   return () => listeners.delete(listener);
 };
 
-/** The draft starts over: called just before a send or a discard changes the draft. */
+/** The draft was sent: a new history. What the send changed is already
+ *  recorded (as nothing: the keyboard now holds what the draft held). */
 export function resetDraftHistory() {
+  set(emptyHistory());
+}
+
+/** The draft is being discarded: a new history, and the discard is no step.
+ *  Called just before the discard's changes, in the same go. */
+export function discardDraftHistory() {
   skipNext = true;
   set(emptyHistory());
 }
@@ -68,8 +77,11 @@ export function useDraftHistory(state: WorkbenchState, dispatch: (action: Workbe
     [state.layers, state.stagedKeys, state.layerDrafts, state.scenes, state.runtimeConditionalDraft],
   );
   const previous = useRef(image);
+  // An Undo toast's action can run after later renders: it reads the state then.
   const latest = useRef(state);
-  latest.current = state;
+  useLayoutEffect(() => {
+    latest.current = state;
+  });
 
   useEffect(() => {
     const before = previous.current;

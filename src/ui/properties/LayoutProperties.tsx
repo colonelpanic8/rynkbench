@@ -41,8 +41,8 @@ export function LayoutProperties() {
   const offered: Record<PropertiesTab, boolean> = {
     details: true,
     options: true,
-    lighting: bundle.caps.lighting_enabled,
-    effects: bundle.caps.lighting_enabled && capabilities.has("lighting.extension"),
+    lighting: capabilities.has("lighting.state"),
+    effects: capabilities.has("lighting.extension"),
   };
   const tabs = TABS.filter((entry) => offered[entry.id]);
 

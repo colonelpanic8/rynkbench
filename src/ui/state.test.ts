@@ -167,8 +167,8 @@ describe("per-target lighting drafts", () => {
   });
 
   it("an explicit target edits that layer without moving the selected target", () => {
-    // Keymap mode edits the layer it is showing while Lighting mode stays on
-    // whatever tab the user left it on; neither may drag the other along.
+    // The key's RGB Lighting tab edits the layer the Keymap shows, and must
+    // not move the selected target along with it.
     let s = baseState({ scenes: [{ layer: 1, led_id: 5, effect: solid(9) }] });
     s = reducer(s, {
       type: "paint",

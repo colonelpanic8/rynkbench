@@ -210,9 +210,7 @@ export function KeymapCenter() {
         tools={
           <>
             {hovered && !drag && <KeyHoverCard keyView={hovered} />}
-            {bundle.caps.lighting_enabled && (
-              <LightsButton shown={layerLightingAvailable ? showLighting : undefined} onShown={setShowLighting} />
-            )}
+            <LightsButton shown={layerLightingAvailable ? showLighting : undefined} onShown={setShowLighting} />
           </>
         }
       >

@@ -53,4 +53,5 @@ Live site: https://moosylog.github.io/rynkbench/ (GitHub Pages, deployed from `m
 - Look at a change in a browser before calling it done: open https://moosylog.github.io/rynkbench/ after the deploy, start a new Glove80 layout and try what changed.
 
 ## Docs
+- `docs/todo.md` — what is left, cheapest first: take one item per session and strike it when it ships.
 - `docs/ux-brief.md` — the UX brief (areas, flows, principles). `docs/adr/` — decisions, newest last. `docs/glossary.md` — words. `docs/sync.md` — how writing to the keyboard works. `docs/firmware/` — patches proposed for RMK.
