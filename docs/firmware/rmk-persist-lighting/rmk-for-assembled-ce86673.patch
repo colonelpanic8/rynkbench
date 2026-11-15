@@ -1,0 +1,472 @@
+From 7d40d6cd4c42e4004b1427f97ef697c2c6e36f1c Mon Sep 17 00:00:00 2001
+From: moosylog <moosylog@users.noreply.github.com>
+Date: Sun, 15 Nov 2026 07:54:40 +0100
+Subject: [PATCH] lighting: persist brightness, background and the effects'
+ on-brightness
+
+The output brightness and the background were never stored, so a board
+always booted at full brightness with its compiled background, and the
+on/off switch a host sets through SetState (the output mode) was not
+stored either. Turning effects off stores their value as 0, so after a
+restart RgbTog brought them back at the compiled brightness.
+
+- Storage: LightingOutputState (brightness and background) and
+  LightingEffectsOnValue (the effects' last brightness above 0), each
+  stored only when it differs, with readers for boot.
+- SetState and settled lighting keys store the output mode, brightness
+  and background; extension writes store the on-brightness.
+- StandardLightingEngine::with_output_brightness, to boot at it.
+- Tests: the records survive reopening storage; SetState and turning
+  effects off reach storage (fails without the change).
+---
+ rmk/src/host/rynk/lighting.rs       | 143 +++++++++++++++++++++++--
+ rmk/src/lighting/standard/engine.rs |   7 ++
+ rmk/src/storage/mod.rs              | 158 ++++++++++++++++++++++++++++
+ 3 files changed, 299 insertions(+), 9 deletions(-)
+
+diff --git a/rmk/src/host/rynk/lighting.rs b/rmk/src/host/rynk/lighting.rs
+index 6c47686..33470b0 100644
+--- a/rmk/src/host/rynk/lighting.rs
++++ b/rmk/src/host/rynk/lighting.rs
+@@ -955,6 +955,11 @@ impl<'a, const OVERLAY_CAPACITY: usize, const CORE_COMMAND_CAPACITY: usize, cons
+             params,
+         }))
+         .await;
++        // Turning effects off stores value 0; keep the brightness they had, so
++        // turning them on after a restart brings it back.
++        if state.value != 0 {
++            send_unchecked(FlashOperationMessage::LightingEffectsOnValue(state.value)).await;
++        }
+ 
+         let overlay = match self.request_core(StandardCommand::ReadExtensionLayers).await {
+             Ok(StandardReply::ExtensionLayers(page)) => page.state.and_then(|state| state.overlay),
+@@ -986,15 +991,12 @@ impl<'a, const OVERLAY_CAPACITY: usize, const CORE_COMMAND_CAPACITY: usize, cons
+     async fn persist_extension(&self) {}
+ 
+     /// Persist the records a lighting key can change: the extension selection
+-    /// (`RgbTog` zeroes its value) and the output mode.
++    /// (`RgbTog` zeroes its value), the output mode, brightness and background.
+     #[cfg(feature = "storage")]
+     async fn persist_key_lighting(&self) {
+         self.persist_extension().await;
+         if let Ok(state) = self.request_core_state(StandardCommand::ReadState).await {
+-            crate::storage::send_unchecked(crate::storage::FlashOperationMessage::LightingOutputMode(
+-                output_mode_to_wire(state.output_mode),
+-            ))
+-            .await;
++            persist_output(&state).await;
+         }
+     }
+ 
+@@ -1750,10 +1752,19 @@ impl<'a, const OVERLAY_CAPACITY: usize, const CORE_COMMAND_CAPACITY: usize, cons
+             RynkLightingCommand::SetState {
+                 expected_revision,
+                 state,
+-            } => StandardCommand::SetStateIfRevision {
+-                expected_revision,
+-                state: mutable_state_from_wire(state),
+-            },
++            } => {
++                let state = self
++                    .request_core_state(StandardCommand::SetStateIfRevision {
++                        expected_revision,
++                        state: mutable_state_from_wire(state),
++                    })
++                    .await?;
++                // On or off (the output mode), brightness and background, so the
++                // board comes up as it was left.
++                #[cfg(feature = "storage")]
++                persist_output(&state).await;
++                return Ok(RynkLightingReadback::State(state_to_wire(state)));
++            }
+             RynkLightingCommand::SetOverlay {
+                 expected_revision,
+                 cell,
+@@ -2317,6 +2328,22 @@ impl<const OVERLAY_CAPACITY: usize, const CORE_COMMAND_CAPACITY: usize, const SC
+     }
+ }
+ 
++/// Persist what `SetState` and the lighting keys change on the lights as a
++/// whole: the output mode (on or off), the brightness and the background.
++#[cfg(feature = "storage")]
++async fn persist_output(state: &StandardState) {
++    use crate::storage::{FlashOperationMessage, LightingOutputStateRecord, send_unchecked};
++
++    send_unchecked(FlashOperationMessage::LightingOutputMode(output_mode_to_wire(
++        state.output_mode,
++    )))
++    .await;
++    send_unchecked(FlashOperationMessage::LightingOutputState(
++        LightingOutputStateRecord::new(state.output_brightness, state.background),
++    ))
++    .await;
++}
++
+ fn mutable_state_from_wire(state: LightingMutableState) -> StandardMutableState {
+     StandardMutableState {
+         output_enabled: state.output_enabled,
+@@ -3407,6 +3434,104 @@ mod tests {
+         assert_eq!(mode, Some(WireLightingOutputMode::PoweredOnly));
+     }
+ 
++    /// The lights as a whole and the effects' brightness survive a restart:
++    /// `SetState` stores on or off, brightness and background, and turning
++    /// effects off keeps the brightness they had.
++    #[cfg(feature = "storage")]
++    #[test]
++    fn output_state_and_effects_brightness_persist() {
++        use crate::storage::FlashOperationMessage;
++        use rmk_types::protocol::rynk::{LightingBackgroundMode, LightingBackgroundState, LightingMutableState};
++        while crate::storage::try_receive_flash_message().is_some() {}
++        // The flash queue is small and nothing drains it here: take what each
++        // request queued before sending the next.
++        let mut queued = std::vec::Vec::new();
++        let drain = |queued: &mut std::vec::Vec<FlashOperationMessage>| {
++            while let Some(message) = crate::storage::try_receive_flash_message() {
++                queued.push(message);
++            }
++        };
++        run_extension_flow(
++            TestExtensionSource {
++                state: crate::lighting::compositor::ExtensionState {
++                    effect: 1,
++                    palette: 0,
++                    value: 128,
++                    speed: 20,
++                },
++                params: [3, 128],
++            },
++            async |protocol| {
++                let mut revision = 0;
++                for value in [90, 0] {
++                    let state = WireExtensionState {
++                        effect: 1,
++                        palette: 0,
++                        value,
++                        speed: 20,
++                    };
++                    revision = match protocol
++                        .request(RynkLightingCommand::SetExtensionState {
++                            expected_revision: revision,
++                            state,
++                        })
++                        .await
++                    {
++                        Ok(RynkLightingReadback::State(state)) => state.revision,
++                        other => panic!("extension write failed: {other:?}"),
++                    };
++                    drain(&mut queued);
++                }
++                let wanted = LightingMutableState {
++                    output_enabled: false,
++                    output_brightness: 77,
++                    background: LightingBackgroundState {
++                        enabled: true,
++                        hue: 9,
++                        saturation: 200,
++                        value: 150,
++                        speed: 4,
++                        mode: LightingBackgroundMode::Breathe,
++                    },
++                };
++                assert!(matches!(
++                    protocol
++                        .request(RynkLightingCommand::SetState {
++                            expected_revision: revision,
++                            state: wanted,
++                        })
++                        .await,
++                    Ok(RynkLightingReadback::State(_))
++                ));
++                drain(&mut queued);
++            },
++        );
++        let (mut on_value, mut output, mut mode) = (None, None, None);
++        for message in queued {
++            match message {
++                FlashOperationMessage::LightingEffectsOnValue(value) => on_value = Some(value),
++                FlashOperationMessage::LightingOutputState(record) => output = Some(record),
++                FlashOperationMessage::LightingOutputMode(value) => mode = Some(value),
++                _ => {}
++            }
++        }
++        assert_eq!(on_value, Some(90), "turning effects off must keep their brightness");
++        let output = output.expect("SetState must reach storage");
++        assert_eq!(output.output_brightness, 77);
++        assert_eq!(
++            output.background(),
++            crate::lighting::BackgroundState {
++                enabled: true,
++                hue: 9,
++                saturation: 200,
++                value: 150,
++                speed: 4,
++                mode: crate::lighting::BackgroundMode::Breathe,
++            }
++        );
++        assert_eq!(mode, Some(WireLightingOutputMode::AlwaysOff));
++    }
++
+     /// Lighting keys reach the engine without a Rynk mutation, so the adapter
+     /// saves what they changed once presses settle.
+     #[cfg(feature = "storage")]
+diff --git a/rmk/src/lighting/standard/engine.rs b/rmk/src/lighting/standard/engine.rs
+index 17d157d..44c9742 100644
+--- a/rmk/src/lighting/standard/engine.rs
++++ b/rmk/src/lighting/standard/engine.rs
+@@ -159,6 +159,13 @@ impl<'scenes, Extension, Status, const N: usize, const OVERLAY_CAP: usize, const
+         self
+     }
+ 
++    /// Start at a stored output brightness instead of full, so the lights
++    /// come up as bright as they were left (`Storage::read_lighting_output_state`).
++    pub const fn with_output_brightness(mut self, level: u8) -> Self {
++        self.output_brightness = level;
++        self
++    }
++
+     /// Supply live board battery state for runtime conditional predicates.
+     pub const fn with_battery_status_provider(mut self, battery_status: &'scenes dyn BatteryStatusProvider) -> Self {
+         self.battery_status = battery_status;
+diff --git a/rmk/src/storage/mod.rs b/rmk/src/storage/mod.rs
+index 20444b3..1a827b9 100644
+--- a/rmk/src/storage/mod.rs
++++ b/rmk/src/storage/mod.rs
+@@ -101,6 +101,10 @@ pub(crate) enum FlashOperationMessage {
+     #[cfg(all(feature = "lighting", feature = "rynk"))]
+     LightingOutputMode(rmk_types::protocol::rynk::LightingOutputMode),
+     #[cfg(all(feature = "lighting", feature = "rynk"))]
++    LightingOutputState(LightingOutputStateRecord),
++    #[cfg(all(feature = "lighting", feature = "rynk"))]
++    LightingEffectsOnValue(u8),
++    #[cfg(all(feature = "lighting", feature = "rynk"))]
+     LightingExtensionParams(LightingExtensionParamsRecord),
+ }
+ 
+@@ -290,6 +294,10 @@ pub(crate) enum StorageKey {
+     LightingRuleShardV4B(u8),
+     #[cfg(feature = "_ble")]
+     AutoSwitchTransport,
++    #[cfg(all(feature = "lighting", feature = "rynk"))]
++    LightingOutputState,
++    #[cfg(all(feature = "lighting", feature = "rynk"))]
++    LightingEffectsOnValue,
+ }
+ 
+ /// A Storage item is actually a storage (key, value) pair.
+@@ -410,6 +418,10 @@ pub(crate) enum StorageItem {
+     #[cfg(all(feature = "lighting", feature = "rynk"))]
+     LightingOutputMode(rmk_types::protocol::rynk::LightingOutputMode),
+     #[cfg(all(feature = "lighting", feature = "rynk"))]
++    LightingOutputState(LightingOutputStateRecord),
++    #[cfg(all(feature = "lighting", feature = "rynk"))]
++    LightingEffectsOnValue(u8),
++    #[cfg(all(feature = "lighting", feature = "rynk"))]
+     LightingExtensionParams(LightingExtensionParamsRecord),
+     #[cfg(all(feature = "lighting", feature = "rynk"))]
+     LightingRuleShard {
+@@ -543,6 +555,13 @@ impl StorageItem {
+             #[cfg(all(feature = "lighting", feature = "rynk"))]
+             Self::LightingOutputMode(v) => (StorageKey::LightingOutputMode, StorageValue::LightingOutputMode(v)),
+             #[cfg(all(feature = "lighting", feature = "rynk"))]
++            Self::LightingOutputState(v) => (StorageKey::LightingOutputState, StorageValue::LightingOutputState(v)),
++            #[cfg(all(feature = "lighting", feature = "rynk"))]
++            Self::LightingEffectsOnValue(v) => (
++                StorageKey::LightingEffectsOnValue,
++                StorageValue::LightingEffectsOnValue(v),
++            ),
++            #[cfg(all(feature = "lighting", feature = "rynk"))]
+             Self::LightingExtensionParams(v) => (
+                 StorageKey::LightingExtensionParams {
+                     effect: v.effect,
+@@ -668,6 +687,10 @@ pub(crate) enum StorageValue {
+     LightingRuleShardV4(heapless::Vec<u8, LIGHTING_RULE_SHARD_BYTES>),
+     #[cfg(feature = "_ble")]
+     AutoSwitchTransport(bool),
++    #[cfg(all(feature = "lighting", feature = "rynk"))]
++    LightingOutputState(LightingOutputStateRecord),
++    #[cfg(all(feature = "lighting", feature = "rynk"))]
++    LightingEffectsOnValue(u8),
+ }
+ 
+ impl<'a> PostcardValue<'a> for StorageValue {}
+@@ -702,6 +725,53 @@ impl LightingExtensionRecord {
+     }
+ }
+ 
++/// The lights as a whole, as a host or a lighting key last left them: the
++/// output brightness and the background. Without it a board boots at its
++/// compiled brightness and background whatever was chosen before.
++#[cfg(all(feature = "lighting", feature = "rynk"))]
++#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
++#[cfg_attr(feature = "defmt", derive(defmt::Format))]
++pub struct LightingOutputStateRecord {
++    pub output_brightness: u8,
++    pub background_enabled: bool,
++    pub background_breathe: bool,
++    pub hue: u8,
++    pub saturation: u8,
++    pub value: u8,
++    pub speed: u8,
++}
++
++#[cfg(all(feature = "lighting", feature = "rynk"))]
++impl LightingOutputStateRecord {
++    pub fn new(output_brightness: u8, background: crate::lighting::BackgroundState) -> Self {
++        Self {
++            output_brightness,
++            background_enabled: background.enabled,
++            background_breathe: matches!(background.mode, crate::lighting::BackgroundMode::Breathe),
++            hue: background.hue,
++            saturation: background.saturation,
++            value: background.value,
++            speed: background.speed,
++        }
++    }
++
++    /// The stored background, to start the engine with.
++    pub fn background(&self) -> crate::lighting::BackgroundState {
++        crate::lighting::BackgroundState {
++            enabled: self.background_enabled,
++            hue: self.hue,
++            saturation: self.saturation,
++            value: self.value,
++            speed: self.speed,
++            mode: if self.background_breathe {
++                crate::lighting::BackgroundMode::Breathe
++            } else {
++                crate::lighting::BackgroundMode::Solid
++            },
++        }
++    }
++}
++
+ /// One parameter page, including effects that are not currently selected.
+ #[cfg(all(feature = "lighting", feature = "rynk"))]
+ #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+@@ -1270,6 +1340,27 @@ impl<F: AsyncNorFlash> Storage<F> {
+         }
+     }
+ 
++    /// The output brightness and background last chosen. `None` keeps the
++    /// board's compiled ones on a keyboard that never changed them.
++    #[cfg(all(feature = "lighting", feature = "rynk"))]
++    pub async fn read_lighting_output_state(&mut self) -> Option<LightingOutputStateRecord> {
++        match self.fetch(StorageKey::LightingOutputState).await {
++            Ok(Some(StorageValue::LightingOutputState(record))) => Some(record),
++            _ => None,
++        }
++    }
++
++    /// The effects' brightness before they were last turned off. The
++    /// extension record stores 0 while effects are off, which alone would
++    /// lose it across a restart.
++    #[cfg(all(feature = "lighting", feature = "rynk"))]
++    pub async fn read_lighting_effects_on_value(&mut self) -> Option<u8> {
++        match self.fetch(StorageKey::LightingEffectsOnValue).await {
++            Ok(Some(StorageValue::LightingEffectsOnValue(value))) if value != 0 => Some(value),
++            _ => None,
++        }
++    }
++
+     #[cfg(all(feature = "lighting", feature = "rynk"))]
+     pub async fn read_lighting_extension_params(
+         &mut self,
+@@ -1887,6 +1978,28 @@ impl<F: AsyncNorFlash> crate::core_traits::Runnable for Storage<F> {
+                     }
+                 }
+                 #[cfg(all(feature = "lighting", feature = "rynk"))]
++                FlashOperationMessage::LightingOutputState(record) => {
++                    match self.fetch(StorageKey::LightingOutputState).await {
++                        Ok(Some(StorageValue::LightingOutputState(saved))) if saved == record => Ok(None),
++                        _ => self
++                            .put(StorageItem::LightingOutputState(record))
++                            .await
++                            .map(|_| None)
++                            .map_err(print_storage_error::<F>),
++                    }
++                }
++                #[cfg(all(feature = "lighting", feature = "rynk"))]
++                FlashOperationMessage::LightingEffectsOnValue(value) => {
++                    match self.fetch(StorageKey::LightingEffectsOnValue).await {
++                        Ok(Some(StorageValue::LightingEffectsOnValue(saved))) if saved == value => Ok(None),
++                        _ => self
++                            .put(StorageItem::LightingEffectsOnValue(value))
++                            .await
++                            .map(|_| None)
++                            .map_err(print_storage_error::<F>),
++                    }
++                }
++                #[cfg(all(feature = "lighting", feature = "rynk"))]
+                 FlashOperationMessage::LightingExtensionParams(record) => {
+                     let key = StorageKey::LightingExtensionParams {
+                         effect: record.effect,
+@@ -2524,6 +2637,10 @@ mod tests {
+             StorageKey::LightingRuleShardV4B(0),
+             #[cfg(feature = "_ble")]
+             StorageKey::AutoSwitchTransport,
++            #[cfg(all(feature = "lighting", feature = "rynk"))]
++            StorageKey::LightingOutputState,
++            #[cfg(all(feature = "lighting", feature = "rynk"))]
++            StorageKey::LightingEffectsOnValue,
+         ];
+         let mut buffer = [0u8; 64];
+         for (tag, key) in keys.iter().enumerate() {
+@@ -2644,6 +2761,18 @@ mod tests {
+             StorageValue::LightingRuleShardV4(heapless::Vec::new()),
+             #[cfg(feature = "_ble")]
+             StorageValue::AutoSwitchTransport(false),
++            #[cfg(all(feature = "lighting", feature = "rynk"))]
++            StorageValue::LightingOutputState(LightingOutputStateRecord {
++                output_brightness: 0,
++                background_enabled: false,
++                background_breathe: false,
++                hue: 0,
++                saturation: 0,
++                value: 0,
++                speed: 0,
++            }),
++            #[cfg(all(feature = "lighting", feature = "rynk"))]
++            StorageValue::LightingEffectsOnValue(0),
+         ];
+         let mut buffer = [0u8; BUFFER_SIZE];
+         for (tag, item) in data.iter().enumerate() {
+@@ -2921,6 +3050,35 @@ mod tests {
+         packed
+     }
+ 
++    // A board comes up as bright as it was left, and effects turned off come
++    // back at the brightness they had (the extension record holds 0 meanwhile).
++    #[cfg(all(feature = "lighting", feature = "rynk"))]
++    #[test]
++    fn output_state_and_effects_on_value_survive_storage_reopen() {
++        block_on(async {
++            let mut storage = new_storage(async_flash_wrapper(Part::new())).await;
++            assert_eq!(storage.read_lighting_output_state().await, None);
++            assert_eq!(storage.read_lighting_effects_on_value().await, None);
++            let background = crate::lighting::BackgroundState {
++                enabled: true,
++                hue: 9,
++                saturation: 200,
++                value: 150,
++                speed: 4,
++                mode: crate::lighting::BackgroundMode::Breathe,
++            };
++            let record = LightingOutputStateRecord::new(77, background);
++            storage.put(StorageItem::LightingOutputState(record)).await.unwrap();
++            storage.put(StorageItem::LightingEffectsOnValue(90)).await.unwrap();
++            let (flash, _) = storage.flash.destroy();
++            let mut reopened = new_storage(flash).await;
++            let restored = reopened.read_lighting_output_state().await.expect("stored");
++            assert_eq!(restored.output_brightness, 77);
++            assert_eq!(restored.background(), background);
++            assert_eq!(reopened.read_lighting_effects_on_value().await, Some(90));
++        });
++    }
++
+     #[cfg(all(feature = "lighting", feature = "rynk"))]
+     #[test]
+     fn lighting_preferences_survive_storage_reopen_without_selection() {
+-- 
+2.43.0
+
