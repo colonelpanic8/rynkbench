@@ -39,7 +39,8 @@ export function useDraft() {
         showToast(`${plural(total, "change")} sent: the keyboard has them all`, { tone: "ok" });
         return true;
       }
-      showToast(`${plural(left, "change")} could not be sent and stay in the draft: try Send again`, { tone: "danger" });
+      const why = sent.ok ? "" : ` (${sent.message})`;
+      showToast(`${plural(left, "change")} could not be sent and stay in the draft${why}: try Send again`, { tone: "danger" });
       return false;
     },
 

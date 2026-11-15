@@ -107,11 +107,19 @@ export function planSync(from: KeyboardImage, to: KeyboardImage): SyncStep[] {
     change.push({ kind: "pointing", value: to.pointing });
   }
   if (from.wakeLayers !== to.wakeLayers) change.push({ kind: "wakeLayers", value: to.wakeLayers });
-  if (!same(from.scenes, to.scenes)) change.push({ kind: "scenes", value: to.scenes });
+  if (!same(sceneOrder(from.scenes), sceneOrder(to.scenes))) change.push({ kind: "scenes", value: to.scenes });
   if (!same(from.runtimeConditionalScenes, to.runtimeConditionalScenes)) {
     change.push({ kind: "rules", value: to.runtimeConditionalScenes });
   }
   return [...create, ...change, ...remove];
+}
+
+/** A scene table in one order. The keyboard holds one cell per layer and LED and
+ *  keeps them grouped by layer in its own order, so the order means nothing:
+ *  two tables are the same when they hold the same cells. (Rules are different:
+ *  their order is the order they are tried in.) */
+function sceneOrder(scenes: readonly LightingSceneCell[]): LightingSceneCell[] {
+  return [...scenes].sort((a, b) => a.layer - b.layer || a.led_id - b.led_id);
 }
 
 /** How many items a plan stores: a key run counts each key, every other step one. */

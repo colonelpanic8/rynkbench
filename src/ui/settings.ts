@@ -24,6 +24,8 @@ export const SETTING_KEYS = {
   draft: (serial: string) => `rynk:draft:${serial || "unknown"}`,
   /** Layer lighting presets on boards without scene storage, per device. */
   layerLighting: (serial: string) => `rynkbench:layer-lighting:${serial || "unknown"}`,
+  /** The effects' brightness to turn them back on at, per device: off is brightness 0 on the keyboard. */
+  effectsOnValue: (serial: string) => `rynk:effects-on-value:${serial || "unknown"}`,
 } as const;
 
 export function readSetting(key: string): string | null {

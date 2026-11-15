@@ -11,6 +11,7 @@ import type { LightingExtensionParam, LightingExtensionState } from "../../model
 import type { ExtensionParamWrite } from "../state";
 import { paramEffects, useWorkbench } from "../state";
 import { useDeviceDraft } from "../device-draft";
+import { SETTING_KEYS, readSetting, writeSetting } from "../settings";
 import { same } from "../../model/deep-equal";
 
 /** Staged parameter values, keyed by the effect whose list they describe. */
@@ -36,11 +37,16 @@ export function useEffectsDraft() {
   const { draft: overlayDraft, setDraft: setOverlayDraft, dirty: overlayDirty, reset: resetOverlay } = useDeviceDraft(
     extensionLayers?.overlay,
   );
-  // The value to turn effects back on at: the last one above zero.
-  const lastOn = useRef(ON_VALUE);
+  // The brightness to turn effects back on at: the last one above zero, kept
+  // in the browser so it outlives this window (the keyboard stores the 0).
+  const onKey = SETTING_KEYS.effectsOnValue(bundle.info.serial_number);
+  const lastOn = useRef(Math.min(255, Number(readSetting(onKey))) || ON_VALUE);
   useEffect(() => {
-    if (draft && draft.value > 0) lastOn.current = draft.value;
-  }, [draft]);
+    if (draft && draft.value > 0 && draft.value !== lastOn.current) {
+      lastOn.current = draft.value;
+      writeSetting(onKey, String(draft.value));
+    }
+  }, [draft, onKey]);
 
   // Parameters belong to the *staged* effects: the protocol serves any effect's
   // list, so picking one previews its parameters before Apply.
