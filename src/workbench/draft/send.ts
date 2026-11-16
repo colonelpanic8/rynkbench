@@ -38,7 +38,8 @@ export interface SendDeps {
   features: ImageFeatures;
 }
 
-export type SendResult = { ok: true } | { ok: false; message: string; guarded?: true };
+/** `unread`: the keyboard could not be read after the failure, so what reached it is not known. */
+export type SendResult = { ok: true } | { ok: false; message: string; guarded?: true; unread?: true };
 
 export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Promise<SendResult> {
   const { session, getState, dispatch, features } = deps;
@@ -76,13 +77,15 @@ export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Pro
   } catch (error) {
     const message = errorMessage(error);
     // Whatever reached the keyboard leaves the draft; the rest is sent next time.
+    let unread = false;
     try {
       stored(await readImage(session, reading));
     } catch {
       // The keyboard cannot be read now: everything stays in the draft.
+      unread = true;
     }
     dispatch({ type: "batchApplyDone", error: message });
-    return { ok: false, message };
+    return unread ? { ok: false, message, unread } : { ok: false, message };
   }
 
   /** The keyboard now holds `image`: what reached it is no longer in the draft. */
