@@ -25,6 +25,11 @@ In this order; decisions in ADR 0017 and an update of ADR 0002.
 11. **Status setups are not atomic in Live.** Their keys are written at once while their rules wait in the draft until you pause; a failed send leaves keys without lights. Stage the keys with the rules.
 12. ~~**The draft history's module-level state** (`useDraftHistory.ts`: history, skip, stroke) leaks between tests and windows; a store per Workbench would not.~~ The history is workbench state (ADR 0018).
 
+14. **The Profiles section in the editor shell (ADR 0020).** The library and All your behaviors open a profile in the shell, but the Profiles section still has its own form and the hold-trigger keys panel. Fold the keys in as a card, with Apply one operation (`set_behavior` taking the positions too), and make the section the kind's list.
+15. **Layer reachability after the Usage screen.** All your behaviors replaced the read-only Usage list, and with it the per-layer list (bound keys, what turns a layer on, unreachable layers). Guard still stops a change that cuts a layer off; decide whether the layer list returns, in the layer manager.
+16. **Behavior rows light their keys.** GLIDE lights the keys that use a behavior while its row is hovered; Rynkbench does not yet.
+17. **Paste keeps references between pasted behaviors.** A copied tap pattern that runs a copied macro still names the macro's old slot after Paste.
+
 ## Large
 
 13. **Select several keys on the Keymap,** so one RGB Lighting choice reaches them all (ADR 0016 stage 1 leftover; it is also what replaces zones). Touches selection, the canvas and the key editor.
