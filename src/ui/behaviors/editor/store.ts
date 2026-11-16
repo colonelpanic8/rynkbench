@@ -35,6 +35,3 @@ export function useBehaviorEditor(): EditorTarget | null {
     () => null,
   );
 }
-
-/** The kinds that open in the editor window; the others still open their section. */
-export const WINDOW_KINDS: ReadonlySet<LibraryKind> = new Set(["morse"]);

@@ -9,9 +9,9 @@ import { labelAt } from "../../model/behavior-labels";
 import { valueOf, type CopiedBehavior } from "../../operations";
 import { wantOf } from "../../workbench/draft/want";
 import type { SiteTarget } from "../../workbench/usage";
-import { setBehaviorFocus, type BehaviorFocus } from "./focus";
+import type { BehaviorFocus } from "./focus";
 import { setBehaviorClip, useBehaviorClip } from "./clip";
-import { openBehaviorEditor, WINDOW_KINDS } from "./editor/store";
+import { openBehaviorEditor } from "./editor/store";
 import { stillUsedText, type LibraryKind, type LibraryRow } from "./library";
 
 const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -37,14 +37,7 @@ export function useBehaviorActions() {
     }
   };
 
-  const open = (kind: LibraryKind, focus: BehaviorFocus) => {
-    if (WINDOW_KINDS.has(kind)) {
-      openBehaviorEditor(kind, focus);
-      return;
-    }
-    setBehaviorFocus(kind, focus);
-    dispatch({ type: "mode", mode: kind });
-  };
+  const open = (kind: LibraryKind, focus: BehaviorFocus) => openBehaviorEditor(kind, focus);
 
   const rename = async (row: LibraryRow, name: string, description?: string) => {
     const done = await io.apply("rename_behavior", { kind: row.kind, slot: row.index, name, description });

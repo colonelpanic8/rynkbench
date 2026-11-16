@@ -1,0 +1,41 @@
+import { describe, expect, it, vi } from "vitest";
+import type { Fork, KeyAction, MacroOp } from "../../../model/action-types";
+import { emptyFork, emptyMorseProfile } from "../../../model/slots";
+import { renderInWorkbench } from "../../../test/workbench";
+import { ForkEditor } from "./ForkEditor";
+import { MacroEditor } from "./MacroEditor";
+import { ProfileEditor, profileNameProblem } from "./ProfileEditor";
+
+// A byte per op and one per slot: the space without the WASM encoder.
+vi.mock("../../../model/macros", async (original) => ({
+  ...(await original<typeof import("../../../model/macros")>()),
+  macroTableSize: (macros: MacroOp[][], slots = macros.length) => macros.reduce((n, ops) => n + ops.length, 0) + slots,
+}));
+
+const key = (code: string) => ({ Single: { Key: { Hid: code } } }) as KeyAction;
+
+describe("the behavior editors", () => {
+  it("a macro: the macro first with its space, then a card per step", () => {
+    const parts = { bundle: { caps: { max_macros: 4, macro_space_size: 32 } }, state: { macroOps: [[{ Char: 104 }, { Char: 105 }, { Delay: 50 }]] as MacroOp[][] } };
+    const html = renderInWorkbench(<MacroEditor focus={0} onClose={() => {}} />, parts);
+    for (const text of ["Macro 0", "7 / 32 bytes", "“hi”", "50 ms", "Add step"]) expect(html).toContain(text);
+    expect(renderInWorkbench(<MacroEditor focus="new" onClose={() => {}} />, parts)).toContain("A text step is empty");
+  });
+
+  it("a fork: the fork first, then its key and what it becomes, in the app's voice", () => {
+    const fork: Fork = { ...emptyFork(), trigger: key("Dot"), positive_output: key("Semicolon") };
+    const html = renderInWorkbench(<ForkEditor focus={0} onClose={() => {}} />, { state: { forks: [fork] } });
+    for (const text of ["Trigger", "Negative output", "Positive output", "Match any"]) expect(html).toContain(text);
+    expect(renderInWorkbench(<ForkEditor focus="new" onClose={() => {}} />, {})).toContain("Pick the key it changes");
+  });
+
+  it("a profile: its name on the keyboard and its timing", () => {
+    const profiles = [{ index: 0, name: "Fast", profile: emptyMorseProfile() }, { index: 1, name: "Slow", profile: emptyMorseProfile() }];
+    const html = renderInWorkbench(<ProfileEditor focus={0} onClose={() => {}} />, { state: { morseProfiles: profiles } });
+    expect(html).toContain('value="Fast"');
+    expect(html).toContain("Hold timeout");
+    expect(profileNameProblem(" ", [])).toBe("A profile needs a name");
+    expect(profileNameProblem("slow", ["Slow"])).toBe("Another profile is called slow");
+    expect(profileNameProblem("x".repeat(33), [])).toMatch(/at most 32/);
+  });
+});

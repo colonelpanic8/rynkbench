@@ -1,10 +1,9 @@
-// The state machine behind the combo, morse, and fork editors: one selected
-// slot, a local draft of it, and a list that shows the occupied slots plus the
-// one being edited. All three tables are fixed-length with empty slots in them,
-// so "add" means claiming the first free index rather than appending.
+// The state machine behind the combo editor: one selected slot, a local draft
+// of it, and a list that shows the occupied slots plus the one being edited.
+// The table is fixed-length with empty slots in it, so "add" means claiming the
+// first free index rather than appending.
 
 import { useState } from "react";
-import { takeBehaviorFocus } from "../behaviors/focus";
 import type { SlotKind, SlotValueOf } from "../../workbench";
 import { slotPendingId } from "../../workbench";
 import { useWorkbench } from "../state";
@@ -103,12 +102,7 @@ export function useSlotEditor<K extends SlotKind>(
   onSelectionChange?: () => void,
 ): SlotEditor<K> {
   const { state } = useWorkbench();
-  // Opened from the Behavior Library: start on that slot, or on a new one.
-  const [selection, setSelection] = useState<SlotSelection<SlotValueOf<K>>>(() => {
-    const focus = takeBehaviorFocus(kind);
-    if (focus === null) return NO_SLOT;
-    return (focus === "new" ? claimFreeSlot(slots, isEmpty, blank) : openSlot(slots, focus)) ?? NO_SLOT;
-  });
+  const [selection, setSelection] = useState<SlotSelection<SlotValueOf<K>>>(NO_SLOT);
   const { sel, draft } = selection;
 
   const select = (next: SlotSelection<SlotValueOf<K>> | null) => {

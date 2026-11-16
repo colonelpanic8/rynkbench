@@ -12,7 +12,6 @@ import type { IoContext, IoWriteResult, WorkbenchIo } from "./io";
 type SettingsIo = Pick<
   WorkbenchIo,
   | "setSlot"
-  | "writeMacros"
   | "setBehavior"
   | "setMorseHoldTriggerPositions"
   | "reloadPointingConfig"
@@ -75,11 +74,6 @@ export function settingsIo(context: IoContext): SettingsIo {
         () => dispatch({ type: "slotWriteOk", kind, index }),
         (message) => dispatch({ type: "slotWriteErr", kind, index, prev, message }),
       );
-    },
-    writeMacros(bytes) {
-      const drafted = whole("macros", bytes);
-      if (drafted) return Promise.resolve(drafted);
-      return writeField("macros", bytes, () => session.macros.write(bytes));
     },
     setBehavior(config) {
       const drafted = whole("behavior", config);

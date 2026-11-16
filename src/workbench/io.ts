@@ -11,7 +11,6 @@ import type {
   LightingLayerPolicy,
   LightingMutableState,
   LightingSceneCell,
-  MacroOp,
   MorseHoldTriggerPosition,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import type { RuntimeLightingRule, RynkSession } from "../session/types";
@@ -85,7 +84,6 @@ export interface WorkbenchIo {
   /** Optimistic single-value writes. Each resolves once the device has
    *  answered; the reducer already reflects the outcome by then. */
   setSlot<K extends SlotKind>(kind: K, index: number, value: SlotValueOf<K>): Promise<IoWriteResult>;
-  writeMacros(ops: MacroOp[][]): Promise<IoWriteResult>;
   setBehavior(config: BehaviorConfig): Promise<IoWriteResult>;
   setMorseHoldTriggerPositions(positions: MorseHoldTriggerPosition[]): Promise<IoWriteResult>;
   reloadPointingConfig(): Promise<IoWriteResult>;

@@ -5,8 +5,6 @@
 
 import { openProperties } from "../properties/store";
 import { CombosTab } from "./CombosTab";
-import { MacrosTab } from "./MacrosTab";
-import { ForksTab } from "./ForksTab";
 import { TransformsTab } from "./TransformsTab";
 import { AllBehaviors } from "../behaviors/AllBehaviors";
 import { KindList } from "../behaviors/KindList";
@@ -20,9 +18,9 @@ export function AdvancedSection({ section }: { section: AdvancedSectionId }) {
     case "morse":
       return <KindList kind="morse" />;
     case "macros":
-      return <MacrosTab nav={null} />;
+      return <KindList kind="macros" />;
     case "forks":
-      return <ForksTab nav={null} />;
+      return <KindList kind="forks" />;
     case "transforms":
       return <TransformsTab nav={null} />;
     case "usage":

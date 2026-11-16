@@ -45,6 +45,13 @@ export const TERMS = {
   "timing.release": { technical: "Hold trigger on release", friendly: "Decide on release" },
   "morse.timing": { technical: "Timing", friendly: "Timing" },
   "morse.does": { technical: "Action", friendly: "Does" },
+  // A fork's parts: RMK's words, and plain ones.
+  "fork.trigger": { technical: "Trigger", friendly: "Key" },
+  "fork.negative": { technical: "Negative output", friendly: "Normally" },
+  "fork.positive": { technical: "Positive output", friendly: "Becomes" },
+  "fork.match": { technical: "Match any", friendly: "While any of these" },
+  "fork.suppress": { technical: "Match none", friendly: "Unless any of these" },
+  "fork.keep": { technical: "Kept modifiers", friendly: "Keep held" },
 } as const satisfies Record<string, Term>;
 
 export type TermId = keyof typeof TERMS;
