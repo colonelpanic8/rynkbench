@@ -4,7 +4,7 @@
 
 import { setKeys, swapKeys } from "./keys";
 import { deleteLayer, duplicateLayer, moveLayer } from "./layers";
-import { setKeyLight } from "./lighting";
+import { clearLayerLights, setKeyLight } from "./lighting";
 import { applyTransform } from "./transform";
 import {
   createBehavior,
@@ -26,6 +26,7 @@ export const OPERATIONS = {
   delete_layer: deleteLayer,
   duplicate_layer: duplicateLayer,
   set_key_light: setKeyLight,
+  clear_layer_lights: clearLayerLights,
   apply_transform: applyTransform,
   create_behavior: createBehavior,
   set_behavior: setBehavior,

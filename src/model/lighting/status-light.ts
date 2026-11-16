@@ -145,3 +145,14 @@ export function withStatusLight(rules: Rules, layer: number, led: number, light:
   };
   return [...kept, level(light.below, undefined, light.level - 1), level(light.above, light.level, undefined)];
 }
+
+/** The LEDs with a status light of their own on this layer. */
+export function statusLightLeds(rules: Rules, layer: number): number[] {
+  const leds = new Set(rules.filter((rule) => rule.cell.conditions.layer?.layer === layer).map((rule) => rule.cell.led_id));
+  return [...leds].filter((led) => ownRules(rules, layer, led).size > 0);
+}
+
+/** The rules without any key's own status light on this layer; the same rules when it has none. */
+export function withoutStatusLights(rules: Rules, layer: number): Rules {
+  return statusLightLeds(rules, layer).reduce((next, led) => withStatusLight(next, layer, led, null), rules);
+}

@@ -1,10 +1,12 @@
-// Lighting: a key's light on a layer (its scene cell or its status rules), and
-// the capacity checks every lighting operation shares. Pure.
+// Lighting: a key's light on a layer (its scene cell or its status rules),
+// clearing a layer of them, and the capacity checks every lighting operation
+// shares. Pure.
 
 import type { LightingSceneCell } from "../vendor/rynk-wasm/rynk_wasm";
 import type { KeyboardImage } from "../sync/image";
 import { planLight, type KeyLight } from "../model/lighting/key-light";
 import type { Rules } from "../model/lighting/rules";
+import { withoutStatusLights } from "../model/lighting/status-light";
 import { failed, type Operation, type OperationFacts, type OperationResult } from "./types";
 
 /** The image with these scenes and rules, if the keyboard has room for them. */
@@ -48,5 +50,19 @@ export const setKeyLight: Operation<{ layer: number; leds: readonly number[]; li
     const painted = plan.paint.map((cell): LightingSceneCell => ({ layer, led_id: cell.led_id, effect: cell.effect }));
     const scenes = kept.length === image.scenes.length && painted.length === 0 ? image.scenes : [...kept, ...painted];
     return withLighting(image, facts, { scenes, rules: plan.rules ?? undefined });
+  },
+};
+
+export const clearLayerLights: Operation<{ layer: number }> = {
+  name: "clear_layer_lights",
+  description: "Removes every light set per key on a layer, its colours and its status lights: the firmware's own lights and the layers below show again.",
+  inputs: [{ name: "layer", kind: "integer", min: 0, description: "The layer to clear." }],
+  run(image, { layer }, facts) {
+    if (!image.layers[layer]) return failed(`Layer ${layer} does not exist`);
+    const scenes = image.scenes.filter((cell) => cell.layer !== layer);
+    return withLighting(image, facts, {
+      scenes: scenes.length === image.scenes.length ? image.scenes : scenes,
+      rules: withoutStatusLights(image.runtimeConditionalScenes, layer),
+    });
   },
 };

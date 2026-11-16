@@ -4,7 +4,8 @@
 // Paint, which makes the choice a brush for the canvas (one undo step per
 // stroke). With several keys selected (Select, or Ctrl/⌘ and Shift with a
 // click) a choice gives them all that light, as one change and one undo step.
-// While the tab is open the canvas shows the board under its lights.
+// While the tab is open the canvas shows the board under its lights. At the
+// foot, the whole layer's lights can be cleared, after a question.
 // Changes join the draft (sent with Review & send; in Live, once painting
 // pauses). The lights as a whole are in Layout properties (RGB settings…).
 
@@ -18,7 +19,8 @@ import { sameLight, type KeyLight } from "../../model/lighting/key-light";
 import { LED_PRESETS } from "../../model/lighting/color";
 import { ledsOf, selectedKeys } from "../../model/key-selection";
 import { layerName } from "../layer-names";
-import { cx, ErrorBanner } from "../kit";
+import { Button, cx, ErrorBanner } from "../kit";
+import { askConfirm, showToast } from "../messages/store";
 import { BrushIcon, MarqueeIcon } from "../icons";
 import { KeyLightFields } from "./KeyLightFields";
 import { lightView, useLightView } from "./lightView";
@@ -102,13 +104,27 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
   };
   const unusable = leds.length === 0 && !view.brush;
   const unlit = keys.length - leds.length;
+  const name = layerName(state.layerMetadata, layer);
+  const clearLayer = async () => {
+    const count = lights.layerLights;
+    const yes = await askConfirm({
+      title: `Clear every light on ${name}?`,
+      body: `${count} key${count === 1 ? " goes" : "s go"} back to what the firmware and the layers below light. Undo brings ${count === 1 ? "it" : "them"} back.`,
+      confirmLabel: "Clear lights",
+      danger: true,
+    });
+    if (!yes) return;
+    const result = await lights.clearLayer();
+    if (result.ok) showToast(`${name}'s lights cleared`, { tone: "ok" });
+    else if (!result.guarded) showToast(`Nothing was cleared: ${result.message}`, { tone: "danger" });
+  };
   const lightsOff = state.lightingState?.output_enabled === false;
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <h3 className="mr-auto text-small font-semibold tracking-widest text-mute uppercase">
-          RGB Lighting · {layerName(state.layerMetadata, layer)}
+          RGB Lighting · {name}
         </h3>
         <button
           type="button"
@@ -208,13 +224,24 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
         );
       })}
 
-      <button
-        type="button"
-        className="self-start cursor-pointer text-small text-mute underline-offset-2 hover:text-ink hover:underline"
-        onClick={() => openProperties("lighting")}
-      >
-        RGB settings…
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          className="mr-auto cursor-pointer text-small text-mute underline-offset-2 hover:text-ink hover:underline"
+          onClick={() => openProperties("lighting")}
+        >
+          RGB settings…
+        </button>
+        <Button
+          variant="danger"
+          className="px-2.5 py-1 text-small"
+          disabled={lights.layerLights === 0}
+          reason={`No key has a light of its own on ${name}`}
+          onClick={() => void clearLayer()}
+        >
+          Clear {name}'s lights…
+        </Button>
+      </div>
     </div>
   );
 }

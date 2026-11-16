@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { renderInWorkbench, testWorkbench } from "../../test/workbench";
+import { renderInWorkbench, testWorkbench, type TestWorkbenchParts } from "../../test/workbench";
+import { withStatusLight } from "../../model/lighting/status-light";
 import type { Selection } from "../../model/workbench-state";
 import type { LightingSceneCell } from "../../vendor/rynk-wasm/rynk_wasm";
 import { WorkbenchContext } from "../state";
@@ -80,6 +81,28 @@ describe("several keys selected", () => {
     } finally {
       await session.close();
     }
+  });
+});
+
+describe("clearing the layer's lights", () => {
+  const draw = (state: TestWorkbenchParts["state"]) =>
+    renderInWorkbench(<LayerLighting ledId={4} />, {
+      bundle: { sceneStatus: { capacity: 100 }, runtimeConditionalStatus: { capacity: 32 } },
+      state: { uiLayer: 0, layerMetadata: [{ occupied: true, name: "Base" }], compiledScenes, scenes: [], layerDrafts: {}, ...state },
+    });
+  const button = (html: string) => /<button[^>]*>Clear Base&#x27;s lights…<\/button>/.exec(html)?.[0];
+
+  it("is greyed out, saying why, while only the firmware lights the layer", () => {
+    expect(button(draw({}))).toContain('aria-disabled="true"');
+    expect(button(draw({}))).toContain('title="No key has a light of its own on Base"');
+    // Another layer's lights are not this layer's.
+    expect(button(draw({ scenes: [{ layer: 1, led_id: 5, effect: compiledScenes[0].effect }] }))).toContain('aria-disabled="true"');
+  });
+
+  it("is offered for a stored colour and for a key's status light", () => {
+    expect(button(draw({ scenes: [{ layer: 0, led_id: 5, effect: compiledScenes[0].effect }] }))).not.toContain('aria-disabled="true"');
+    const usb = withStatusLight([], 0, 6, { kind: "usb" });
+    expect(button(draw({ runtimeConditionalScenes: usb, runtimeConditionalDraft: usb }))).not.toContain('aria-disabled="true"');
   });
 });
 
