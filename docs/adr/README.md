@@ -16,10 +16,11 @@ One short page per decision that shapes the code, so the reason survives the peo
 | [0010](0010-draft-and-live.md) | Draft and Live: when changes reach the keyboard | Accepted |
 | [0011](0011-guard.md) | Rynkbench Guard: one gate for every key write | Accepted |
 | [0012](0012-sync.md) | One write path: plan the difference, write only that | Accepted |
-| [0013](0013-one-history-one-gate.md) | One document, one history, one gate: adopted module by module | Accepted |
+| [0013](0013-one-history-one-gate.md) | One document, one history, one gate: adopted module by module | Accepted; its end state designed in 0018 |
 | [0014](0014-themes-preferences-key-faces.md) | GLIDE's themes, Settings and key faces | Accepted |
 | [0015](0015-layout-properties.md) | Layout properties, as in GLIDE | Accepted |
 | [0016](0016-rgb-lighting-the-glide-way.md) | RGB lighting the GLIDE way (staged) | Accepted |
 | [0017](0017-a-core-for-the-workbench.md) | A core for the workbench: `workbench/` between the core and the screens | Accepted |
+| [0018](0018-the-draft-is-a-wanted-image.md) | The draft is a wanted image beside its base; one history in Draft and Live | Proposed |
 
 The glossary is in [../glossary.md](../glossary.md).
