@@ -22,5 +22,6 @@ One short page per decision that shapes the code, so the reason survives the peo
 | [0016](0016-rgb-lighting-the-glide-way.md) | RGB lighting the GLIDE way (staged) | Accepted |
 | [0017](0017-a-core-for-the-workbench.md) | A core for the workbench: `workbench/` between the core and the screens | Accepted |
 | [0018](0018-the-draft-is-a-wanted-image.md) | The draft is a wanted image beside its base; one history in Draft and Live | Accepted |
+| [0019](0019-operations.md) | Operations: named changes from one image to another; realtime lighting | Accepted |
 
 The glossary is in [../glossary.md](../glossary.md).
