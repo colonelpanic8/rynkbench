@@ -1,6 +1,6 @@
 import type { BoardDocumentTools } from "../model/boards/profile";
 import { detectFormat, initConfigWasm, loadCatalog, snapshotFromState } from "./document";
-import { exportDocument, importDocument } from "./transfer";
+import { exportDocument, readImport } from "./transfer";
 import { migrationDraft } from "./migration";
 
 const moergo = {
@@ -8,7 +8,7 @@ const moergo = {
   detectFormat,
   loadCatalog,
   snapshotFromState,
-  importDocument,
+  readImport,
   exportDocument,
   migrationDraft,
 };
