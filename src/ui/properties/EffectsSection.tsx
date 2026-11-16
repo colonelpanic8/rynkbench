@@ -1,23 +1,24 @@
 // Layout properties' RGB Effects tab (ADR 0016): the firmware's effects across
-// the keyboard. One big Effects switch first, then the effect (and the overlay
-// effect, where the firmware has one), palette, speed and the effect's own
-// settings. Applied to the keyboard in one go.
+// the keyboard. One big Effects switch first, then the effect (and the effect
+// over it, where the firmware has a second slot) picked from a gallery of
+// cards, then palette, brightness, speed and the picked effects' own settings.
+// Applied to the keyboard in one go.
 
-import { ApplyBar, ErrorBanner, cx } from "../kit";
+import { ApplyBar, Button, ErrorBanner, cx } from "../kit";
 import { Slider } from "../lighting/BackgroundPanel";
 import { BigSwitch } from "./BigSwitch";
+import { EffectGallery } from "./EffectGallery";
 import { useEffectsDraft } from "./useEffectsDraft";
 
-/** One of the firmware's named lists (effects, palettes) as a select. */
-function NameSelect({ label, names, value, onChange }: {
-  label: string;
+/** The firmware's palettes as a select. */
+function PaletteSelect({ names, value, onChange }: {
   names: string[];
   value: number;
   onChange: (index: number) => void;
 }) {
   return (
     <label className="flex items-center justify-between gap-3 text-body text-mute">
-      {label}
+      Palette
       <select
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
@@ -37,30 +38,43 @@ export function EffectsSection() {
   const fx = useEffectsDraft();
   const { draft, setDraft } = fx;
   if (!draft) return null;
-  const none = fx.effects.length;
 
   return (
     <div className="flex flex-col gap-4">
       <BigSwitch name="Effects" state={fx.on ? fx.effectName(draft.effect) : "Off"} on={fx.on} onChange={fx.setOn} />
 
-      <fieldset disabled={!fx.on} className={cx("flex flex-col gap-2", !fx.on && "opacity-50")}>
-        <NameSelect label="Effect" names={fx.effects} value={draft.effect} onChange={(effect) => setDraft({ ...draft, effect })} />
+      <fieldset disabled={!fx.on} className={cx("flex min-w-0 flex-col gap-3", !fx.on && "opacity-50")}>
+        <EffectGallery label="Effect" names={fx.effects} value={draft.effect} onPick={(effect) => setDraft({ ...draft, effect })} />
         {fx.hasOverlaySlot && (
-          <NameSelect
+          <EffectGallery
             label="Over it"
-            names={[...fx.effects, "None"]}
-            value={fx.overlayDraft ?? none}
-            onChange={(index) => fx.setOverlayDraft(index === none ? undefined : index)}
+            names={fx.effects}
+            value={fx.overlayDraft}
+            onPick={fx.setOverlayDraft}
+            empty={{ name: "None", onPick: () => fx.setOverlayDraft(undefined) }}
           />
         )}
-        {fx.palettes.length > 0 && (
-          <NameSelect label="Palette" names={fx.palettes} value={draft.palette} onChange={(palette) => setDraft({ ...draft, palette })} />
-        )}
-        <Slider label="Bright" min={1} value={draft.value} onChange={(value) => setDraft({ ...draft, value })} />
-        <Slider label="Speed" value={draft.speed} onChange={(speed) => setDraft({ ...draft, speed })} />
+        <div className="flex flex-col gap-2">
+          {fx.palettes.length > 0 && (
+            <PaletteSelect names={fx.palettes} value={draft.palette} onChange={(palette) => setDraft({ ...draft, palette })} />
+          )}
+          <Slider label="Bright" min={1} value={draft.value} onChange={(value) => setDraft({ ...draft, value })} />
+          <Slider label="Speed" value={draft.speed} onChange={(speed) => setDraft({ ...draft, speed })} />
+        </div>
         {fx.blocks.map((block) => (
           <div key={block.effect} className="flex flex-col gap-2 border-t border-line-soft pt-3">
-            <span className="text-small font-semibold text-mute">{fx.effectName(block.effect)}</span>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-small font-semibold text-mute">{fx.effectName(block.effect)}</span>
+              <Button
+                variant="ghost"
+                className="px-1.5 py-0 text-small"
+                disabled={block.items.every((param, index) => block.values[index] === param.default)}
+                reason="These are the firmware's defaults."
+                onClick={() => fx.defaults(block)}
+              >
+                Defaults
+              </Button>
+            </div>
             {block.items.map((param, index) => (
               <Slider
                 key={`${block.effect}:${index}:${param.name}`}

@@ -1,5 +1,6 @@
 // Layout properties' RGB Effects tab (ADR 0016) on simulated boards: the big
-// Effects switch first, then the firmware's own effects, overlay and palettes.
+// Effects switch first, then the firmware's own effects as cards (and those of
+// the slot over it), and its palettes.
 
 import { describe, expect, it } from "vitest";
 import type { ConnectedBundle, WorkbenchState } from "../../model/workbench-state";
@@ -26,6 +27,16 @@ function draw(bundle: ConnectedBundle, state: Partial<WorkbenchState> = {}): str
 
 const pack = glove80Board.extensionEffects!;
 
+/** The cards of the gallery under `label`: each effect's name, and whether it is pressed. */
+function cards(html: string, label: string): Array<{ name: string; pressed: boolean }> {
+  const gallery = html.split('role="group"').find((part) => part.includes(`>${label}</span>`)) ?? "";
+  return [...gallery.matchAll(/<button type="button" aria-pressed="(true|false)".*?font-semibold">([^<]*)</g)].map((card) => ({
+    name: card[2],
+    pressed: card[1] === "true",
+  }));
+}
+const pressed = (html: string, label: string) => cards(html, label).filter((card) => card.pressed).map((card) => card.name);
+
 describe("RGB Effects", () => {
   it("leads with the Effects switch, naming the effect that runs", async () => {
     await onBoard(glove80Board, (bundle) => {
@@ -36,18 +47,37 @@ describe("RGB Effects", () => {
     });
   });
 
-  it("offers the firmware's effects, the effect over it and its palettes, as the keyboard has them", async () => {
+  it("shows a card for each of the firmware's effects, the staged one pressed", async () => {
     await onBoard(glove80Board, (bundle) => {
       const html = draw(bundle);
-      expect(html).toContain(`<option value="${pack.initial.effect}" selected="">${pack.effects[pack.initial.effect]}</option>`);
-      expect(html).toContain("Over it");
-      expect(html).toContain(`<option value="${pack.overlay}" selected="">${pack.effects[pack.overlay!]}</option>`);
-      expect(html).toContain(`<option value="${pack.effects.length}">None</option>`);
+      expect(cards(html, "Effect").map((card) => card.name)).toEqual(pack.effects);
+      expect(pressed(html, "Effect")).toEqual([pack.effects[pack.initial.effect]]);
       expect(html).toContain("Palette");
       for (const palette of pack.palettes) expect(html).toContain(`>${palette}</option>`);
       for (const slider of ["Bright", "Speed"]) expect(html).toContain(`>${slider}</span>`);
       // Nothing staged yet: no Apply.
       expect(html).not.toContain("Revert");
+    });
+  });
+
+  it("shows the slot over it as its own cards, with None for leaving it empty", async () => {
+    await onBoard(glove80Board, (bundle) => {
+      const html = draw(bundle);
+      expect(cards(html, "Over it").map((card) => card.name)).toEqual(["None", ...pack.effects]);
+      expect(pressed(html, "Over it")).toEqual([pack.effects[pack.overlay!]]);
+    });
+    await onBoard({ ...glove80Board, extensionEffects: { ...pack, overlay: null } }, (bundle) => {
+      const html = draw(bundle);
+      expect(pressed(html, "Over it")).toEqual(["None"]);
+      expect(pressed(html, "Effect")).toEqual([pack.effects[pack.initial.effect]]);
+    });
+  });
+
+  it("has only the effect's cards on firmware without a second slot", async () => {
+    await onBoard({ ...glove80Board, extensionEffects: { ...pack, overlay: undefined } }, (bundle) => {
+      const html = draw(bundle);
+      expect(html).not.toContain("Over it");
+      expect(cards(html, "Effect")).toHaveLength(pack.effects.length);
     });
   });
 
