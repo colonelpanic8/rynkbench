@@ -1,11 +1,10 @@
-import { macroTableSize } from "../../model/macros";
-import type { MacroOp } from "../../vendor/rynk-wasm/rynk_wasm";
 // The mock backend's engine: a BoardSpec is one simulated device (static
 // identity, geometry, topology, defaults); MockSession drives its mutable
 // in-memory state behind the RynkSession seam. Every op resolves through a
 // small random latency so the UI's loading states are exercised honestly,
 // and topic pushes arrive on timers like a real device's.
 
+import { macroTableSize } from "../../model/macros";
 import type {
   Action,
   AutoMouseLayerConfig,
@@ -43,6 +42,7 @@ import type {
   LightingSceneCell,
   LightingSceneStatus,
   LightingState,
+  MacroOp,
   Morse,
   MorseHoldTriggerPosition,
   MorseHoldTriggerPositionState,
@@ -87,13 +87,8 @@ import {
   RULES,
 } from "../lighting-features";
 import { unsupported } from "../unsupported";
-import {
-  emptyCombo,
-  emptyFork,
-  emptyMorse,
-  emptyMorseProfile,
-  noModifiers,
-} from "../../model/slots";
+import { emptyCombo, emptyFork, emptyMorse, emptyMorseProfile, noModifiers } from "../../model/slots";
+import { absentSurface } from "./absent";
 
 export interface BoardSpec {
   title: string;
@@ -361,6 +356,8 @@ class MockSession implements RynkSession {
     this.kind = kind;
     this.spec = spec;
     this.label = spec.info.product_name;
+    // Firmware built without lighting answers every lighting call "unsupported".
+    if (!spec.capabilities.lighting_enabled) this.lighting = absentSurface(this.lighting, "lighting");
     this.layers = structuredClone(spec.defaultLayers);
     this.layerMetadata = layerMetadataDefaults(spec);
     this.base = this.checkLayer(spec.initialDefaultLayer ?? 0);

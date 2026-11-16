@@ -12,7 +12,7 @@ const BUDGET = 500;
 const OVER_BUDGET: Record<string, number> = {
   "src/ui/state.tsx": 1594,
   "src/session/link-session.ts": 1514,
-  "src/session/mock/board.ts": 1499,
+  "src/session/mock/board.ts": 1496,
   "src/ui/lighting/ConditionalRulesPanel.tsx": 1059,
   "src/ui/keymap/ActionEditor.tsx": 696,
   "src/config/transfer.ts": 677,

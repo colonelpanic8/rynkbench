@@ -18,6 +18,7 @@ import { emptyMorseProfile } from "../../model/slots";
 import { isUnsupportedError } from "../unsupported";
 import { mockProvider, type BoardSpec } from "./board";
 import { stub48Board } from "./stub48";
+import { plain36Board } from "./plain36";
 
 beforeAll(() => initSync({ module: readFileSync("src/vendor/moergo-config-wasm/moergo_config_wasm_bg.wasm") }));
 
@@ -1250,9 +1251,49 @@ describe("firmware without the optional surfaces", () => {
   });
 });
 
+describe("firmware built without lighting or Bluetooth", () => {
+  const lightingCalls: Array<[string, (session: RynkSession) => Promise<unknown>]> = [
+    ["lighting.capabilities", (session) => session.lighting.capabilities()],
+    ["lighting.state", (session) => session.lighting.state()],
+    ["lighting.topology", (session) => session.lighting.topology()],
+    ["lighting.clearOverlay", (session) => session.lighting.clearOverlay()],
+    ["lighting.scenes.sceneStatus", (session) => session.lighting.scenes.sceneStatus()],
+    ["lighting.conditionalScenes.status", (session) => session.lighting.conditionalScenes.status()],
+  ];
+
+  it("reports neither, nor encoders, split or a battery", async () => {
+    await withSession(plain36Board, async (session) => {
+      const caps = await session.device.capabilities();
+      expect(caps.lighting_enabled).toBe(false);
+      expect(caps.ble_enabled).toBe(false);
+      expect(caps.num_ble_profiles).toBe(0);
+      expect(caps.num_encoders).toBe(0);
+      expect(caps.is_split).toBe(false);
+      expect(await session.device.battery()).toBe("Unavailable");
+    });
+  });
+
+  it("lays out a key for every matrix position, with no lights", () => {
+    const { capabilities, layout, topology, defaultLayers } = plain36Board;
+    expect(layout.variants[0].keys).toHaveLength(capabilities.num_rows * capabilities.num_cols);
+    expect(topology.leds).toEqual([]);
+    for (const layer of defaultLayers) expect(layer).toHaveLength(capabilities.num_rows * capabilities.num_cols);
+  });
+
+  it.each(lightingCalls)("rejects %s as unsupported", async (_name, call) => {
+    await withSession(plain36Board, async (session) => {
+      const error = await call(session).then(
+        () => null,
+        (reason: unknown) => reason,
+      );
+      expect(isUnsupportedError(error)).toBe(true);
+    });
+  });
+});
+
 describe("providers", () => {
   it("surfaces every demo board as an available mock provider", async () => {
-    expect(mockProviders).toHaveLength(3);
+    expect(mockProviders).toHaveLength(4);
     for (const provider of mockProviders) {
       expect(provider.kind).toBe("mock");
       expect(provider.available()).toBe(true);
