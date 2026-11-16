@@ -18,6 +18,8 @@ export type {
   /** A held-LED condition a fork can test (Caps Lock …). */
   LedIndicator,
   LightAction,
+  /** One step of a macro as the keyboard stores it. */
+  MacroOp,
   /** Where a key sits in the matrix. */
   MatrixPosition,
   ModifierCombination,
