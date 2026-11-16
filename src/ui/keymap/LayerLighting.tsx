@@ -2,7 +2,9 @@
 // choice for the key on the layer shown (Off, Color, Layer below, and with the
 // firmware's rule table Status light), the chosen one's fields under it, and
 // Paint, which makes the choice a brush for the canvas (one undo step per
-// stroke). While the tab is open the canvas shows the board under its lights.
+// stroke). With several keys selected (Select, or Ctrl/⌘ and Shift with a
+// click) a choice gives them all that light, as one change and one undo step.
+// While the tab is open the canvas shows the board under its lights.
 // Changes join the draft (sent with Review & send; in Live, once painting
 // pauses). The lights as a whole are in Layout properties (RGB settings…).
 
@@ -14,9 +16,10 @@ import { effectColor } from "../lighting/decor";
 import { DEFAULT_TIMING } from "../../model/lighting/effect";
 import { sameLight, type KeyLight } from "../../model/lighting/key-light";
 import { LED_PRESETS } from "../../model/lighting/color";
+import { ledsOf, selectedKeys } from "../../model/key-selection";
 import { layerName } from "../layer-names";
 import { cx, ErrorBanner } from "../kit";
-import { BrushIcon } from "../icons";
+import { BrushIcon, MarqueeIcon } from "../icons";
 import { KeyLightFields } from "./KeyLightFields";
 import { lightView, useLightView } from "./lightView";
 import { useKeyLights } from "./useKeyLights";
@@ -55,8 +58,15 @@ function ReadOnlyLight({ effect }: { effect: LightingEffect }) {
   );
 }
 
+const toolClass = (on: boolean) =>
+  cx(
+    "flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-body font-semibold transition-colors",
+    on ? "border-accent bg-accent-fill text-on-accent" : "border-line-strong text-ink hover:border-mute",
+  );
+
+/** `ledId`: the LED of the key the editor shows; the other selected keys' are found here. */
 export function LayerLighting({ ledId }: { ledId: number | undefined }) {
-  const { state } = useWorkbench();
+  const { bundle, state, dispatch } = useWorkbench();
   const view = useLightView();
   const lights = useKeyLights();
   const layer = state.uiLayer;
@@ -66,12 +76,17 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
     return () => lightView.setOpen(false);
   }, []);
 
-  const current: KeyLight = ledId === undefined ? { kind: "below" } : lights.lightOf(ledId);
+  // Every selected key that has an LED; the tab shows the light of the editor's key.
+  const keys = selectedKeys(state.selection);
+  const several = keys.length > 1;
+  const leds = several ? ledsOf(bundle.model.keys, keys) : ledId === undefined ? [] : [ledId];
+  const lead = ledId ?? leds.at(-1);
+  const current: KeyLight = lead === undefined ? { kind: "below" } : lights.lightOf(lead);
   // What each choice had last, so trying another and coming back keeps its fields.
   const [kept, setKept] = useState<Partial<Record<Choice, KeyLight>>>({});
   // Re-seed only when the key or the layer changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => setKept({ [choiceOf(current)]: current }), [ledId, layer]);
+  useEffect(() => setKept({ [choiceOf(current)]: current }), [lead, layer]);
 
   if (!lights.writable) {
     const effect = ledId === undefined ? undefined : lights.preview.get(ledId);
@@ -79,12 +94,14 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
   }
 
   const shown: KeyLight = view.brush ?? current;
+  const differ = (light: KeyLight) => leds.some((led) => !sameLight(light, lights.lightOf(led)));
   const choose = (light: KeyLight) => {
     setKept((all) => ({ ...all, [choiceOf(light)]: light }));
     if (view.brush) return lightView.setBrush(light);
-    if (ledId !== undefined && !sameLight(light, current)) lights.set(light, [ledId]);
+    if (differ(light)) lights.set(light, leds);
   };
-  const unusable = ledId === undefined && !view.brush;
+  const unusable = leds.length === 0 && !view.brush;
+  const unlit = keys.length - leds.length;
   const lightsOff = state.lightingState?.output_enabled === false;
 
   return (
@@ -95,19 +112,46 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
         </h3>
         <button
           type="button"
+          aria-pressed={view.selecting}
+          title="Select several keys. Also: Ctrl/⌘ with a click or a drag, Shift with a click."
+          onClick={() => lightView.setSelecting(!view.selecting)}
+          className={toolClass(view.selecting)}
+        >
+          <MarqueeIcon size={13} /> Select
+        </button>
+        <button
+          type="button"
           aria-pressed={view.brush !== null}
           onClick={() => lightView.setBrush(view.brush ? null : shown)}
-          className={cx(
-            "flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-body font-semibold transition-colors",
-            view.brush ? "border-accent bg-accent-fill text-on-accent" : "border-line-strong text-ink hover:border-mute",
-          )}
+          className={toolClass(view.brush !== null)}
         >
           <BrushIcon size={13} /> Paint
         </button>
       </div>
       {view.brush && <p className="text-small text-accent">Click or drag over keys to give them this lighting.</p>}
-      {ledId === undefined && !view.brush && (
-        <p className="text-small text-mute">This key has no LED. Turn on Paint to light other keys.</p>
+      {view.selecting && (
+        <p className="text-small text-accent">Click or drag over keys to select them; start on a selected key to take keys out.</p>
+      )}
+      {several && (
+        <div className="flex items-center gap-3 text-small text-mute">
+          <span className="mr-auto">
+            <span className="font-semibold text-ink">{keys.length} keys selected</span>
+            {unlit > 0 && ` · ${unlit} without an LED`}
+            {!view.brush && differ(current) && " · their lights differ: a choice gives them all the same"}
+          </span>
+          <button
+            type="button"
+            className="shrink-0 cursor-pointer font-semibold text-accent hover:underline"
+            onClick={() => state.selection?.type === "key" && dispatch({ type: "select", selection: { type: "key", row: state.selection.row, col: state.selection.col } })}
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+      {leds.length === 0 && !view.brush && (
+        <p className="text-small text-mute">
+          {several ? "None of these keys has an LED." : "This key has no LED."} Turn on Paint to light other keys.
+        </p>
       )}
       {lightsOff && (
         <div className="flex items-center gap-2 rounded-xl bg-warn/10 p-3 text-body text-warn">

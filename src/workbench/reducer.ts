@@ -5,6 +5,7 @@
 
 import type { EncoderAction, KeyAction } from "../vendor/rynk-wasm/rynk_wasm";
 import type { WorkbenchAction, WorkbenchState } from "../model/workbench-state";
+import { selectionWith } from "../model/key-selection";
 import { draftEditCount } from "./draft/selectors";
 import { sameValue } from "../model/deep-equal";
 import { applyPatch, patchBetween, withValues, type KeyboardImage } from "../sync";
@@ -110,6 +111,8 @@ export function makeWorkbenchReducer(cols: number) {
         return { ...state, uiLayer: act.layer };
       case "select":
         return { ...state, selection: act.selection };
+      case "selectKeys":
+        return { ...state, selection: selectionWith(state.selection, act.keys, act.how) };
       case "keyWriteStart": {
         // Live: the keyboard is written at once, so it holds the key as soon as it says yes.
         const id = keyPendingId(act.layer, act.row, act.col);

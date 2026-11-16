@@ -2,7 +2,8 @@
 // Left: which key it is and its actions as slots (On Tap; On Hold, a tap-hold;
 // On Double Tap, a morse entry of its own, written by model/key-slots' plan).
 // The tabs fill the active slot: Pick Key, Switch Layer, Lighting, and Every
-// action (the full editor, for macros, morse patterns and the rest).
+// action (the full editor, for macros, morse patterns and the rest). With
+// several keys selected it edits the last one; only RGB Lighting reaches all.
 
 import { useEffect, useMemo, useState } from "react";
 import type { Action, KeyAction } from "../../model/action-types";
@@ -13,6 +14,7 @@ import { keyAddressLabel, keyPlaceName } from "../key-address";
 import { isDrafted, keyPendingId } from "../../workbench";
 import { useWorkbench } from "../state";
 import { useCapabilities } from "../use-capabilities";
+import { selectedKeys } from "../../model/key-selection";
 
 import { WarningIcon } from "../icons";
 import { showToast } from "../messages/store";
@@ -92,13 +94,14 @@ export function KeyEditor({ size = 310 }: { size?: number }) {
     void fill({ [kind]: target } as unknown as Action);
   };
   const glyph = keyFace(action, state.morse, faceContext);
+  const others = selectedKeys(selection).length - 1;
 
   const side = (
     <>
       <EditorHeading
         glyph={glyph}
         title={keyPlaceName(addressable)}
-        detail={`Key ${keyAddressLabel(addressable).replace("-", " ")}`}
+        detail={`Key ${keyAddressLabel(addressable).replace("-", " ")}${others > 0 ? ` · and ${others} more for RGB Lighting` : ""}`}
         onDone={() => dispatch({ type: "select", selection: null })}
         doneLabel="Done with this key"
       />

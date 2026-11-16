@@ -1,7 +1,8 @@
 // The keyboard on the keymap screen: the layer heading, the canvas with its
 // selection, drag-to-move, copy and paste, the key quick menu and the hover
 // card. Keys are edited below it (KeyEditor.tsx); trackpads and encoders in
-// SideInspector.tsx.
+// SideInspector.tsx. Several keys can be selected (useKeySelection.ts): the
+// last one is the key the editor, the quick menu, copy and paste work on.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -26,6 +27,8 @@ import { KeyHoverCard } from "./KeyHoverCard";
 import { CanvasPill } from "./CanvasPill";
 import { CarriedKey } from "./CarriedKey";
 import { useKeyMoves } from "./useKeyMoves";
+import { useKeySelection } from "./useKeySelection";
+import { selectionShowing } from "../../model/key-selection";
 import { useLightView } from "./lightView";
 import { LightsButton } from "./LightsButton";
 import { beginStroke } from "../draft/useHistory";
@@ -74,14 +77,17 @@ export function KeymapCenter() {
 
   const runClipboard = useKeyClipboard(latestStateRef, moves.setMessage);
 
-  const keyboardActivateKey = (key: KeyView, event: React.KeyboardEvent) => {
-    if (event.key === "Enter") dispatch({ type: "select", selection: { type: "key", row: key.row, col: key.col } });
-    else moves.keyboardStep(key, event);
-  };
-
   // The layer's staged scene, previewed under the legends so bindings and
   // lighting can be judged together; the RGB Lighting tab paints it.
   const light = useLightView();
+  const chosen = useKeySelection(light.selecting ? "many" : null);
+
+  const keyboardActivateKey = (key: KeyView, event: React.KeyboardEvent) => {
+    if (event.key === "Escape") return moves.keyboardStep(key, event);
+    if (chosen.activate(key, event)) return moves.cancelKeyboardMove();
+    if (event.key === "Enter") dispatch({ type: "select", selection: { type: "key", row: key.row, col: key.col } });
+    else moves.keyboardStep(key, event);
+  };
   const lights = useKeyLights();
   // The lit board shows the layer's lighting whatever the switch says.
   const lit = light.open || (layerLightingAvailable && showLighting);
@@ -137,15 +143,15 @@ export function KeymapCenter() {
         ? " Picked up; press Space to put it back."
         : " Press Space to swap it with this key."
       : " Press Space to pick it up and swap it with another key.";
+    const among = chosen.count > 1 && chosen.has(key);
     return {
       glyph,
       ariaLabel: `${keyText.layer(state.uiLayer)}, row ${key.row}, column ${key.col}: ${
         action === undefined ? "unavailable" : keyText.describe(action)
-      }.${keyboardMoveHint}`,
-      ariaKeyShortcuts: selected
-        ? "Enter Space Escape Control+C Meta+C Control+V Meta+V"
-        : "Enter Space Escape",
+      }.${among ? ` Selected with ${chosen.count - 1} more.` : ""}${keyboardMoveHint}`,
+      ariaKeyShortcuts: `Enter Space Escape Control+Enter Meta+Enter Shift+Enter${selected ? " Control+C Meta+C Control+V Meta+V" : ""}`,
       selected,
+      inSelection: among && !selected,
       highlight: dropTarget,
       lifted,
       special: highlightSpecial && action !== undefined ? specialKind(action, face) : undefined,
@@ -234,7 +240,7 @@ export function KeymapCenter() {
             };
           }}
           onKeyContextMenu={(key, event) => {
-            dispatch({ type: "select", selection: { type: "key", row: key.row, col: key.col } });
+            dispatch({ type: "select", selection: selectionShowing(state.selection, key) });
             // From the keyboard (the menu key, Shift+F10) there is no pointer: open by the key.
             const fromKeyboard = event.clientX === 0 && event.clientY === 0;
             const box = (event.currentTarget as Element).getBoundingClientRect();
@@ -243,21 +249,24 @@ export function KeymapCenter() {
             );
           }}
           onKeyHover={setHovered}
-          onKeyPointerDown={(key) => {
+          onKeyPointerDown={(key, event) => {
             moves.cancelKeyboardMove();
+            // Any other button opens the quick menu, which selects for itself.
+            if (chosen.press(key, event) || event.button !== 0) return;
             if (light.brush) {
               beginStroke(dispatch);
               paintKey(key, light.brush);
             } else dispatch({ type: "select", selection: { type: "key", row: key.row, col: key.col } });
           }}
           onKeyPointerEnter={(key, event) => {
-            if (light.brush && event.buttons & 1) paintKey(key, light.brush);
+            if (!(event.buttons & 1) || chosen.cross(key)) return;
+            if (light.brush) paintKey(key, light.brush);
           }}
           onKeyKeyboardActivate={keyboardActivateKey}
           onKeyFocus={moves.keyboardFocus}
           onKeyDragChange={moves.dragChange}
           keyDraggable={(key) =>
-            !light.brush && state.pending[keyPendingId(state.uiLayer, key.row, key.col)]?.status !== "pending"
+            !light.brush && !chosen.dragSelects() && state.pending[keyPendingId(state.uiLayer, key.row, key.col)]?.status !== "pending"
           }
           onKeyDrop={moves.dragDrop}
           onEncoderPointerDown={(enc) =>

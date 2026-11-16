@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { testWorkbench } from "../../test/workbench";
+import { renderInWorkbench, testWorkbench } from "../../test/workbench";
+import type { Selection } from "../../model/workbench-state";
 import type { LightingSceneCell } from "../../vendor/rynk-wasm/rynk_wasm";
 import { WorkbenchContext } from "../state";
 
@@ -40,6 +41,47 @@ function markup(ledId: number, writable = true): string {
     </WorkbenchContext>,
   );
 }
+
+describe("several keys selected", () => {
+  const draw = (selection: Selection) =>
+    renderInWorkbench(<LayerLighting ledId={4} />, {
+      bundle: {
+        sceneStatus: { capacity: 100 },
+        model: { keys: [{ row: 0, col: 0, ledId: 4 }, { row: 0, col: 1, ledId: 5 }, { row: 0, col: 2 }] },
+      },
+      state: { uiLayer: 0, layerMetadata: null, compiledScenes, scenes: [], layerDrafts: {}, selection },
+    });
+
+  it("says how many, how many cannot be lit, that their lights differ, and offers to clear the selection", () => {
+    const html = draw({ type: "key", row: 0, col: 0, more: [{ row: 0, col: 1 }, { row: 0, col: 2 }] });
+    expect(html).toContain("3 keys selected");
+    expect(html).toContain("1 without an LED");
+    // LED 4 has the firmware's colour, LED 5 shows the layer below.
+    expect(html).toContain("their lights differ");
+    expect(html).toContain("Clear selection");
+  });
+
+  it("says nothing of a selection for one key", () => {
+    const html = draw({ type: "key", row: 0, col: 0 });
+    expect(html).not.toContain("selected");
+    expect(html).not.toContain("Clear selection");
+  });
+
+  it("rings every selected key on the canvas, and names the selection on each", async () => {
+    const session = await mockProvider(glove80Board).connect();
+    try {
+      const bundle = await openBundle(session);
+      const [a, b, c] = bundle.model.keys;
+      const selection: Selection = { type: "key", row: c.row, col: c.col, more: [a, b].map(({ row, col }) => ({ row, col })) };
+      const html = renderInWorkbench(<KeymapCenter />, { bundle, state: { ...initialWorkbenchState(bundle), selection } });
+      // The thin ring of a key selected with others; the editor's key keeps the one ring it always had.
+      expect(html.match(/stroke-opacity="0.9"/g)).toHaveLength(2);
+      expect(html.match(/Selected with 2 more\./g)).toHaveLength(3);
+    } finally {
+      await session.close();
+    }
+  });
+});
 
 describe("layer lighting summary", () => {
   // The runtime draft is empty here: reading it alone would report the key as

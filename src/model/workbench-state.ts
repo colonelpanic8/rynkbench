@@ -77,7 +77,9 @@ export type Mode =
 export type LightingTarget = "overlay" | number;
 
 export type Selection =
-  | { type: "key"; row: number; col: number }
+  /** `more`: the other keys selected with this one, which is the last one
+   *  selected and the one the key editor shows (model/key-selection.ts). */
+  | { type: "key"; row: number; col: number; more?: ReadonlyArray<{ row: number; col: number }> }
   | { type: "encoder"; id: number }
   | { type: "pointing"; id: number }
   /** A combo open in Focus Mode: key clicks add or remove its keys. */
@@ -320,6 +322,8 @@ export type WorkbenchAction =
   | { type: "mode"; mode: Mode }
   | { type: "uiLayer"; layer: number }
   | { type: "select"; selection: Selection | null }
+  /** Keys join or leave the keys selected on the keymap. */
+  | { type: "selectKeys"; keys: ReadonlyArray<{ row: number; col: number }>; how: "add" | "remove" }
   | { type: "keyWriteStart"; layer: number; row: number; col: number; action: KeyAction }
   | { type: "keyWriteOk"; layer: number; row: number; col: number }
   | {
