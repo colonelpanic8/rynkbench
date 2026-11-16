@@ -1,5 +1,6 @@
 // The io's lighting: refresh, the lighting state, scenes, the rule table, wake
-// layers and the extension effect with its parameters.
+// layers and the extension effect with its parameters. In Draft the controls
+// change what you want (ADR 0018); in Live they are written at once.
 
 import { conditionalTablesEqual } from "../model/lighting/compare";
 import { errorMessage } from "../session/errors";
@@ -19,7 +20,7 @@ type LightingIo = Pick<
 >;
 
 export function lightingIo(context: IoContext): LightingIo {
-  const { session, getState, dispatch, features } = context;
+  const { session, getState, dispatch, features, draft } = context;
 
   // Feature detection lives here: firmware predating per-effect parameters
   // rejects the request outright, which is recorded as "no parameters" and
@@ -75,6 +76,7 @@ export function lightingIo(context: IoContext): LightingIo {
       );
     },
     setLightingState(mutable) {
+      if (draft([{ item: { kind: "lightingState" }, value: mutable }])) return;
       dispatch({ type: "lightingBusy", busy: true, error: null });
       session.lighting.setState(mutable).then(
         (lightingState) => dispatch({ type: "lightingStateSet", state: lightingState }),
@@ -115,6 +117,7 @@ export function lightingIo(context: IoContext): LightingIo {
       });
     },
     setScenePolicy(policy) {
+      if (draft([{ item: { kind: "layerPolicy" }, value: policy }])) return;
       dispatch({ type: "lightingBusy", busy: true, error: null });
       session.lighting.scenes.setLayerPolicy(policy).then(
         (lightingState) => dispatch({ type: "scenePolicySet", state: lightingState, policy }),
@@ -122,6 +125,8 @@ export function lightingIo(context: IoContext): LightingIo {
       );
     },
     setWakeLayers(layers) {
+      const drafted = draft([{ item: { kind: "wakeLayers" }, value: layers }]);
+      if (drafted) return Promise.resolve(drafted);
       dispatch({ type: "lightingBusy", busy: true, error: null });
       return session.lighting.setWakeLayers(layers).then(
         (outputMode) => {
@@ -136,6 +141,12 @@ export function lightingIo(context: IoContext): LightingIo {
       );
     },
     setExtensionState(extension, params = [], overlay) {
+      const drafted = draft([
+        { item: { kind: "extension" }, value: extension },
+        ...(getState().lightingExtensionLayers ? [{ item: { kind: "extensionOverlay" as const }, value: overlay ?? null }] : []),
+        ...params.map(({ effect, index, value }) => ({ item: { kind: "effectParam" as const, effect, index }, value })),
+      ]);
+      if (drafted) return;
       dispatch({ type: "lightingBusy", busy: true, error: null });
       // Write only the parts that changed. Each extension mutation is durable,
       // so repeating the unchanged primary/layer selections needlessly queues

@@ -16,6 +16,7 @@ import type {
   MorseProfileEntry,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import type { RuntimeLightingRule, RynkSession } from "../session/types";
+import type { SyncItem } from "../sync";
 import type { BootloaderTarget } from "../model/boards";
 import type {
   ConnectedBundle,
@@ -91,7 +92,6 @@ export interface WorkbenchIo {
   setMorseProfile(entry: MorseProfileEntry): Promise<IoWriteResult>;
   deleteMorseProfile(index: number): Promise<IoWriteResult>;
   setMorseHoldTriggerPositions(positions: MorseHoldTriggerPosition[]): Promise<IoWriteResult>;
-  applyPointingConfig(): Promise<IoWriteResult>;
   reloadPointingConfig(): Promise<IoWriteResult>;
   disconnect(): void;
   rebootToBootloader(target?: BootloaderTarget): Promise<void>;
@@ -148,6 +148,8 @@ export interface IoContext {
   dispatch: WorkbenchDispatch;
   cols: number;
   features: IoFeatures;
+  /** In Draft, puts these items in what you want and answers; in Live, answers null and the caller writes. */
+  draft(values: Array<{ item: SyncItem; value: unknown }>): IoWriteResult | null;
 }
 
 /** Build the io facade. `session` writes; `dispatch` narrates. */
@@ -157,7 +159,14 @@ export function makeIo(
   dispatch: WorkbenchDispatch,
   { cols, onDisconnect, features = NO_IO_FEATURES }: IoOptions,
 ): WorkbenchIo {
-  const context: IoContext = { session, getState, dispatch, cols, features };
+  const draft: IoContext["draft"] = (values) => {
+    const state = getState();
+    if (!state.batchMode) return null;
+    if (state.batchBusy) return { ok: false, message: "the draft is being sent" };
+    dispatch({ type: "wantSet", values });
+    return { ok: true };
+  };
+  const context: IoContext = { session, getState, dispatch, cols, features, draft };
   return {
     ...keyIo(context),
     ...layerIo(context),

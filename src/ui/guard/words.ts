@@ -73,6 +73,10 @@ export function itemName(item: SyncItem, names: GuardNames): string {
       return `${names.layerName(item.layer)}: RGB Lighting`;
     case "rules":
       return "Lock and battery lights";
+    case "morseProfile":
+      return `Tap-hold profile ${item.index + 1}`;
+    case "effectParam":
+      return `RGB effect ${item.effect}: setting ${item.index + 1}`;
     default:
       return item.kind.replace(/([A-Z])/g, " $1").toLowerCase();
   }

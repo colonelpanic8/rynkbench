@@ -1,5 +1,5 @@
 // Review & send: what the draft changes, grouped (keys and lighting per layer,
-// encoders, lock and battery lights), each group with its own Discard, then
+// encoders, slots, layers, settings, lock and battery lights), each group with its own Discard, then
 // Send, which writes it all to the keyboard in one go and says how it went.
 
 import { createPortal } from "react-dom";
@@ -29,6 +29,18 @@ function groupText(group: DraftGroup, name: (layer: number) => string): { title:
       return { title: `Lighting${on}`, count: plural(group.count, "key") };
     case "lightRules":
       return { title: "Lock and battery lights", count: plural(group.count, "key") };
+    case "macros":
+      return { title: "Macros", count: "changed" };
+    case "layers":
+      return { title: "Layer names and order", count: plural(group.count, "change") };
+    case "profiles":
+      return { title: "Tap-hold profiles", count: plural(group.count, "change") };
+    case "pointing":
+      return { title: "Pointing", count: "changed" };
+    case "settings":
+      return { title: "Keyboard settings", count: plural(group.count, "setting") };
+    case "lightingControls":
+      return { title: "RGB Lighting settings", count: plural(group.count, "setting") };
   }
 }
 

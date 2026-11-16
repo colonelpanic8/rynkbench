@@ -5,7 +5,7 @@
 
 import type { WorkbenchState } from "../../model/workbench-state";
 import type { RynkSession } from "../../session/types";
-import { applyPatch, conflicts, readImage, syncTo, valueAt, type KeyboardImage, type ImageFeatures, type SyncItem } from "../../sync";
+import { applyPatch, conflicts, partsOf, readImage, syncTo, valueAt, type KeyboardImage, type ImageFeatures, type SyncItem } from "../../sync";
 import { sameValue } from "../../model/deep-equal";
 import { errorMessage } from "../../session/errors";
 import { draftOf } from "./want";
@@ -32,11 +32,13 @@ export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Pro
   const patch = draftOf(start).changes;
   if (patch.length === 0) return { ok: true };
   dispatch({ type: "batchApplyStart" });
+  // Read what the base holds, so the read-back can take its place.
+  const reading = { ...features, ...partsOf(start.base) };
   try {
     // The draft on top of what the keyboard holds now; what you started from is
     // the same with each drafted item as it was based on (an item never read,
     // such as an encoder, was based on nothing and cannot clash).
-    const now = await readImage(session, features);
+    const now = await readImage(session, reading);
     const want = applyPatch(now, patch, "after");
     const startedFrom = applyPatch(now, patch.filter(({ before }) => before !== undefined), "before");
     const clashes = conflicts(startedFrom, now, want);
@@ -44,7 +46,7 @@ export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Pro
       dispatch({ type: "batchApplyDone", error: null });
       return { ok: false, message: "Not sent: the keyboard keeps its own changes", guarded: true };
     }
-    const { readback } = await syncTo(session, now, want, features);
+    const { readback } = await syncTo(session, now, want, reading);
     stored(readback);
     if (patch.some(({ item }) => item.kind === "lighting" || item.kind === "rules")) {
       dispatch({ type: "lightingStateSet", state: await session.lighting.state() });
@@ -55,7 +57,7 @@ export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Pro
     const message = errorMessage(error);
     // Whatever reached the keyboard leaves the draft; the rest is sent next time.
     try {
-      stored(await readImage(session, features));
+      stored(await readImage(session, reading));
     } catch {
       // The keyboard cannot be read now: everything stays in the draft.
     }

@@ -19,7 +19,9 @@ import { initialKeyEditHistory } from "../model/history";
 import { conditionalTablesEqual, stagedBetween } from "../model/lighting/compare";
 import { activeLightingBase, activeLightingDraft } from "./lighting-drafts";
 import { canTravelKeyEditHistory, draftEditCount, pointingDraftDirty } from "./draft/selectors";
+import { normalizePointingConfig } from "../model/pointing";
 import { draftOf, storedImage } from "./draft/want";
+import { writePlan } from "../sync";
 import { makeIo } from "./io";
 import { makeWorkbenchReducer } from "./reducer";
 import { type WorkbenchAction, type WorkbenchState } from "../model/workbench-state";
@@ -946,53 +948,27 @@ describe("pointing configuration state", () => {
     expect(state.pointingError).toBeNull();
   });
 
-  it("writes the current revision, verifies readback, and adopts the bumped revision", async () => {
-    let state = baseState({ pointingConfig: pointing(7), pointingDraft: pointing(7, 5) });
-    const accepted = pointing(8, 5);
-    const set = vi.fn(async (_config: PointingConfig) => accepted);
-    const get = vi.fn(async () => accepted);
-    const session = { pointing: { set, get } } as unknown as RynkSession;
-    const dispatch = (action: WorkbenchAction) => {
-      state = reducer(state, action);
-    };
-    const io = makeIo(session, () => state, dispatch, { cols: 2, onDisconnect: () => {} });
-
-    await expect(io.applyPointingConfig()).resolves.toEqual({ ok: true });
+  it("writes pointing with the keyboard's current revision, whatever the draft was based on", async () => {
+    const set = vi.fn(async (config: PointingConfig) => ({ ...config, revision: 8 }));
+    const session = { pointing: { set, get: vi.fn(async () => pointing(7)) } } as unknown as RynkSession;
+    await writePlan(session, [{ kind: "pointing", value: normalizePointingConfig(pointing(2, 5)) }]);
     expect(set).toHaveBeenCalledOnce();
     expect(set.mock.calls[0][0]).toMatchObject({ revision: 7, device_count: 1 });
     expect(set.mock.calls[0][0].devices).toHaveLength(4);
-    expect(get).toHaveBeenCalledOnce();
-    expect(state.pointingConfig?.revision).toBe(8);
-    expect(pointingDraftDirty(state)).toBe(false);
-    expect(state.pointingBusy).toBe(false);
   });
 
-  it("keeps staged edits after a revision failure and can reload the keyboard copy", async () => {
-    let state = baseState({ pointingConfig: pointing(2), pointingDraft: pointing(2, 9) });
-    const get = vi.fn(async () => pointing(3, 4));
-    const session = {
-      pointing: {
-        set: vi.fn(async () => {
-          throw new Error("pointing configuration revision changed");
-        }),
-        get,
-      },
-    } as unknown as RynkSession;
+  it("keeps staged pointing in the draft until the keyboard copy is reloaded", async () => {
+    let state = baseState({ pointingConfig: pointing(2), pointingDraft: pointing(2, 9), batchMode: true });
+    expect(draftOf(state).changes.map(({ item }) => item.kind)).toEqual(["pointing"]);
+    const session = { pointing: { get: vi.fn(async () => pointing(3, 4)) } } as unknown as RynkSession;
     const dispatch = (action: WorkbenchAction) => {
       state = reducer(state, action);
     };
     const io = makeIo(session, () => state, dispatch, { cols: 2, onDisconnect: () => {} });
-
-    await expect(io.applyPointingConfig()).resolves.toEqual({
-      ok: false,
-      message: "pointing configuration revision changed",
-    });
-    expect(pointingDraftDirty(state)).toBe(true);
-    expect(state.pointingError).toContain("revision changed");
-
     await expect(io.reloadPointingConfig()).resolves.toEqual({ ok: true });
     expect(state.pointingConfig?.revision).toBe(3);
     expect(pointingDraftDirty(state)).toBe(false);
+    expect(draftOf(state).changes).toEqual([]);
   });
 
   it("recovers a config the connect-time read failed to fetch", async () => {

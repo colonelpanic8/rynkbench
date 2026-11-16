@@ -8,8 +8,8 @@ import type { WorkbenchAction, WorkbenchState } from "../model/workbench-state";
 import { reduceKeyEditHistory } from "../model/history";
 import { normalizePointingConfig } from "../model/pointing";
 import { draftEditCount } from "./draft/selectors";
-import { applyPatch, type KeyboardImage } from "../sync";
-import { atBase, storedImage, wantOf, withBase, withItemsAtBase, withStored, withWant } from "./draft/want";
+import { applyPatch, withValues, type KeyboardImage } from "../sync";
+import { atBase, storedImage, wantOf, withBase, withItemsAtBase, withRead, withStored, withWant } from "./draft/want";
 import { encoderPendingId, keyPendingId } from "./pending";
 import { isLightingAction, reduceLighting } from "./reduce-lighting";
 import { isSettingsAction, reduceSettings } from "./reduce-settings";
@@ -29,16 +29,54 @@ function setLayerKey(
   return next;
 }
 
+/** Where the layer on show went in a rewrite (`order`: destination → source slot). */
+function movedLayer(layer: number, order: readonly number[]): number {
+  const moved = order.findIndex((source) => source === layer);
+  return moved >= 0 ? moved : Math.min(layer, order.length - 1);
+}
+
 function withEncoder(image: KeyboardImage, layer: number, id: number, action: EncoderAction | undefined): KeyboardImage {
   const encoders = image.encoders.map((row) => [...row]);
   if (encoders[layer]) encoders[layer][id] = action as EncoderAction;
   return { ...image, encoders };
 }
 
+/** Live writes and their answers: the keyboard holds what they show, so these
+ *  parts of the base are set with what you want (ADR 0018). Optimistic writes
+ *  set it at the start and put it back on an error, like a key. */
+const LIVE_WRITES: Partial<Record<WorkbenchAction["type"], (keyof KeyboardImage)[]>> = {
+  fieldWriteStart: ["behavior", "behaviorOptions", "macroOps", "holdTriggerPositions", "autoMouseLayers"],
+  fieldWriteErr: ["behavior", "behaviorOptions", "macroOps", "holdTriggerPositions", "autoMouseLayers"],
+  morseProfileWriteStart: ["morseProfiles"],
+  morseProfileWriteErr: ["morseProfiles"],
+  morseProfileDeleteStart: ["morseProfiles", "holdTriggerPositions"],
+  morseProfileDeleteErr: ["morseProfiles", "holdTriggerPositions"],
+  defaultLayer: ["defaultLayer"],
+  layerMetadataSet: ["metadata"],
+  pointingWriteOk: ["pointing"],
+  pointingReloaded: ["pointing"],
+};
+
+function withLiveBase(state: WorkbenchState, parts: readonly (keyof KeyboardImage)[]): WorkbenchState {
+  const want = wantOf(state);
+  const base = { ...state.base };
+  for (const part of parts) if (base[part] !== undefined) (base as Record<string, unknown>)[part] = want[part];
+  return { ...state, base };
+}
+
 export function makeWorkbenchReducer(cols: number) {
-  return function reducer(state: WorkbenchState, act: WorkbenchAction): WorkbenchState {
+  const reduce = (state: WorkbenchState, act: WorkbenchAction): WorkbenchState => {
     if (isLightingAction(act)) return reduceLighting(state, act);
     if (isSettingsAction(act)) return reduceSettings(state, act);
+    return reduceRest(state, act);
+  };
+  return function reducer(state: WorkbenchState, act: WorkbenchAction): WorkbenchState {
+    const next = reduce(state, act);
+    const live = LIVE_WRITES[act.type];
+    return live && next !== state ? withLiveBase(next, live) : next;
+  };
+
+  function reduceRest(state: WorkbenchState, act: WorkbenchAction): WorkbenchState {
     switch (act.type) {
       case "mode":
         return { ...state, mode: act.mode, selection: null, hoverLeds: null };
@@ -146,6 +184,10 @@ export function makeWorkbenchReducer(cols: number) {
         return { ...atBase(state), batchError: null };
       case "draftRevert":
         return withItemsAtBase(state, act.items);
+      case "wantSet":
+        return withWant(state, withValues(wantOf(state), act.values));
+      case "wantImage":
+        return withWant(state, act.image);
       case "draftStored":
         return withBase(state, act.image);
       case "draftRestore": {
@@ -196,14 +238,18 @@ export function makeWorkbenchReducer(cols: number) {
         layerMetadata[act.layer] = act.metadata;
         return { ...state, layerMetadata, layerBusy: false, layerError: null };
       }
+      case "layerRewriteDrafted":
+        return {
+          ...withWant(state, act.image),
+          uiLayer: movedLayer(state.uiLayer, act.order),
+          selection: null,
+          layerBusy: false,
+          layerError: null,
+        };
       case "layerOperationApplied": {
         const rewrite = act.rewrite;
         const pointing = rewrite.pointing ? normalizePointingConfig(rewrite.pointing) : null;
-        const movedUiLayer = rewrite.order.findIndex((source) => source === state.uiLayer);
-        const uiLayer =
-          movedUiLayer >= 0
-            ? movedUiLayer
-            : Math.min(state.uiLayer, rewrite.order.length - 1);
+        const uiLayer = movedLayer(state.uiLayer, rewrite.order);
         const next: WorkbenchState = {
           ...state,
           layers: rewrite.layers,
@@ -238,8 +284,7 @@ export function makeWorkbenchReducer(cols: number) {
       }
       case "topicLayers":
         return {
-          ...state,
-          defaultLayer: act.defaultLayer,
+          ...withRead(state, { defaultLayer: act.defaultLayer }),
           activeLayers: act.activeLayers,
           layerStateComplete: act.complete,
           currentLayer: Math.max(act.defaultLayer, ...act.activeLayers),
@@ -252,6 +297,8 @@ export function makeWorkbenchReducer(cols: number) {
         return { ...state, ledIndicator: act.indicator };
       case "topicModifier":
         return { ...state, modifierState: act.modifiers };
+      default:
+        return state;
     }
-  };
+  }
 }

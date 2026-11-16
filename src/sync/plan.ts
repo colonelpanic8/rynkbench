@@ -15,14 +15,20 @@ import { comboIsEmpty } from "../model/combos";
 import { forkIsEmpty, morseIsEmpty } from "../model/slots";
 import type {
   AutoMouseLayerConfig,
+  BehaviorConfig,
   BehaviorOptions,
   ComboDefinition,
   EncoderAction,
   Fork,
   KeyAction,
+  LightingExtensionState,
+  LightingLayerPolicy,
+  LightingMutableState,
   LightingSceneCell,
   MacroOp,
   Morse,
+  MorseHoldTriggerPosition,
+  MorseProfileEntry,
   PointingConfig,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import type { LayerMetadata, RuntimeLightingRule } from "../session/types";
@@ -43,7 +49,16 @@ export type SyncStep =
   | { kind: "pointing"; value: PointingConfig }
   | { kind: "wakeLayers"; value: number }
   | { kind: "scenes"; value: LightingSceneCell[] }
-  | { kind: "rules"; value: RuntimeLightingRule[] };
+  | { kind: "rules"; value: RuntimeLightingRule[] }
+  | { kind: "behavior"; value: BehaviorConfig }
+  /** A profile set, or deleted (null). */
+  | { kind: "morseProfile"; index: number; value: MorseProfileEntry | null }
+  | { kind: "holdTriggerPositions"; value: MorseHoldTriggerPosition[] }
+  | { kind: "layerPolicy"; value: LightingLayerPolicy }
+  | { kind: "lightingState"; value: LightingMutableState }
+  | { kind: "extension"; value: LightingExtensionState }
+  | { kind: "extensionOverlay"; value: number | null }
+  | { kind: "effectParam"; effect: number; index: number; value: number };
 
 export type StepKind = SyncStep["kind"];
 
@@ -116,7 +131,35 @@ export function planSync(from: KeyboardImage, to: KeyboardImage): SyncStep[] {
   if (!same(from.runtimeConditionalScenes, to.runtimeConditionalScenes)) {
     change.push({ kind: "rules", value: to.runtimeConditionalScenes });
   }
+  planSettings(from, to, { create, change, remove });
   return [...create, ...change, ...remove];
+}
+
+/** The parts a keyboard may lack, each written only when both sides hold it.
+ *  Profiles are created before what uses them and deleted last. */
+function planSettings(from: KeyboardImage, to: KeyboardImage, out: Record<"create" | "change" | "remove", SyncStep[]>) {
+  const both = <K extends keyof KeyboardImage>(part: K) => from[part] !== undefined && to[part] !== undefined;
+  to.morseProfiles?.forEach((value, index) => {
+    if (!both("morseProfiles") || same(from.morseProfiles![index] ?? null, value ?? null)) return;
+    (value ? out.create : out.remove).push({ kind: "morseProfile", index, value: value ?? null });
+  });
+  const whole = <K extends "behavior" | "holdTriggerPositions" | "layerPolicy" | "lightingState" | "extension" | "extensionOverlay">(kind: K) => {
+    if (both(kind) && !same(from[kind], to[kind])) out.change.push({ kind, value: to[kind] } as SyncStep);
+  };
+  whole("behavior");
+  whole("holdTriggerPositions");
+  whole("layerPolicy");
+  whole("lightingState");
+  whole("extension");
+  whole("extensionOverlay");
+  for (const [key, values] of Object.entries(to.effectParams ?? {})) {
+    const effect = Number(key);
+    const before = from.effectParams?.[effect];
+    if (!before) continue;
+    values.forEach((value, index) => {
+      if (before[index] !== value) out.change.push({ kind: "effectParam", effect, index, value });
+    });
+  }
 }
 
 /** A scene table in one order. The keyboard holds one cell per layer and LED and

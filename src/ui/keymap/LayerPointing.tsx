@@ -6,7 +6,7 @@ import type {
   PointingConfig,
   PointingMode,
 } from "../../vendor/rynk-wasm/rynk_wasm";
-import { ApplyBar, Button, SectionLabel, Segmented, TextInput, cx } from "../kit";
+import { Button, SectionLabel, Segmented, TextInput, cx } from "../kit";
 import { NumberField } from "../lighting/EffectEditor";
 import {
   ChevronRightIcon,
@@ -460,19 +460,12 @@ export function LayerPointing({ selectedDeviceId }: { selectedDeviceId?: number 
             </div>
           )}
 
-          <ApplyBar
-            busy={state.pointingBusy}
-            apply={{
-              label: "Apply",
-              disabled: !staged || state.pointingBusy,
-              onClick: () => void io.applyPointingConfig(),
-            }}
-            discard={{
-              label: "Discard",
-              disabled: !staged || state.pointingBusy,
-              onClick: () => dispatch({ type: "pointingDraftReset" }),
-            }}
-          />
+          {/* Staged pointing is in the draft: Review & send writes it in Draft, Live after a pause (ADR 0018). */}
+          {staged && (
+            <Button variant="ghost" disabled={state.pointingBusy} onClick={() => dispatch({ type: "pointingDraftReset" })}>
+              Discard pointing changes
+            </Button>
+          )}
           {state.pointingError && (
             <Button variant="ghost" disabled={state.pointingBusy} onClick={() => void io.reloadPointingConfig()}>Reload from keyboard</Button>
           )}

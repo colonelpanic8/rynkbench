@@ -6,7 +6,7 @@
 import type { RynkSession } from "../session/types";
 import type { KeyboardImage } from "./image";
 import { planSync, storedItems, type SyncStep } from "./plan";
-import { readImage, type ImageFeatures, type ReadImage } from "./read";
+import { partsOf, readImage, type ImageFeatures, type ReadImage } from "./read";
 
 /** A write that stopped part-way: the cause's message, how many steps went through, and which one failed. */
 export class SyncStopped extends Error {
@@ -57,6 +57,27 @@ async function writeStep(session: RynkSession, step: SyncStep): Promise<void> {
     case "rules":
       await session.lighting.conditionalScenes.replace(step.value);
       return;
+    case "behavior":
+      return session.behavior.set(step.value);
+    case "morseProfile":
+      return step.value ? session.behavior.setProfile(step.value) : session.behavior.deleteProfile(step.index);
+    case "holdTriggerPositions":
+      return session.behavior.setHoldTriggerPositions(step.value);
+    case "layerPolicy":
+      await session.lighting.scenes.setLayerPolicy(step.value);
+      return;
+    case "lightingState":
+      await session.lighting.setState(step.value);
+      return;
+    case "extension":
+      await session.lighting.setExtensionState(step.value);
+      return;
+    case "extensionOverlay":
+      await session.lighting.setExtensionLayers(step.value ?? undefined);
+      return;
+    case "effectParam":
+      await session.lighting.setExtensionParam(step.effect, step.index, step.value);
+      return;
   }
 }
 
@@ -94,7 +115,7 @@ export async function syncTo(
 ): Promise<SyncResult> {
   const steps = planSync(now, want);
   await writePlan(session, steps, onProgress);
-  const readback = await readImage(session, { ...features, macros: want.macroOps !== undefined });
+  const readback = await readImage(session, { ...features, ...partsOf(want) });
   const left = planSync(readback, want);
   if (left.length > 0) {
     throw new Error(`the keyboard holds something else for ${storedItems(left)} item(s) after writing; try again`);

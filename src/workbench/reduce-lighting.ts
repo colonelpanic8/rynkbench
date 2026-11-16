@@ -4,7 +4,7 @@
 
 import type { WorkbenchAction, WorkbenchState } from "../model/workbench-state";
 import { overlaysEqual } from "../model/lighting/compare";
-import { withBase, wantOf, withWant } from "./draft/want";
+import { wantOf, withLightingRead, withRead, withWant } from "./draft/want";
 import { cellsToRecord, layerSceneCells, lightingDraftFor, setTargetDraft } from "./lighting-drafts";
 
 const LIGHTING_ACTION_TYPES = [
@@ -40,23 +40,23 @@ export function reduceLighting(state: WorkbenchState, act: LightingAction): Work
     case "lightingRefresh": {
       const applied = cellsToRecord(act.overlay);
       const draftWasClean = overlaysEqual(state.draft, state.applied);
-      // What the keyboard stores (scenes, rules) is read: drafts you had not
-      // changed follow it, changed ones stay (ADR 0018).
-      const stored = withBase(state, {
-        ...state.base,
+      // The counters and names are the keyboard's; what it stores is read, and
+      // drafts you had not changed follow it, changed ones stay (ADR 0018).
+      const counted = {
+        ...state,
+        lightingOutputMode: act.outputMode ? { ...act.outputMode, wake_layers: state.lightingOutputMode?.wake_layers ?? state.base.wakeLayers } : state.lightingOutputMode,
+        lightingExtension: act.extension ? { ...act.extension, state: state.lightingExtension?.state ?? act.extension.state } : state.lightingExtension,
+        lightingExtensionLayers: act.extensionLayers ? { ...act.extensionLayers, overlay: state.lightingExtensionLayers?.overlay } : state.lightingExtensionLayers,
+      };
+      const stored = withRead(counted, {
         ...(act.scenes ? { scenes: act.scenes } : {}),
         ...(act.runtimeConditional ? { runtimeConditionalScenes: act.runtimeConditional } : {}),
+        ...(act.outputMode ? { wakeLayers: act.outputMode.wake_layers } : {}),
+        ...(act.extension ? { extension: act.extension.state } : {}),
+        ...(act.extensionLayers ? { extensionOverlay: act.extensionLayers.overlay ?? null } : {}),
       });
       return {
-        ...stored,
-        lightingState: act.state,
-        lightingOutputMode: act.outputMode ?? state.lightingOutputMode,
-        lightingControls:
-          act.outputMode === undefined || act.outputMode === null
-            ? state.lightingControls
-            : { ...state.lightingControls, wake_layers: act.outputMode.wake_layers },
-        lightingExtension: act.extension ?? state.lightingExtension,
-        lightingExtensionLayers: act.extensionLayers ?? state.lightingExtensionLayers,
+        ...withLightingRead(stored, act.state),
         applied,
         draft: draftWasClean ? { ...applied } : state.draft,
       };
@@ -107,8 +107,7 @@ export function reduceLighting(state: WorkbenchState, act: LightingAction): Work
     case "overlayApplied": {
       const applied = cellsToRecord(act.cells);
       return {
-        ...state,
-        lightingState: act.state,
+        ...withLightingRead(state, act.state),
         applied,
         draft: { ...applied },
         lightingBusy: false,
@@ -117,8 +116,7 @@ export function reduceLighting(state: WorkbenchState, act: LightingAction): Work
     }
     case "scenesApplied":
       return {
-        ...withBase(state, { ...state.base, scenes: act.cells }),
-        lightingState: act.state,
+        ...withLightingRead(withRead(state, { scenes: act.cells }), act.state),
         lightingBusy: false,
         lightingError: null,
       };
@@ -132,52 +130,66 @@ export function reduceLighting(state: WorkbenchState, act: LightingAction): Work
       };
     case "conditionalApplied":
       return {
-        ...withWant(withBase(state, { ...state.base, runtimeConditionalScenes: act.cells }), {
-          ...wantOf(state),
-          runtimeConditionalScenes: act.cells,
-        }),
-        lightingState: act.state,
+        ...withLightingRead(
+          withWant(withRead(state, { runtimeConditionalScenes: act.cells }), { ...wantOf(state), runtimeConditionalScenes: act.cells }),
+          act.state,
+        ),
         lightingBusy: false,
         lightingError: null,
       };
     case "scenePolicySet":
       return {
-        ...state,
-        lightingState: act.state,
-        scenePolicy: act.policy,
+        ...withLightingRead(withRead({ ...state, scenePolicy: state.scenePolicy ?? act.policy }, { layerPolicy: act.policy }), act.state),
         lightingBusy: false,
         lightingError: null,
       };
     case "wakeLayersSet":
       return {
-        ...state,
-        lightingOutputMode: act.outputMode,
-        lightingControls: {
-          ...state.lightingControls,
-          wake_layers: act.outputMode.wake_layers,
-        },
+        ...withRead(
+          { ...state, lightingOutputMode: { ...act.outputMode, wake_layers: state.lightingOutputMode?.wake_layers ?? state.base.wakeLayers } },
+          { wakeLayers: act.outputMode.wake_layers },
+        ),
         lightingBusy: false,
         lightingError: null,
       };
     case "extensionStateSet":
       return {
-        ...state,
-        lightingState: act.state,
-        lightingExtension: state.lightingExtension
-          ? { ...state.lightingExtension, revision: act.state.revision, state: act.extension }
-          : state.lightingExtension,
-        lightingExtensionLayers: act.extensionLayers,
+        ...withLightingRead(
+          withRead(
+            {
+              ...state,
+              lightingExtension: state.lightingExtension && { ...state.lightingExtension, revision: act.state.revision },
+              lightingExtensionLayers: act.extensionLayers && { ...act.extensionLayers, overlay: state.lightingExtensionLayers?.overlay },
+            },
+            { extension: act.extension, ...(act.extensionLayers ? { extensionOverlay: act.extensionLayers.overlay ?? null } : {}) },
+          ),
+          act.state,
+        ),
         lightingBusy: false,
         lightingError: null,
       };
-    case "extensionParamsLoaded":
+    case "extensionParamsLoaded": {
+      const values = act.items.map((param) => param.value);
+      const known = state.extensionParams[act.effect];
+      // An effect read for the first time is what the keyboard holds; one read
+      // again is a read like any other: drafted values stay.
+      if (!known || known.length !== values.length) {
+        return {
+          ...state,
+          base: { ...state.base, effectParams: { ...state.base.effectParams, [act.effect]: values } },
+          extensionParams: { ...state.extensionParams, [act.effect]: act.items },
+        };
+      }
+      const next = withRead(state, { effectParams: { ...state.base.effectParams, [act.effect]: values } });
+      const wanted = next.extensionParams[act.effect];
       return {
-        ...state,
-        extensionParams: { ...state.extensionParams, [act.effect]: act.items },
+        ...next,
+        extensionParams: { ...next.extensionParams, [act.effect]: act.items.map((item, index) => ({ ...item, value: wanted[index].value })) },
       };
+    }
     case "hoverLeds":
       return { ...state, hoverLeds: act.leds };
     case "lightingStateSet":
-      return { ...state, lightingState: act.state, lightingBusy: false, lightingError: null };
+      return { ...withLightingRead(state, act.state), lightingBusy: false, lightingError: null };
   }
 }

@@ -55,15 +55,15 @@ Guard judges the end result (ADR 0011). Every intermediate state is not judged: 
 
 ## When the writer runs
 
-| Mode | Keys | Combos, morse, forks | Lighting, lock and battery lights | Macros, layer names, settings |
+| Mode | Keys | Combos, morse, forks | Lighting, lock and battery lights, pointing | Macros, layer names and moves, settings, lighting controls |
 |---|---|---|---|---|
 | **Live** | At once (so you can try them), one item per edit; an unchanged key is not sent. | At once | 0.6 s after the last change, and at once when the page is hidden or closed | At once |
-| **Draft** | On Send | On Send | On Send | At once (not in the draft yet) |
-| **Not connected** | Kept in the draft | Kept in the draft | Kept in the draft | Not possible |
+| **Draft** | On Send | On Send | On Send | On Send (ADR 0018) |
+| **Not connected** | Kept in the draft | Kept in the draft | Kept in the draft | Kept in the draft; a layer move needs the keyboard |
 
 - **Send** (`workbench/draft/send.ts`): reads the keyboard fresh, builds what you want (the read with the draft's patch on top), runs the three-way check and Guard, then `syncTo`. The read-back becomes `base` (ADR 0018): whatever reached the keyboard no longer differs and leaves the draft; the rest stays and is sent next time.
 - **The three-way check at Send** compares each drafted item with what it was based on (`before`, kept with the draft, also across visits) and with what the keyboard holds now. Anything changed on both sides is shown in Guard's window ("Send overwrites N changes made on the keyboard", Show details) with **Send anyway** and **Don't send**.
-- **Layer move, delete and duplicate** (`workbench/io-layers.ts`) plan the rewritten layout against the read and write only the difference; the way back on failure is planned the same way. Moving a layer with three keys on it stores six keys, not the whole keymap.
+- **Layer move, delete and duplicate** (`workbench/io-layers.ts`): in Draft they rewrite what you want (from a fresh read with the draft on top) and Send writes the difference. In Live they plan the rewritten layout against the read and write only the difference; the way back on failure is planned the same way. Moving a layer with three keys on it stores six keys, not the whole keymap.
 - **Not connected:** when a dropped link cannot be restored, the workbench stays open in Draft (`ui/draft/link.ts`). The status chip says "not connected", how many changes are kept, and offers Reconnect. The draft is kept for this keyboard; after reconnecting it is offered back with what each change was based on, so Send's three-way check sees anything changed meanwhile.
 
 ## For GLIDE Flows
@@ -118,7 +118,7 @@ The original layer move, delete and duplicate compared their read-back with the 
 
 ## Not done yet
 
-- **Macros, layer names, behavior and morse-profile settings** still write at once, even in Draft. They are already items the planner knows (macros, layer names, behavior options); they join what you want (ADR 0018, part 2).
+- **Live commits through Send's path** (ADR 0018, part 3): settings, names and macros still write at once in Live, each through its own call, and the two undo histories still take turns.
 - **Starting without the keyboard:** today you keep working when the link is lost. Opening a keyboard you have used before, without connecting it, needs its last read kept per keyboard and a session built from it.
 - **Live keys after a short pause:** keys go at once in Live because RMK only applies a key once it is written. Gathering repeated edits of one key would save a little more flash at the cost of trying it slightly later.
 - **Read only what is needed:** Send reads the whole keyboard before and after. Reading only the parts in the plan would make Send faster over Bluetooth.

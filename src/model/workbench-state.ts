@@ -357,6 +357,10 @@ export type WorkbenchAction =
   | { type: "batchDiscard" }
   /** These items of what you want set back to what the keyboard holds. */
   | { type: "draftRevert"; items: SyncItem[] }
+  /** Draft edits of any stored item: these items as you want them. */
+  | { type: "wantSet"; values: Array<{ item: SyncItem; value: unknown }> }
+  /** What you want, whole (a layer move in Draft). */
+  | { type: "wantImage"; image: KeyboardImage }
   /** The keyboard was read (Send's read-back): the base is this image. */
   | { type: "draftStored"; image: KeyboardImage }
   /** A kept draft put back: each item based on `before`, wanted as `after`. */
@@ -376,6 +380,8 @@ export type WorkbenchAction =
   | { type: "defaultLayer"; layer: number }
   | { type: "layerOperationStart" }
   | { type: "layerOperationApplied"; rewrite: LayerRewrite }
+  /** A layer move, delete or duplicate in Draft: what you want, rewritten; `order` is destination → source slot. */
+  | { type: "layerRewriteDrafted"; image: KeyboardImage; order: number[] }
   | { type: "layerOperationError"; message: string }
   | { type: "layerMetadataSet"; layer: number; metadata: LayerMetadata }
   | {

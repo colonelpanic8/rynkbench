@@ -1,5 +1,6 @@
 // What the draft holds, as the review window lists it (keys and encoders per
-// layer, the slots, each layer's lighting, the lock and battery lights), and
+// layer, the slots, macros, layers, profiles, pointing, settings, each layer's
+// lighting, the lock and battery lights, the lighting controls), and
 // the draft as kept in the browser for that keyboard. All of it is computed
 // from the draft (want.ts): the items that differ from what the keyboard
 // holds. Pure: state in, plain data out.
@@ -13,7 +14,20 @@ import { valueAt, type KeyboardImage, type PatchEntry, type SyncItem } from "../
 import { layerSceneCells, lightingBaseFor } from "../lighting-drafts";
 import { draftOf } from "./want";
 
-export type DraftArea = "keys" | "encoders" | "combos" | "morse" | "forks" | "lighting" | "lightRules";
+export type DraftArea =
+  | "keys"
+  | "encoders"
+  | "combos"
+  | "morse"
+  | "forks"
+  | "macros"
+  | "layers"
+  | "profiles"
+  | "pointing"
+  | "settings"
+  | "lighting"
+  | "lightRules"
+  | "lightingControls";
 
 export interface DraftGroup {
   area: DraftArea;
@@ -43,7 +57,7 @@ function changedLeds(change: PatchEntry): number {
 }
 
 /** The group a drafted item is counted in. */
-function groupOf(item: SyncItem): Omit<DraftGroup, "count"> | null {
+function groupOf(item: SyncItem): Omit<DraftGroup, "count"> {
   switch (item.kind) {
     case "key":
       return { area: "keys", layer: item.layer };
@@ -55,19 +69,40 @@ function groupOf(item: SyncItem): Omit<DraftGroup, "count"> | null {
       return { area: "lighting", layer: item.layer };
     case "rules":
       return { area: "lightRules" };
-    default:
-      return null;
+    case "macros":
+      return { area: "macros" };
+    case "layerMetadata":
+    case "defaultLayer":
+      return { area: "layers" };
+    case "morseProfile":
+    case "holdTriggerPositions":
+      return { area: "profiles" };
+    case "pointing":
+      return { area: "pointing" };
+    case "behavior":
+    case "behaviorOptions":
+    case "autoMouseLayers":
+      return { area: "settings" };
+    case "lightingState":
+    case "extension":
+    case "extensionOverlay":
+    case "effectParam":
+    case "layerPolicy":
+    case "wakeLayers":
+      return { area: "lightingControls" };
   }
 }
 
-const AREA_ORDER: DraftArea[] = ["keys", "encoders", "combos", "morse", "forks", "lighting", "lightRules"];
+const AREA_ORDER: DraftArea[] = [
+  "keys", "encoders", "combos", "morse", "forks", "macros", "layers", "profiles", "pointing", "settings",
+  "lighting", "lightRules", "lightingControls",
+];
 const sameGroup = (a: Omit<DraftGroup, "count">, b: Omit<DraftGroup, "count">) => a.area === b.area && a.layer === b.layer;
 
 export function draftGroups(state: WorkbenchState): DraftGroup[] {
   const groups: DraftGroup[] = [];
   for (const change of draftOf(state).changes) {
     const group = groupOf(change.item);
-    if (!group) continue;
     const count =
       change.item.kind === "lighting"
         ? changedLeds(change)
@@ -86,10 +121,7 @@ export function draftGroups(state: WorkbenchState): DraftGroup[] {
 export function groupItems(state: WorkbenchState, group: DraftGroup): SyncItem[] {
   return draftOf(state)
     .changes.map((change) => change.item)
-    .filter((item) => {
-      const its = groupOf(item);
-      return its !== null && sameGroup(its, group);
-    });
+    .filter((item) => sameGroup(groupOf(item), group));
 }
 
 export const draftSize = (groups: readonly DraftGroup[]) => groups.reduce((sum, group) => sum + group.count, 0);

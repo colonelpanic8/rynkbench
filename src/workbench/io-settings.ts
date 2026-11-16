@@ -1,13 +1,12 @@
-// The io's settings: combo, morse and fork slots (staged in Draft), macros,
-// behavior, morse profiles, hold-trigger positions and pointing. Each is an
-// optimistic single-value write that the device's answer settles.
+// The io's settings: combo, morse and fork slots, macros, behavior, morse
+// profiles, hold-trigger positions and pointing. In Draft each changes what
+// you want (ADR 0018); in Live each is an optimistic single-value write that
+// the device's answer settles.
 
 import type { ComboDefinition, Fork, Morse } from "../vendor/rynk-wasm/rynk_wasm";
 import type { FieldValue, WorkbenchAction, WritableField } from "../model/workbench-state";
 import { FIELD_STATE_KEY } from "../model/workbench-state";
-import { normalizePointingConfig, pointingConfigsEqual } from "../model/pointing";
 import { errorMessage } from "../session/errors";
-import { pointingDraftDirty } from "./draft/selectors";
 import type { IoContext, IoWriteResult, WorkbenchIo } from "./io";
 
 type SettingsIo = Pick<
@@ -18,12 +17,12 @@ type SettingsIo = Pick<
   | "setMorseProfile"
   | "deleteMorseProfile"
   | "setMorseHoldTriggerPositions"
-  | "applyPointingConfig"
   | "reloadPointingConfig"
 >;
 
 export function settingsIo(context: IoContext): SettingsIo {
-  const { session, getState, dispatch } = context;
+  const { session, getState, dispatch, draft } = context;
+  const whole = (kind: "macros" | "behavior" | "holdTriggerPositions", value: unknown) => draft([{ item: { kind }, value }]);
 
   /** Run one optimistic write: `start` narrates the intent, then the device
    *  answer settles it as `ok` or `err`. Every single-value write below is
@@ -80,12 +79,18 @@ export function settingsIo(context: IoContext): SettingsIo {
       );
     },
     writeMacros(bytes) {
+      const drafted = whole("macros", bytes);
+      if (drafted) return Promise.resolve(drafted);
       return writeField("macros", bytes, () => session.macros.write(bytes));
     },
     setBehavior(config) {
+      const drafted = whole("behavior", config);
+      if (drafted) return Promise.resolve(drafted);
       return writeField("behavior", config, () => session.behavior.set(config));
     },
     setMorseProfile(entry) {
+      const drafted = draft([{ item: { kind: "morseProfile", index: entry.index }, value: entry }]);
+      if (drafted) return Promise.resolve(drafted);
       const prev = getState().morseProfiles.find((item) => item.index === entry.index) ?? null;
       dispatch({ type: "morseProfileWriteStart", entry });
       return settle(
@@ -100,6 +105,12 @@ export function settingsIo(context: IoContext): SettingsIo {
       const entry = state.morseProfiles.find((item) => item.index === index);
       if (!entry) return Promise.resolve({ ok: false, message: `no profile in slot ${index}` });
       const positions = state.morseHoldTriggerPositions;
+      // The keyboard forgets a profile's hold-trigger positions with it.
+      const drafted = draft([
+        { item: { kind: "morseProfile", index }, value: null },
+        { item: { kind: "holdTriggerPositions" }, value: positions.filter((position) => position.profile !== index) },
+      ]);
+      if (drafted) return Promise.resolve(drafted);
       dispatch({ type: "morseProfileDeleteStart", index });
       return settle(
         session.behavior.deleteProfile(index),
@@ -108,36 +119,11 @@ export function settingsIo(context: IoContext): SettingsIo {
       );
     },
     setMorseHoldTriggerPositions(positions) {
+      const drafted = whole("holdTriggerPositions", positions);
+      if (drafted) return Promise.resolve(drafted);
       return writeField("morseHoldTriggerPositions", positions, () =>
         session.behavior.setHoldTriggerPositions(positions),
       );
-    },
-    async applyPointingConfig() {
-      const state = getState();
-      if (state.pointingBusy) return { ok: false, message: "a pointing write is already running" };
-      if (!state.pointingConfig || !state.pointingDraft) {
-        return { ok: false, message: "this keyboard has no runtime pointing configuration" };
-      }
-      if (!pointingDraftDirty(state)) return { ok: true };
-
-      dispatch({ type: "pointingWriteStart" });
-      try {
-        const request = normalizePointingConfig({
-          ...state.pointingDraft,
-          revision: state.pointingConfig.revision,
-        });
-        const accepted = await session.pointing.set(request);
-        const readback = await session.pointing.get();
-        if (accepted.revision !== readback.revision || !pointingConfigsEqual(accepted, readback)) {
-          throw new Error("pointing configuration read-back did not match the accepted write");
-        }
-        dispatch({ type: "pointingWriteOk", config: readback });
-        return { ok: true };
-      } catch (error) {
-        const message = errorMessage(error);
-        dispatch({ type: "pointingWriteErr", message });
-        return { ok: false, message };
-      }
     },
     async reloadPointingConfig() {
       if (getState().pointingBusy) {

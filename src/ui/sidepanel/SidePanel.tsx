@@ -81,8 +81,8 @@ function LayerList({ onPicked }: { onPicked?: () => void }) {
     ? "This keyboard cannot change its layers yet"
     : state.layerBusy
       ? "Wait for the layer change in progress"
-      : pointingDraftDirty(state)
-        ? "Apply or discard the staged pointing changes first"
+      : !state.batchMode && pointingDraftDirty(state)
+        ? "Wait for the pointing changes to reach the keyboard"
         : null;
 
   const remove = (layer: number) => {

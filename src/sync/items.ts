@@ -1,6 +1,7 @@
 // The items a keyboard stores, named one by one (ADR 0018): a key, an encoder,
 // a combo, morse or fork slot, a layer's name, a layer's lighting, the rule
-// table, and each keyboard-wide setting. The planner writes in steps (a run of
+// table, a morse profile, an effect's parameter, each keyboard-wide setting
+// and the live lighting controls. The planner writes in steps (a run of
 // keys, a whole scene table); the draft, the three-way check, the history and
 // the kept draft speak of items: what differs between two images, the value an
 // item has in one, and an image with some items set. Pure.
@@ -23,7 +24,15 @@ export type SyncItem =
   | { kind: "behaviorOptions" }
   | { kind: "autoMouseLayers" }
   | { kind: "pointing" }
-  | { kind: "wakeLayers" };
+  | { kind: "wakeLayers" }
+  | { kind: "behavior" }
+  | { kind: "morseProfile"; index: number }
+  | { kind: "holdTriggerPositions" }
+  | { kind: "layerPolicy" }
+  | { kind: "lightingState" }
+  | { kind: "extension" }
+  | { kind: "extensionOverlay" }
+  | { kind: "effectParam"; effect: number; index: number };
 
 export type ItemKind = SyncItem["kind"];
 
@@ -46,6 +55,10 @@ export function itemKey(item: SyncItem): string {
     case "layerMetadata":
     case "lighting":
       return `${item.kind}:${item.layer}`;
+    case "morseProfile":
+      return `morseProfile:${item.index}`;
+    case "effectParam":
+      return `effectParam:${item.effect}:${item.index}`;
     default:
       return item.kind;
   }
@@ -76,6 +89,10 @@ export function valueAt(image: KeyboardImage, item: SyncItem): unknown {
       return image.runtimeConditionalScenes;
     case "macros":
       return image.macroOps;
+    case "morseProfile":
+      return image.morseProfiles?.[item.index];
+    case "effectParam":
+      return image.effectParams?.[item.effect]?.[item.index];
     default:
       return image[item.kind];
   }
@@ -103,6 +120,12 @@ function withValue(image: KeyboardImage, item: SyncItem, value: unknown): Keyboa
       return { ...image, runtimeConditionalScenes: value as never };
     case "macros":
       return { ...image, macroOps: value as never };
+    case "morseProfile":
+      return { ...image, morseProfiles: replaced(image.morseProfiles ?? [], item.index, value as never) };
+    case "effectParam": {
+      const params = image.effectParams ?? {};
+      return { ...image, effectParams: { ...params, [item.effect]: replaced(params[item.effect] ?? [], item.index, value as number) } };
+    }
     default:
       return { ...image, [item.kind]: value };
   }
@@ -148,5 +171,21 @@ export function differences(from: KeyboardImage, to: KeyboardImage): ItemChange[
   check({ kind: "autoMouseLayers" }, from.autoMouseLayers, to.autoMouseLayers);
   if (to.pointing) check({ kind: "pointing" }, from.pointing, to.pointing, (a, b) => sameValue(pointingBody(a as PointingConfig), pointingBody(b as PointingConfig)));
   check({ kind: "wakeLayers" }, from.wakeLayers, to.wakeLayers);
+  // The parts a keyboard may lack: compared only when both images hold them.
+  const both = <K extends keyof KeyboardImage>(part: K) => from[part] !== undefined && to[part] !== undefined;
+  if (both("behavior")) check({ kind: "behavior" }, from.behavior, to.behavior);
+  if (both("morseProfiles")) {
+    to.morseProfiles!.forEach((entry, index) => check({ kind: "morseProfile", index }, from.morseProfiles![index] ?? null, entry ?? null));
+  }
+  if (both("holdTriggerPositions")) check({ kind: "holdTriggerPositions" }, from.holdTriggerPositions, to.holdTriggerPositions);
+  if (both("layerPolicy")) check({ kind: "layerPolicy" }, from.layerPolicy, to.layerPolicy);
+  if (both("lightingState")) check({ kind: "lightingState" }, from.lightingState, to.lightingState);
+  if (both("extension")) check({ kind: "extension" }, from.extension, to.extension);
+  if (both("extensionOverlay")) check({ kind: "extensionOverlay" }, from.extensionOverlay, to.extensionOverlay);
+  for (const [key, values] of Object.entries(to.effectParams ?? {})) {
+    const effect = Number(key);
+    const before = from.effectParams?.[effect];
+    if (before) values.forEach((value, index) => check({ kind: "effectParam", effect, index }, before[index], value));
+  }
   return out;
 }
