@@ -3,7 +3,7 @@ import { DEFAULT_TIMING, buildEffect, effectKind, effectRgb, effectTiming } from
 import type { EffectKind } from "./effect";
 
 const color = { r: 10, g: 20, b: 30 };
-const timing = { periodMs: 400, phaseMs: 75, duty: 200, stepMs: 8 };
+const timing = { periodMs: 400, phaseMs: 75, duty: 30, stepMs: 8 };
 const kinds: EffectKind[] = ["Solid", "Blink", "Breathe"];
 
 describe("effect shape round-trips", () => {

@@ -80,9 +80,9 @@ export function EffectShapeEditor({
           {kind === "Blink" && (
             <NumberField
               label="Duty"
-              unit="/255"
+              unit="%"
               min={0}
-              max={255}
+              max={100}
               value={timing.duty}
               onChange={(duty) => retime({ duty })}
             />

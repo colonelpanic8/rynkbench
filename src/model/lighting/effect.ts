@@ -13,7 +13,7 @@ export type EffectKind = "Solid" | "Blink" | "Breathe";
 export interface EffectTiming {
   periodMs: number;
   phaseMs: number;
-  /** Blink only: on-fraction out of 255. */
+  /** Blink only: the share of each period it is lit, in percent. */
   duty: number;
   /** Breathe only: ramp step interval. */
   stepMs: number;
@@ -22,7 +22,7 @@ export interface EffectTiming {
 export const DEFAULT_TIMING: EffectTiming = {
   periodMs: 1000,
   phaseMs: 0,
-  duty: 128,
+  duty: 50,
   stepMs: 16,
 };
 
