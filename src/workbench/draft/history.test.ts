@@ -51,11 +51,10 @@ describe("the history (pure)", () => {
     expect(history.past).toEqual([]);
   });
 
-  it("keeps at most a hundred steps, and none while a bulk write runs", () => {
+  it("keeps at most a hundred steps", () => {
     let history = emptyHistory();
     for (let i = 0; i < HISTORY_LIMIT + 5; i += 1) history = recordStep(history, [change(0, "No", key(`F${i}`))]);
     expect(history.past).toHaveLength(HISTORY_LIMIT);
-    expect(recordStep({ ...history, suspended: true }, [change(1, "No", key("A"))]).past).toHaveLength(HISTORY_LIMIT);
   });
 });
 

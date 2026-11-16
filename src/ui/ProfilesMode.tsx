@@ -9,7 +9,6 @@ import {
   replaceProfilePositions,
   type MatrixPosition,
 } from "./profiles";
-import { morseProfilePendingId } from "../workbench";
 import { useWorkbench } from "./state";
 import { useDeviceDraft } from "./device-draft";
 import { emptyMorseProfile } from "../model/slots";
@@ -166,9 +165,7 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
   onDelete: () => void;
 }) {
   const { state, io } = useWorkbench();
-  const pendingId = morseProfilePendingId(entry.index);
-  const pending = state.pending[pendingId];
-  const { draft, setDraft, dirty: edited, reset } = useDeviceDraft(entry, pending?.status === "pending");
+  const { draft, setDraft, dirty: edited, reset } = useDeviceDraft(entry);
   const dirty = isNew || edited;
   const duplicateName = state.morseProfiles.some(
     (item) => item.index !== entry.index && item.name === draft.name.trim(),
@@ -192,7 +189,6 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
         {!isNew && (
           <Button
             variant="ghost"
-            disabled={pending?.status === "pending"}
             onClick={() => {
               onDelete();
               void io.apply("delete_behavior", { kind: "profiles", slot: entry.index });
@@ -297,13 +293,10 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
           opposite-hand or bilateral key activates the hold.
         </p>
       )}
-      <div className="mt-4">
-        <WriteStatus id={pendingId} onRetry={save} />
-      </div>
       <SaveBar
         className="mt-5 flex gap-2 border-t border-line-soft pt-4"
         dirty={dirty}
-        writing={pending?.status === "pending"}
+        writing={false}
         saveDisabled={!validName}
         saveLabel={isNew ? "Create profile" : "Save profile"}
         onSave={save}

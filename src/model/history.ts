@@ -21,8 +21,6 @@ export interface History {
   future: HistoryStep[];
   /** A Paint stroke is open: "open" until its first step, then "joined". */
   stroke: "none" | "open" | "joined";
-  /** A bulk write (an import, a transform) is running: its changes are no step. */
-  suspended: boolean;
 }
 
 export type HistoryShortcut = "undo" | "redo";

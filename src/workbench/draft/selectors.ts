@@ -16,7 +16,6 @@ export function pointingDraftDirty(state: WorkbenchState): boolean {
 
 export function hasPendingConfigurationWrite(state: WorkbenchState): boolean {
   return (
-    state.history.suspended ||
     state.lightingBusy ||
     state.pointingBusy ||
     state.batchBusy ||

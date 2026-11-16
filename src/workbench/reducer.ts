@@ -8,7 +8,7 @@ import type { WorkbenchAction, WorkbenchState, WritableField } from "../model/wo
 import { draftEditCount } from "./draft/selectors";
 import { sameValue } from "../model/deep-equal";
 import { applyPatch, patchBetween, valueAt, withValues, type KeyboardImage, type SyncItem } from "../sync";
-import { emptyHistory, recordStep, travel } from "./draft/history";
+import { recordStep, travel } from "./draft/history";
 import { atBase, wantOf, withBase, withItemsAtBase, withRead, withStored, withWant } from "./draft/want";
 import { encoderPendingId, keyPendingId } from "./pending";
 import { labelsFor } from "./labels";
@@ -50,14 +50,6 @@ const FIELD_ITEM: Record<WritableField, SyncItem> = {
   autoMouseLayers: { kind: "autoMouseLayers" },
 };
 
-/** A profile's slot, and the hold-trigger positions the keyboard drops with
- *  it: the table follows only where you had not changed it. */
-function profileDeleted(index: number, before: WorkbenchState): SyncItem[] {
-  const positions: SyncItem = { kind: "holdTriggerPositions" };
-  const untouched = sameValue(valueAt(before.base, positions), valueAt(wantOf(before), positions));
-  return [{ kind: "morseProfile", index }, ...(untouched ? [positions] : [])];
-}
-
 type LiveWrites = {
   [Type in WorkbenchAction["type"]]?: (act: Extract<WorkbenchAction, { type: Type }>, before: WorkbenchState) => SyncItem[];
 };
@@ -69,13 +61,8 @@ type LiveWrites = {
 const LIVE_WRITES: LiveWrites = {
   fieldWriteStart: (act) => [FIELD_ITEM[act.field]],
   fieldWriteErr: (act) => [FIELD_ITEM[act.field]],
-  morseProfileWriteStart: (act) => [{ kind: "morseProfile", index: act.entry.index }],
-  morseProfileWriteErr: (act) => [{ kind: "morseProfile", index: act.index }],
-  morseProfileDeleteStart: (act, before) => profileDeleted(act.index, before),
-  morseProfileDeleteErr: (act, before) => profileDeleted(act.entry.index, before),
   defaultLayer: () => [{ kind: "defaultLayer" }],
   layerMetadataSet: (act) => [{ kind: "layerMetadata", layer: act.layer }],
-  pointingWriteOk: () => [{ kind: "pointing" }],
   pointingReloaded: () => [{ kind: "pointing" }],
 };
 
@@ -90,13 +77,12 @@ function withLiveBase(state: WorkbenchState, items: readonly SyncItem[]): Workbe
 const COMMITS = new Set<WorkbenchAction["type"]>([
   "keyStage", "encoderStage", "slotStage", "wantSet", "commit", "paint", "erase", "draftReset",
   "conditionalDraft", "conditionalDraftReset", "pointingDraftSet", "pointingDraftReset", "draftRevert", "batchDiscard",
-  "keyWriteStart", "encoderWriteStart", "slotWriteStart", "fieldWriteStart", "morseProfileWriteStart",
-  "morseProfileDeleteStart", "defaultLayer", "layerMetadataSet", "lightingStateSet",
+  "keyWriteStart", "encoderWriteStart", "slotWriteStart", "fieldWriteStart", "defaultLayer", "layerMetadataSet", "lightingStateSet",
   "scenePolicySet", "wakeLayersSet", "extensionStateSet",
 ]);
 /** A Live write that failed puts back what it changed: that joins its step. */
 const FAILED_WRITES = new Set<WorkbenchAction["type"]>([
-  "keyWriteErr", "encoderWriteErr", "slotWriteErr", "fieldWriteErr", "morseProfileWriteErr", "morseProfileDeleteErr",
+  "keyWriteErr", "encoderWriteErr", "slotWriteErr", "fieldWriteErr",
 ]);
 
 function withStep(before: WorkbenchState, after: WorkbenchState, join: boolean): WorkbenchState {
@@ -170,10 +156,6 @@ export function makeWorkbenchReducer(cols: number) {
       }
       case "historyStroke":
         return { ...state, history: { ...state.history, stroke: act.open ? "open" : "none" } };
-      case "historySuspend":
-        return { ...state, history: { ...state.history, suspended: act.suspended } };
-      case "historyClear":
-        return { ...state, history: { ...emptyHistory(), suspended: state.history.suspended } };
       case "batchMode": {
         // Leaving Draft needs the drafted keys, encoders and slots sent or
         // discarded, never silently written or dropped.

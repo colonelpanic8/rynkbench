@@ -20,7 +20,7 @@ export type {
 } from "../model/workbench-state";
 export { initialWorkbenchState } from "./initial-state";
 export { makeWorkbenchReducer } from "./reducer";
-export { encoderPendingId, keyPendingId, morseProfilePendingId, slotPendingId } from "./pending";
+export { encoderPendingId, keyPendingId, slotPendingId } from "./pending";
 export {
   activeLightingBase,
   activeLightingDraft,
