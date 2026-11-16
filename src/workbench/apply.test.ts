@@ -21,7 +21,7 @@ async function withBoard(
   const session = await mockProvider({
     ...glove80Board,
     defaultLayers: glove80Board.defaultLayers.map((layer, index) =>
-      layer.map((action, offset) => (index === 0 && offset < 2 ? (offset === 0 ? "A" : "B") : action)),
+      layer.map((action, offset) => (index === 0 && offset < 2 ? letter(offset === 0 ? "A" : "B") : action)),
     ),
   }).connect();
   try {
