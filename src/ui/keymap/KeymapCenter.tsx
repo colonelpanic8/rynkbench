@@ -259,8 +259,8 @@ export function KeymapCenter() {
           onKeyHover={setHovered}
           onKeyPointerDown={(key, event) => {
             moves.cancelKeyboardMove();
-            // Any other button opens the quick menu, which selects for itself.
-            if (chosen.press(key, event) || event.button !== 0) return;
+            // A secondary click opens the quick menu, which selects for itself.
+            if (chosen.press(key, event) || chosen.secondary(event)) return;
             if (light.brush) {
               beginStroke(dispatch);
               paintKey(key, light.brush);

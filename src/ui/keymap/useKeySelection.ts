@@ -1,16 +1,20 @@
-// Selecting several keys on the keymap canvas (model/key-selection.ts): Ctrl or
-// ⌘ with a click adds or removes a key, and held through a drag does the same
-// for every key the pointer crosses; Shift with a click extends to that key.
+// Selecting several keys on the keymap canvas (model/key-selection.ts): ⌘ on
+// Apple computers, Ctrl elsewhere, with a click adds or removes a key, and held
+// through a drag does the same for every key the pointer crosses; Shift with a
+// click extends to that key. A secondary click (Ctrl with a click on a Mac)
+// never selects.
 // From the keyboard the same modifiers work with Enter or Space. While the
 // canvas is choosing keys (the RGB Lighting tab's Select, a pick for a status
 // setup) a plain press does it. A drag that selects never moves a key.
 
 import { useMemo, useRef } from "react";
 import type { KeyPlace } from "../../model/key-moves";
-import { selectedKeys, selectGesture, selectionExtended, type SelectHow } from "../../model/key-selection";
+import { secondaryPress, selectedKeys, selectGesture, selectionExtended, type Held, type SelectHow } from "../../model/key-selection";
+import { detectOs } from "../preferences";
 import { useWorkbench } from "../state";
 
-type Held = { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean };
+/** The computer this page runs on is an Apple one: its modifiers decide. */
+export const onApple = () => detectOs() === "mac";
 const idOf = (key: KeyPlace) => `${key.row},${key.col}`;
 
 export function useKeySelection(choosing: "one" | "many" | null) {
@@ -20,8 +24,10 @@ export function useKeySelection(choosing: "one" | "many" | null) {
   const stroke = useRef<SelectHow | null>(null);
   const selecting = useRef(false);
 
+  const apple = useMemo(onApple, []);
+
   const act = (key: KeyPlace, held: Held): boolean => {
-    const gesture = selectGesture(choosing, held);
+    const gesture = selectGesture(choosing, held, apple);
     const place = { row: key.row, col: key.col };
     stroke.current = null;
     if (gesture === "only") dispatch({ type: "select", selection: { type: "key", ...place } });
@@ -37,9 +43,11 @@ export function useKeySelection(choosing: "one" | "many" | null) {
     /** How many keys are selected. */
     count: chosen.size,
     has: (key: KeyPlace) => chosen.has(idOf(key)),
+    /** A secondary press opens the quick menu: no click, Paint, move or selection. */
+    secondary: (event: Held & { button: number }) => secondaryPress(event, apple),
     /** A press on a key: whether it changed the selection, and so is no click, Paint or move. */
     press(key: KeyPlace, event: Held & { button: number }): boolean {
-      selecting.current = event.button === 0 && act(key, event);
+      selecting.current = !secondaryPress(event, apple) && act(key, event);
       if (!selecting.current) stroke.current = null;
       return selecting.current;
     },

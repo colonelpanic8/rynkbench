@@ -2,8 +2,8 @@
 // choice for the key on the layer shown (Off, Color, Layer below, and with the
 // firmware's rule table Status light), the chosen one's fields under it, and
 // Paint, which makes the choice a brush for the canvas (one undo step per
-// stroke). With several keys selected (Select, or Ctrl/⌘ and Shift with a
-// click) a choice gives them all that light, as one change and one undo step.
+// stroke). With several keys selected (Select, or ⌘ on a Mac, Ctrl elsewhere,
+// and Shift with a click) a choice gives them all that light, as one change and one undo step.
 // While the tab is open the canvas shows the board under its lights. At the
 // foot, the whole layer's lights can be cleared, after a question.
 // Changes join the draft (sent with Review & send; in Live, once painting
@@ -25,6 +25,7 @@ import { BrushIcon, MarqueeIcon } from "../icons";
 import { KeyLightFields } from "./KeyLightFields";
 import { lightView, useLightView } from "./lightView";
 import { useKeyLights } from "./useKeyLights";
+import { onApple } from "./useKeySelection";
 
 const [RED] = LED_PRESETS;
 
@@ -129,7 +130,7 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
         <button
           type="button"
           aria-pressed={view.selecting}
-          title="Select several keys. Also: Ctrl/⌘ with a click or a drag, Shift with a click."
+          title={`Select several keys. Also: ${onApple() ? "⌘" : "Ctrl"} with a click or a drag, Shift with a click.`}
           onClick={() => lightView.setSelecting(!view.selecting)}
           className={toolClass(view.selecting)}
         >

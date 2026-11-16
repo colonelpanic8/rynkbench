@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Selection } from "./workbench-state";
-import { ledsOf, selectedKeys, selectGesture, selectionExtended, selectionShowing, selectionWith } from "./key-selection";
+import { ledsOf, secondaryPress, selectedKeys, selectGesture, selectionExtended, selectionShowing, selectionWith } from "./key-selection";
 
 const at = (row: number, col: number) => ({ row, col });
 const one: Selection = { type: "key", row: 0, col: 0 };
@@ -47,13 +47,27 @@ describe("the keys selected on the keymap", () => {
     expect(ledsOf(board, selectedKeys(three))).toEqual([7, 3]);
   });
 
-  it("reads a press: Ctrl or ⌘ adds or removes, Shift extends, and a canvas choosing keys needs neither", () => {
+  it("reads a press: the toggle key adds or removes, Shift extends, and a canvas choosing keys needs neither", () => {
     const none = { ctrlKey: false, metaKey: false, shiftKey: false };
-    expect(selectGesture(null, none)).toBeNull();
-    expect(selectGesture(null, { ...none, ctrlKey: true })).toBe("toggle");
-    expect(selectGesture(null, { ...none, metaKey: true })).toBe("toggle");
-    expect(selectGesture(null, { ...none, shiftKey: true })).toBe("extend");
-    expect(selectGesture("many", none)).toBe("toggle");
-    expect(selectGesture("one", { ...none, ctrlKey: true })).toBe("only");
+    expect(selectGesture(null, none, false)).toBeNull();
+    expect(selectGesture(null, { ...none, ctrlKey: true }, false)).toBe("toggle");
+    expect(selectGesture(null, { ...none, metaKey: true }, true)).toBe("toggle");
+    expect(selectGesture(null, { ...none, shiftKey: true }, false)).toBe("extend");
+    expect(selectGesture("many", none, false)).toBe("toggle");
+    expect(selectGesture("one", { ...none, ctrlKey: true }, false)).toBe("only");
+  });
+
+  it("toggles with ⌘ on Apple computers and Ctrl elsewhere, never with the other", () => {
+    const none = { ctrlKey: false, metaKey: false, shiftKey: false };
+    expect(selectGesture(null, { ...none, ctrlKey: true }, true)).toBeNull();
+    expect(selectGesture(null, { ...none, metaKey: true }, false)).toBeNull();
+  });
+
+  it("reads Ctrl with a click on a Mac as the secondary click, which never selects", () => {
+    const click = { ctrlKey: false, metaKey: false, shiftKey: false, button: 0 };
+    expect(secondaryPress({ ...click, ctrlKey: true }, true)).toBe(true);
+    expect(secondaryPress({ ...click, ctrlKey: true }, false)).toBe(false);
+    expect(secondaryPress({ ...click, metaKey: true }, true)).toBe(false);
+    expect(secondaryPress({ ...click, button: 2 }, false)).toBe(true);
   });
 });
