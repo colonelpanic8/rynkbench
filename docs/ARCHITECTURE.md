@@ -1,6 +1,27 @@
 # Architecture
 
-One map of Rynkbench: the layers, where a piece of code goes, and how a change travels from a click to the keyboard and back. The decisions behind it are in `docs/adr/`; this page links them and does not repeat them.
+One map of Rynkbench: why it is built this way, the layers, where a piece of code goes, and how a change travels from a click to the keyboard and back. The decisions behind it are in `docs/adr/`; this page links them and does not repeat them.
+
+## Why it is built this way
+
+A keyboard configurator has one job it must never get wrong: what you see is what the keyboard does. Most get there by trust; Rynkbench gets there by construction. Five ideas carry it, and each one removes a whole class of bugs instead of fixing them one at a time.
+
+**1. Two pictures, and a change is the difference between them** (ADR 0018). The workbench holds what the keyboard holds (`base`) and what you want (`want`), both as a `KeyboardImage`. Every edit, one key or a hundred, changes only `want`. Everything else follows from comparing the two: the draft is their difference, Review & send lists it, Send writes only it, the read-back moves `base`, and a crash or a closed tab loses nothing because the difference is kept. There is no second bookkeeping to drift out of step, because there is nothing to keep but two images.
+
+**2. One way to the keyboard** (ADR 0012, `docs/sync.md`). Every write, from every screen, goes the same way: read the keyboard fresh, check that nobody changed the same thing meanwhile, write only what differs, read it back. Nothing is written "to be sure", nothing unchanged is sent, and a change made on the keyboard elsewhere is noticed instead of overwritten. One path means one place to make right, and it is.
+
+**3. A change is a named, pure function** (ADR 0019, ADR 0020). A swap, a layer move, a transform, a new macro, a rename: each is an operation, image in, image out, with typed inputs described as data. It cannot touch the keyboard, ask a question or depend on a screen, so it is tested in milliseconds without a board. Applying it is always the same: Guard judges the result, it becomes one commit and one Undo step, and the mode decides when it is written; in Live it is all or nothing. Because operations are listed in a catalog, a Flow or an assistant (WebMCP) will call exactly what a person's click calls, through the same Guard and the same Undo, with no second implementation to trust.
+
+**4. A guard that understands the layout** (ADR 0011). Guard reads the reference graph (`domain/`: which key, combo, fork or tap pattern refers to which layer or slot) and judges the change as a whole, before it is made. It stops what would break a reference and asks about what would cut a layer off, and it says nothing otherwise. It sees an operation's result, not the clicks that led there, so a bulk change is judged like a single key.
+
+**5. Layers that cannot lean the wrong way** (ADR 0001, ADR 0017). Pure data at the bottom, the write path above it, operations above that, the workbench above those, screens on top. The rules are tests (`src/architecture/boundaries.ts`): a screen that reaches for a transport, an operation that reaches for a session, or a core module that reaches for React fails the build. What a screen offers comes from capabilities (ADR 0002), never from the firmware's version or a board's name, so a plain RMK board, a Glove80 and a file opened without a keyboard run the same code.
+
+What this buys, concretely:
+- **Undo means undo,** for every edit, in Draft and Live, and in Live it puts the keyboard back. A whole file import is one step too (ADR 0023).
+- **Nothing half-written.** A send that fails part-way leaves the rest in the draft; a Live change that fails part-way is put back.
+- **Fast, honest tests.** The rules are pure functions; the screens render in a test workbench; a simulated board stands in for the keyboard. The whole suite runs in about a minute and covers what a person can do.
+- **New features are small.** A new bulk change is one operation and its test; staging, Guard, Send, Undo and Live atomicity come with it. The whole Behavior Library (ADR 0020) added seven operations and screens that call them, and no new write path.
+- **Ready for automation.** The catalog is the API: what Flows and WebMCP will call is already what the screens call.
 
 ## The layers
 
