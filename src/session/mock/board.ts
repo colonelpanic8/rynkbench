@@ -554,6 +554,10 @@ class MockSession implements RynkSession {
       latency(() => {
         this.layers[this.checkLayer(layer)][this.keyIndex(row, col)] = action;
       }),
+    setRows: (layer, startRow, actions) =>
+      latency(() => {
+        this.layers[this.checkLayer(layer)].splice(this.keyIndex(startRow, 0), actions.length, ...actions);
+      }),
     getEncoder: (encoderId, layer) =>
       latency(() => this.encoders[this.checkLayer(layer)][this.checkEncoder(encoderId)]),
     setEncoder: (encoderId, layer, action) =>

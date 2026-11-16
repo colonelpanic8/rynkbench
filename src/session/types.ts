@@ -145,6 +145,10 @@ export interface KeymapOps {
   replaceAll(layers: LayerKeymap[]): Promise<void>;
   /** Write one cell, resending while the firmware answers `Busy`. */
   setKey(layer: number, row: number, col: number, action: KeyAction): Promise<void>;
+  /** Write whole rows of one layer: `actions` holds every cell of the rows from
+   *  `startRow` on. The firmware stores a row segment per flash item, so a
+   *  changed row costs one write however many of its cells changed. */
+  setRows(layer: number, startRow: number, actions: KeyAction[]): Promise<void>;
   getEncoder(encoderId: number, layer: number): Promise<EncoderAction>;
   setEncoder(encoderId: number, layer: number, action: EncoderAction): Promise<void>;
   currentLayer(): Promise<number>;

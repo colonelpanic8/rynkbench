@@ -442,9 +442,11 @@ async function writeBehaviors(
   return { applied, skipped };
 }
 
-/** Write only the cells that differ, one key at a time with the same optimistic
- *  dispatch the editor uses, so a partial failure leaves the UI showing exactly
- *  which key refused. */
+/** Write every row holding a cell that differs, whole: the firmware stores a row
+ *  segment per flash item, so a changed row costs one write however many of its
+ *  cells changed. One row per request, with the same optimistic dispatch the
+ *  editor uses on its changed cells, so a failure leaves the UI showing exactly
+ *  which row refused. */
 async function writeChangedKeys(
   snapshot: RuntimeSnapshot,
   session: RynkSession,
@@ -455,22 +457,27 @@ async function writeChangedKeys(
   const cols = bundle.caps.num_cols;
   let changed = 0;
   for (let layer = 0; layer < snapshot.layers.length; layer += 1) {
-    for (let offset = 0; offset < snapshot.layers[layer].length; offset += 1) {
-      const action = snapshot.layers[layer][offset];
-      const previous = state.layers[layer][offset];
-      if (same(action, previous)) continue;
-      const row = Math.floor(offset / cols);
-      const col = offset % cols;
-      dispatch({ type: "keyWriteStart", layer, row, col, action });
+    for (let start = 0; start < snapshot.layers[layer].length; start += cols) {
+      const row = start / cols;
+      const actions = snapshot.layers[layer].slice(start, start + cols);
+      const cells = actions
+        .map((action, col) => ({ action, col, prev: state.layers[layer][start + col] }))
+        .filter(({ action, prev }) => !same(action, prev));
+      if (cells.length === 0) continue;
+      for (const { col, action } of cells) {
+        dispatch({ type: "keyWriteStart", layer, row, col, action });
+      }
       try {
-        await session.keymap.setKey(layer, row, col, action);
-        dispatch({ type: "keyWriteOk", layer, row, col });
-        changed += 1;
+        await session.keymap.setRows(layer, row, actions);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        dispatch({ type: "keyWriteErr", layer, row, col, prev: previous, attempted: action, message });
-        throw new Error(`Writing layer ${layer} r${row},c${col}: ${message}`);
+        for (const { col, action, prev } of cells) {
+          dispatch({ type: "keyWriteErr", layer, row, col, prev, attempted: action, message });
+        }
+        throw new Error(`Writing layer ${layer} row ${row}: ${message}`);
       }
+      for (const { col } of cells) dispatch({ type: "keyWriteOk", layer, row, col });
+      changed += cells.length;
     }
   }
   if (snapshot.default_layer !== state.defaultLayer) {

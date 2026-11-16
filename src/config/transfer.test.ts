@@ -64,7 +64,7 @@ holds = 1
 
 interface Recorded {
   metadataWrites: [number, LayerMetadata][];
-  keyWrites: number;
+  rowWrites: [number, number, number][];
   actions: WorkbenchAction[];
 }
 
@@ -72,11 +72,11 @@ interface Recorded {
  *  records what reaches it. The keymap already matches the document, so layer
  *  metadata is the only difference left to write. */
 function harness(layerMetadata: LayerMetadata[] | null) {
-  const recorded: Recorded = { metadataWrites: [], keyWrites: 0, actions: [] };
+  const recorded: Recorded = { metadataWrites: [], rowWrites: [], actions: [] };
   const session = {
     keymap: {
-      setKey: async () => {
-        recorded.keyWrites += 1;
+      setRows: async (layer: number, row: number, actions: unknown[]) => {
+        recorded.rowWrites.push([layer, row, actions.length]);
       },
       setDefaultLayer: async () => {},
       setLayerMetadata: async (layer: number, metadata: LayerMetadata) => {
@@ -148,6 +148,13 @@ describe("importDocument layer names", () => {
     });
     expect(result.applied).toContain("1 layer name");
     expect(result.skipped).toEqual([]);
+    // Changed keys travel as whole rows, each row once however many of its keys changed.
+    expect(recorded.rowWrites.length).toBeGreaterThan(0);
+    expect(recorded.rowWrites.length).toBeLessThan(result.changedKeys);
+    expect(recorded.rowWrites.every(([, , cells]) => cells === 14)).toBe(true);
+    expect(new Set(recorded.rowWrites.map(([layer, row]) => `${layer}:${row}`)).size).toBe(
+      recorded.rowWrites.length,
+    );
   });
 
   it("reports rather than writes names on firmware without metadata", async () => {
@@ -185,7 +192,7 @@ describe("importDocument pointing configuration", () => {
     let accepted: PointingConfig | null = current;
     const session = {
       keymap: {
-        setKey: async () => {},
+        setRows: async () => {},
         setDefaultLayer: async () => {},
         setLayerMetadata: async () => {},
       },

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   DeviceCapabilities,
+  KeyAction,
   LightingCapabilities,
   LightingOverlayCell,
   LightingState,
@@ -152,25 +153,37 @@ describe("LinkSession", () => {
     await session.close();
   });
 
-  it("pages a whole-keymap write for the flash queue, not the read page", async () => {
-    const wide = { ...caps, num_cols: 10, bulk_transfer_supported: true };
+  it("hands a whole-keymap write to the client one layer at a time", async () => {
+    const wide = { ...caps, num_layers: 2, num_rows: 1, num_cols: 10, bulk_transfer_supported: true };
     const { session, spies } = harness({
       get_capabilities: async () => wide,
-      get_keymap_bulk: async () => ({ actions: Array.from({ length: 10 }, () => "No") }),
-      set_keymap_bulk: async () => undefined,
+      write_keymap_from: async () => undefined,
     });
+    const actions: KeyAction[] = Array.from({ length: 10 }, () => "No");
 
-    await session.keymap.replaceAll([{ layer: 0, actions: Array.from({ length: 10 }, () => "No") }]);
-
-    const pages = spies.set_keymap_bulk.mock.calls.map(([request]) => request as {
-      start_col: number;
-      actions: string[];
-    });
-    expect(pages.map((page) => [page.start_col, page.actions.length])).toEqual([
-      [0, 4],
-      [4, 4],
-      [8, 2],
+    await session.keymap.replaceAll([
+      { layer: 0, actions },
+      { layer: 1, actions },
     ]);
+
+    expect(spies.write_keymap_from.mock.calls).toEqual([
+      [0, actions],
+      [10, actions],
+    ]);
+    await session.close();
+  });
+
+  it("addresses a row write by its flat offset", async () => {
+    const wide = { ...caps, num_layers: 2, num_rows: 3, num_cols: 4, bulk_transfer_supported: true };
+    const { session, spies } = harness({
+      get_capabilities: async () => wide,
+      write_keymap_from: async () => undefined,
+    });
+    const actions: KeyAction[] = Array.from({ length: 8 }, () => "No");
+
+    await session.keymap.setRows(1, 1, actions);
+
+    expect(spies.write_keymap_from.mock.calls).toEqual([[16, actions]]);
     await session.close();
   });
 
