@@ -43,11 +43,11 @@ describe("stored items", () => {
       { kind: "lighting", layer: 0 },
       { kind: "wakeLayers" },
     ]);
-    expect(planSync(base, want)).not.toEqual([]);
+    expect(planSync(base, want, 2)).not.toEqual([]);
     // The keyboard's own order of scene cells means nothing.
     const reordered = image({ scenes: [lit(1, 1, 9), lit(0, 1, 9)] });
     expect(differences(base, reordered)).toEqual([]);
-    expect(planSync(base, reordered)).toEqual([]);
+    expect(planSync(base, reordered, 2)).toEqual([]);
   });
 
   it("are read and set in an image", () => {

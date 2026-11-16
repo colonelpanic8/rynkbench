@@ -1,5 +1,5 @@
 // The planner: what to write so the keyboard holds the layout you want, and
-// nothing more (ADR 0012, docs/sync.md). RMK stores every key it is sent, even
+// nothing more (ADR 0012, docs/sync.md). RMK stores every row it is sent, even
 // an unchanged one, so only items that differ are listed. The order keeps the
 // keyboard usable if writing stops part-way: what keys will point to is
 // created first, keys and settings change next, what is no longer used goes
@@ -31,6 +31,7 @@ import type {
   MorseProfileEntry,
   PointingConfig,
 } from "../vendor/rynk-wasm/rynk_wasm";
+import { keymapSegments } from "../session/flash-writes";
 import type { LayerMetadata, RuntimeLightingRule } from "../session/types";
 import type { KeyboardImage, SlotTable } from "./image";
 
@@ -40,8 +41,8 @@ export type SyncStep =
   | { kind: "slot"; table: "forks"; index: number; value: Fork }
   | { kind: "macros"; value: MacroOp[][] }
   | { kind: "layerMetadata"; layer: number; value: LayerMetadata }
-  /** Neighbouring keys of one layer, from `start` (row-major offset). */
-  | { kind: "keys"; layer: number; start: number; actions: KeyAction[] }
+  /** Every cell of one row of one layer: the firmware stores a row whole. */
+  | { kind: "keys"; layer: number; row: number; actions: KeyAction[] }
   | { kind: "encoder"; layer: number; id: number; action: EncoderAction }
   | { kind: "defaultLayer"; layer: number }
   | { kind: "behaviorOptions"; value: BehaviorOptions }
@@ -68,25 +69,27 @@ const SLOT_EMPTY: { [T in SlotTable]: (value: never) => boolean } = {
   forks: forkIsEmpty as (value: never) => boolean,
 };
 
-/** Runs of neighbouring offsets whose values differ. */
-function changedRuns<T>(from: readonly T[], to: readonly T[]): { start: number; values: T[] }[] {
-  const runs: { start: number; values: T[] }[] = [];
-  for (let offset = 0; offset < to.length; offset += 1) {
-    if (same(from[offset], to[offset])) continue;
-    const last = runs.at(-1);
-    if (last && last.start + last.values.length === offset) last.values.push(to[offset]);
-    else runs.push({ start: offset, values: [to[offset]] });
+/** The rows of `to`, `cols` cells each, that hold a cell differing from `from`. */
+function changedRows<T>(from: readonly T[], to: readonly T[], cols: number): { row: number; values: T[] }[] {
+  const rows: { row: number; values: T[] }[] = [];
+  for (let start = 0; start < to.length; start += cols) {
+    const values = to.slice(start, start + cols);
+    if (values.some((value, col) => !same(from[start + col], value))) rows.push({ row: start / cols, values });
   }
-  return runs;
+  return rows;
 }
 
 /** A pointing configuration compared without its revision, which the keyboard counts. */
 const pointingBody = (config: PointingConfig | null) => (config ? { ...config, revision: 0 } : null);
 
-/** What to write, in order, so that `from` (what the keyboard holds) becomes `to`. */
-export function planSync(from: KeyboardImage, to: KeyboardImage): SyncStep[] {
+/** What to write, in order, so that `from` (what the keyboard holds) becomes
+ *  `to`, on a keyboard `cols` columns wide. */
+export function planSync(from: KeyboardImage, to: KeyboardImage, cols: number): SyncStep[] {
   if (from.layers.length !== to.layers.length) {
     throw new Error(`the layouts have ${from.layers.length} and ${to.layers.length} layers; a keyboard's layer count is fixed`);
+  }
+  if (!(cols > 0) || to.layers.some((cells) => cells.length % cols !== 0)) {
+    throw new Error(`the layout does not divide into rows of ${cols} keys`);
   }
   const create: SyncStep[] = [];
   const change: SyncStep[] = [];
@@ -109,8 +112,8 @@ export function planSync(from: KeyboardImage, to: KeyboardImage): SyncStep[] {
   });
 
   to.layers.forEach((cells, layer) => {
-    for (const run of changedRuns(from.layers[layer] ?? [], cells)) {
-      change.push({ kind: "keys", layer, start: run.start, actions: run.values });
+    for (const { row, values } of changedRows(from.layers[layer] ?? [], cells, cols)) {
+      change.push({ kind: "keys", layer, row, actions: values });
     }
   });
   to.encoders.forEach((encoders, layer) =>
@@ -170,16 +173,10 @@ function sceneOrder(scenes: readonly LightingSceneCell[]): LightingSceneCell[] {
   return [...scenes].sort((a, b) => a.layer - b.layer || a.led_id - b.led_id);
 }
 
-/** How many items a plan stores: a key run counts each key, every other step one. */
+/** How many flash items a plan stores: a row counts its segments, every other step one. */
 export function storedItems(steps: readonly SyncStep[]): number {
-  return steps.reduce((sum, step) => sum + (step.kind === "keys" ? step.actions.length : 1), 0);
-}
-
-/** The keys a plan writes, as layer, row and column. */
-export function plannedKeys(steps: readonly SyncStep[], cols: number): { layer: number; row: number; col: number }[] {
-  return steps.flatMap((step) =>
-    step.kind === "keys"
-      ? step.actions.map((_, i) => ({ layer: step.layer, row: Math.floor((step.start + i) / cols), col: (step.start + i) % cols }))
-      : [],
+  return steps.reduce(
+    (sum, step) => sum + (step.kind === "keys" ? keymapSegments(0, step.actions.length, step.actions.length) : 1),
+    0,
   );
 }

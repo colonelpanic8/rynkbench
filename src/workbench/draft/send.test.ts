@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mockProvider, storedKeysOf } from "../../session/mock/board";
+import { mockProvider, storedSegmentsOf } from "../../session/mock/board";
 import { glove80Board } from "../../session/mock/glove80";
 import type { RynkSession } from "../../session/types";
 import type { KeyAction } from "../../model/action-types";
@@ -29,14 +29,14 @@ async function inDraft(check: (h: { session: RynkSession; io: ReturnType<typeof 
 }
 
 describe("Send", () => {
-  it("stores only the drafted keys, in one pass, and empties the draft", async () => {
+  it("stores only the rows of the drafted keys, in one pass, and empties the draft", async () => {
     await inDraft(async ({ session, io, state }) => {
       await io.setKey(0, 0, 0, key("F13"));
       await io.setKey(0, 0, 1, key("F14"));
       await io.setKey(1, 2, 3, key("F15"));
-      const before = storedKeysOf(session);
+      const before = storedSegmentsOf(session);
       expect(await io.applyBatch()).toEqual({ ok: true });
-      expect(storedKeysOf(session) - before).toBe(3);
+      expect(storedSegmentsOf(session) - before).toBe(2); // two keys share a row
       expect(draftOf(state()).changes).toEqual([]);
       expect(state().batchBusy).toBe(false);
       const [layer0] = await session.keymap.readAll();
@@ -49,9 +49,9 @@ describe("Send", () => {
       const original = state().layers[0][0];
       await io.setKey(0, 0, 0, key("F13"));
       await io.setKey(0, 0, 0, original);
-      const before = storedKeysOf(session);
+      const before = storedSegmentsOf(session);
       expect(await io.applyBatch()).toEqual({ ok: true });
-      expect(storedKeysOf(session)).toBe(before);
+      expect(storedSegmentsOf(session)).toBe(before);
     });
   });
 
@@ -72,15 +72,15 @@ describe("Send", () => {
     await inDraft(async ({ session, io, state }) => {
       await io.setKey(0, 0, 0, key("F13"));
       await io.setKey(2, 0, 0, key("F14"));
-      const writeKeys = session.keymap.writeKeys;
+      const setRows = session.keymap.setRows;
       let failures = 1;
-      session.keymap.writeKeys = (layer, start, actions) =>
-        layer === 2 && failures-- > 0 ? Promise.reject(new Error("link dropped")) : writeKeys(layer, start, actions);
+      session.keymap.setRows = (layer, row, actions) =>
+        layer === 2 && failures-- > 0 ? Promise.reject(new Error("link dropped")) : setRows(layer, row, actions);
       expect(await io.applyBatch()).toEqual({ ok: false, message: "link dropped" });
       expect(draftOf(state()).changes.map(({ item }) => item)).toEqual([{ kind: "key", layer: 2, offset: 0 }]);
-      const before = storedKeysOf(session);
+      const before = storedSegmentsOf(session);
       expect(await io.applyBatch()).toEqual({ ok: true });
-      expect(storedKeysOf(session) - before).toBe(1);
+      expect(storedSegmentsOf(session) - before).toBe(1);
     });
   });
 

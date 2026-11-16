@@ -34,7 +34,7 @@ async function writeStep(session: RynkSession, step: SyncStep): Promise<void> {
     case "layerMetadata":
       return session.keymap.setLayerMetadata(step.layer, step.value);
     case "keys":
-      return session.keymap.writeKeys(step.layer, step.start, step.actions);
+      return session.keymap.setRows(step.layer, step.row, step.actions);
     case "encoder":
       return session.keymap.setEncoder(step.id, step.layer, step.action);
     case "defaultLayer":
@@ -100,7 +100,7 @@ export async function writePlan(
 export interface SyncResult {
   /** What the keyboard holds after writing, read back. */
   readback: ReadImage;
-  /** Items stored by this sync (keys count one each). */
+  /** Flash items stored by this sync (a key row counts its segments). */
   stored: number;
 }
 
@@ -113,10 +113,11 @@ export async function syncTo(
   features: ImageFeatures,
   onProgress?: (done: number, total: number) => void,
 ): Promise<SyncResult> {
-  const steps = planSync(now, want);
+  const { num_cols: cols } = await session.device.capabilities();
+  const steps = planSync(now, want, cols);
   await writePlan(session, steps, onProgress);
   const readback = await readImage(session, { ...features, ...partsOf(want) });
-  const left = planSync(readback, want);
+  const left = planSync(readback, want, cols);
   if (left.length > 0) {
     throw new Error(`the keyboard holds something else for ${storedItems(left)} item(s) after writing; try again`);
   }

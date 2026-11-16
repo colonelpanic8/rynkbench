@@ -69,13 +69,13 @@ describe("applying an operation (ADR 0019)", () => {
   it("in Live: all or nothing; a send that stops part-way is put back and leaves no step", async () => {
     await withBoard(false, async (session, io, state) => {
       const before = await firstTwo(session);
-      const write = session.keymap.writeKeys.bind(session.keymap);
+      const write = session.keymap.setRows.bind(session.keymap);
       let calls = 0;
-      vi.spyOn(session.keymap, "writeKeys").mockImplementation(async (layer, start, actions) => {
+      vi.spyOn(session.keymap, "setRows").mockImplementation(async (layer, row, actions) => {
         calls += 1;
-        // The second run of keys fails; the first already reached the keyboard.
+        // The second row fails; the first already reached the keyboard.
         if (calls === 2) throw new Error("flash failed");
-        return write(layer, start, actions);
+        return write(layer, row, actions);
       });
       const keys = [
         { layer: 0, row: 0, col: 0, action: letter("X") },
