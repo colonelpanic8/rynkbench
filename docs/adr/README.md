@@ -23,5 +23,6 @@ One short page per decision that shapes the code, so the reason survives the peo
 | [0017](0017-a-core-for-the-workbench.md) | A core for the workbench: `workbench/` between the core and the screens | Accepted |
 | [0018](0018-the-draft-is-a-wanted-image.md) | The draft is a wanted image beside its base; one history in Draft and Live | Accepted |
 | [0019](0019-operations.md) | Operations: named changes from one image to another; realtime lighting | Accepted |
+| [0020](0020-behavior-library.md) | The Behavior Library: names beside the slots, one editor, every edit an operation | Accepted |
 
 The glossary is in [../glossary.md](../glossary.md).
