@@ -49,8 +49,10 @@
           cargoRoot = "rynk";
           buildAndTestSubdir = "rynk";
 
+          # RMK patches crates.io with git revisions (Embassy, TrouBLE, bluest).
           cargoLock = {
             lockFile = ./nix/rynk-wasm-Cargo.lock;
+            allowBuiltinFetchGit = true;
           };
           nativeBuildInputs = [
             pkgs.binaryen
@@ -63,6 +65,11 @@
             # Store copies are read-only; leaving it so turns "this lock is
             # stale for the pinned rmk" into an unreadable permission error.
             chmod u+w rynk/Cargo.lock
+            # The vendor dir holds only locked packages, so cargo cannot load
+            # the git patches this workspace leaves unused while offline.
+            for crate in $(awk '/^\[\[patch\.unused\]\]/ { getline; gsub(/name = |"/, ""); print }' rynk/Cargo.lock); do
+              sed -i "/^$crate *= *{ git/d" rynk/Cargo.toml
+            done
           '';
 
           buildPhase = ''
@@ -108,7 +115,10 @@
             cp -r ${rmk} "$out/dependencies/rmk"
           '';
 
-          cargoLock.lockFile = "${moergo-rmk}/Cargo.lock";
+          cargoLock = {
+            lockFile = "${moergo-rmk}/Cargo.lock";
+            allowBuiltinFetchGit = true;
+          };
           nativeBuildInputs = [
             pkgs.binaryen
             pkgs.wasm-bindgen-cli_0_2_126
