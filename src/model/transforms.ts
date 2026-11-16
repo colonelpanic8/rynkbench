@@ -178,21 +178,6 @@ export function planSize(plan: TransformPlan): number {
   );
 }
 
-/** Why a transform may not run right now, or null when it may.
- *
- *  A transform writes key cells through `io.setKey`, which batch mode stages
- *  instead of sending, while its combo/morse/fork/macro writes go straight to
- *  the device. Running under staged edits would put half the plan on the
- *  keyboard and leave the other half in a local buffer. */
-export function transformBlockedReason(
-  batchMode: boolean,
-  stagedEdits: number,
-): string | null {
-  return batchMode || stagedEdits > 0
-    ? "Apply or discard staged edits before running a transform."
-    : null;
-}
-
 /** Just the keymap cells. The layout switch reports these separately because
  *  its non-key writes follow from them rather than being chosen. */
 export function planKeyCount(plan: TransformPlan): number {

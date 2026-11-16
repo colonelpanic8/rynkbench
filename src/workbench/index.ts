@@ -47,3 +47,4 @@ export {
   type WorkbenchDispatch,
   type WorkbenchIo,
 } from "./io";
+export { factsOf, ledNodesOf, passEverything, type Judge } from "./apply";

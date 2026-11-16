@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
-import type { ConnectedBundle } from "../workbench";
+import { ledNodesOf, type ConnectedBundle } from "../workbench";
 import { WorkbenchContext, useWorkbench } from "./state";
 import {
   initialWorkbenchState,
@@ -16,7 +16,7 @@ import { TopBar } from "./TopBar";
 import { KeymapCenter } from "./keymap/KeymapCenter";
 import { KeymapInspector } from "./keymap/SideInspector";
 import { DraftKeeper } from "./draft/DraftKeeper";
-import { guardIo } from "./guard/guardIo";
+import { guardIo, guardJudge } from "./guard/guardIo";
 import { useHistory } from "./draft/useHistory";
 import { ComboEditor } from "./keymap/ComboEditor";
 import { ComboFocusCanvas } from "./keymap/ComboFocusCanvas";
@@ -215,6 +215,8 @@ export function Workbench({
           cols: bundle.caps.num_cols,
           onDisconnect: onClose,
           features: ioFeaturesFor(bundle),
+          judge: guardJudge(bundle),
+          ledNodes: ledNodesOf(bundle),
         }),
         bundle,
         () => stateRef.current,

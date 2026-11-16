@@ -20,7 +20,7 @@ import { activeLightingBase, activeLightingDraft } from "./lighting-drafts";
 import { canTravel, draftEditCount, pointingDraftDirty } from "./draft/selectors";
 import { emptyHistory } from "./draft/history";
 import { normalizePointingConfig } from "../model/pointing";
-import { draftOf, storedImage } from "./draft/want";
+import { draftOf, storedImage, wantOf } from "./draft/want";
 import { writePlan } from "../sync";
 import { makeIo } from "./io";
 import { makeWorkbenchReducer } from "./reducer";
@@ -882,94 +882,8 @@ describe("layer management state", () => {
         { occupied: true, name: "Nav" },
       ],
     });
-    const next = reducer(state, {
-      type: "layerOperationApplied",
-      rewrite: {
-        order: [1, 0],
-        metadata: [
-          { occupied: true, name: "Nav" },
-          { occupied: true, name: "Base" },
-        ],
-        layers: state.layers,
-        encoders: [[], []],
-        defaultLayer: 1,
-        activeLayers: [1],
-        combos: [],
-        morse: [],
-        forks: [],
-        behaviorOptions: null,
-        autoMouseLayers: [],
-        scenes: [],
-        runtimeConditionalScenes: [],
-        compiledScenes: [],
-        compiledConditionalScenes: [],
-        wakeLayers: 0,
-        pointing: null,
-      },
-    });
-
+    const next = reducer(state, { type: "commit", image: wantOf(state), layerOrder: [1, 0] });
     expect(next.uiLayer).toBe(0);
-  });
-
-  it("keeps the applied pointing state and draft synchronized after a layer rewrite", () => {
-    const rewrittenPointing: PointingConfig = {
-      revision: 6,
-      device_count: 1,
-      devices: [
-        {
-          device_id: 3,
-          mode: {
-            Cursor: { multiplier_x: 1, multiplier_y: 1, divisor_x: 1, divisor_y: 1, invert_x: false, invert_y: false },
-          },
-        },
-      ],
-      override_count: 1,
-      overrides: [
-        {
-          layer: 0,
-          device_id: 3,
-          mode: {
-            Press: {
-              cursor: { multiplier_x: 1, multiplier_y: 1, divisor_x: 1, divisor_y: 1, invert_x: false, invert_y: false },
-              holds: 1,
-            },
-          },
-        },
-      ],
-    };
-    const state = baseState({
-      pointingConfig: rewrittenPointing,
-      pointingDraft: { ...rewrittenPointing, revision: 5 },
-    });
-    const next = reducer(state, {
-      type: "layerOperationApplied",
-      rewrite: {
-        order: [0, 1],
-        metadata: [
-          { occupied: true, name: "Base" },
-          { occupied: true, name: "Layer 1" },
-        ],
-        layers: state.layers,
-        encoders: [[], []],
-        defaultLayer: 0,
-        activeLayers: [0],
-        combos: [],
-        morse: [],
-        forks: [],
-        behaviorOptions: null,
-        autoMouseLayers: [],
-        scenes: [],
-        runtimeConditionalScenes: [],
-        compiledScenes: [],
-        compiledConditionalScenes: [],
-        wakeLayers: 0,
-        pointing: rewrittenPointing,
-      },
-    });
-
-    expect(next.pointingConfig?.devices).toHaveLength(4);
-    expect(next.pointingDraft).toEqual(next.pointingConfig);
-    expect(pointingDraftDirty(next)).toBe(false);
   });
 });
 

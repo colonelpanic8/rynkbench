@@ -5,6 +5,7 @@ import type { KeyAction } from "../vendor/rynk-wasm/rynk_wasm";
 import { errorMessage } from "../session/errors";
 import { sendStaged } from "./draft/send";
 import { canTravel } from "./draft/selectors";
+import { applyOperation } from "./apply";
 import type { IoContext, IoWriteResult, WorkbenchIo } from "./io";
 
 type KeyIo = Pick<WorkbenchIo, "setKey" | "writeKeys" | "travel" | "applyBatch" | "loadEncoder" | "setEncoder">;
@@ -39,21 +40,8 @@ export function keyIo(context: IoContext): KeyIo {
 
   return {
     setKey,
-    async writeKeys(edits, options) {
-      // One change (a swap, a paste) is one step of the history, like a Paint stroke.
-      const joining = edits.length > 1 && getState().history.stroke === "none";
-      if (joining) dispatch({ type: "historyStroke", open: true });
-      let first: IoWriteResult = { ok: true };
-      try {
-        for (const edit of edits) {
-          const result = await setKey(edit.layer, edit.row, edit.col, edit.action);
-          options?.onWritten?.(result.ok);
-          if (first.ok && !result.ok) first = result;
-        }
-      } finally {
-        if (joining) dispatch({ type: "historyStroke", open: false });
-      }
-      return first;
+    writeKeys(edits) {
+      return applyOperation(context, "set_keys", { keys: edits });
     },
     async travel(direction) {
       const state = getState();

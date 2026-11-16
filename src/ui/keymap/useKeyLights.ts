@@ -1,7 +1,7 @@
 // Reading and writing keys' lights on the layer shown, for the RGB Lighting
 // tab and for Paint on the canvas. A light lives in the layer's scene (Off, a
-// colour, Layer below) or in the rule table (a status light); both are staged
-// in the draft and sent with it. Your colours and changing one colour
+// colour, Layer below) or in the rule table (a status light); setting one is
+// the set_key_light operation (ADR 0019), one Undo step. Your colours and changing one colour
 // everywhere work over every layer's scene and the rules you coloured.
 
 import { useMemo } from "react";
@@ -19,12 +19,12 @@ import {
 } from "../../model/lighting/key-light";
 import { statusLightOf } from "../../model/lighting/status-light";
 import { targetPreviewEffects } from "../../model/lighting/preview";
-import { lightingDraftFor } from "../../workbench";
+import { ledNodesOf, lightingDraftFor } from "../../workbench";
 import { useWorkbench } from "../state";
 import { useCapability } from "../use-capabilities";
 
 export function useKeyLights() {
-  const { bundle, state, dispatch } = useWorkbench();
+  const { bundle, state, dispatch, io } = useWorkbench();
   const scenes = useCapability("lighting.scenes");
   const rulesTable = useCapability("lighting.rules");
   const layer = state.uiLayer;
@@ -34,11 +34,7 @@ export function useKeyLights() {
   const coloured = rules.filter(pickedColor);
   const preview = useMemo(() => targetPreviewEffects(layer, draft, state.compiledScenes), [layer, draft, state.compiledScenes]);
 
-  // A lock or battery light watches the half of a split board its key is on.
-  const nodeOf = (led: number) => {
-    const key = bundle.model.keys.find((candidate) => candidate.ledId === led);
-    return bundle.caps.is_split && key?.address?.startsWith("RH") ? 1 : 0;
-  };
+  const nodes = useMemo(() => ledNodesOf(bundle), [bundle]);
   const everyCell = () => layers.flatMap((index) => Object.values(lightingDraftFor(state, index)));
 
   return {
@@ -53,9 +49,14 @@ export function useKeyLights() {
     preview,
     lightOf: (led: number): KeyLight => keyLightOf(preview.get(led), statusLightOf(rules, layer, led)),
 
-    /** Gives keys a light on the layer shown (staged). */
+    /** Gives keys a light on the layer shown: one change, judged and undone as one. */
     set(light: KeyLight, leds: readonly number[]) {
-      const plan = planLight(light, leds, layer, rules, nodeOf);
+      return io.apply("set_key_light", { layer, leds, light });
+    },
+    /** Paint: a key under the brush gets its light. A stroke is one step, and in
+     *  Live it is written once the painting pauses (a scene is written whole). */
+    paint(light: KeyLight, led: number) {
+      const plan = planLight(light, [led], layer, rules, (each) => nodes[each] ?? 0);
       if (plan.paint.length) dispatch({ type: "paint", cells: plan.paint, target: layer });
       if (plan.erase.length) dispatch({ type: "erase", ledIds: plan.erase, target: layer });
       if (plan.rules) dispatch({ type: "conditionalDraft", cells: plan.rules });

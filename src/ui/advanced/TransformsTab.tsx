@@ -1,9 +1,10 @@
-// Transforms: keymap-wide rewrites applied live through the ordinary write
-// path — the dual-OS Ctrl↔GUI swap and QWERTY→alternate alpha layouts.
+// Transforms: keymap-wide rewrites — the dual-OS Ctrl↔GUI swap and switching
+// alpha layouts. Each is the apply_transform operation (ADR 0019): one change,
+// one Undo step; in Draft it waits for Send, in Live it is sent at once.
 
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { draftEditCount } from "../../workbench";
+import type { TransformChoice } from "../../operations";
 import { useWorkbench } from "../state";
 import { Button, Chip, Panel, SectionLabel } from "../kit";
 import { CenterScroll } from "./bits";
@@ -13,7 +14,6 @@ import {
   planOsSwap,
   planKeyCount,
   planSize,
-  transformBlockedReason,
   type AlphaLayout,
   type LayerMigration,
   type TransformPlan,
@@ -34,12 +34,12 @@ const MIGRATIONS: Array<{ id: LayerMigration; label: string; hint: string }> = [
 
 type RunState =
   | { phase: "idle" }
-  | { phase: "running"; done: number; total: number }
-  | { phase: "done"; written: number; failed: number }
+  | { phase: "running" }
+  | { phase: "done"; changes: number; drafted: boolean }
   | { phase: "error"; message: string };
 
 export function TransformsTab({ nav }: { nav: ReactNode }) {
-  const { bundle, state, dispatch, io, history } = useWorkbench();
+  const { bundle, state, io } = useWorkbench();
   const [run, setRun] = useState<RunState>({ phase: "idle" });
   const [from, setFrom] = useState<AlphaLayout>("qwerty");
   const [to, setTo] = useState<AlphaLayout>("colemak");
@@ -82,40 +82,14 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
   );
 
   const busy = run.phase === "running";
-  const blocked = transformBlockedReason(state.batchMode, draftEditCount(state));
 
-  const execute = async (plan: TransformPlan) => {
-    const total = planSize(plan);
-    if (total === 0 || busy) return;
-    if (blocked !== null) {
-      setRun({ phase: "error", message: blocked });
-      return;
-    }
-    dispatch({ type: "historySuspend", suspended: true });
-    history.clear();
-    let done = 0;
-    let failed = 0;
-    setRun({ phase: "running", done, total });
-    const step = (result: { ok: boolean }) => {
-      if (!result.ok) failed += 1;
-      done += 1;
-      setRun({ phase: "running", done, total });
-    };
-    try {
-      const keys = plan.keys.map((edit) => ({ layer: edit.layer, row: edit.row, col: edit.col, action: edit.after }));
-      const written = await io.writeKeys(keys, { onWritten: (ok) => step({ ok }) });
-      if (!written.ok && written.guarded) return setRun({ phase: "error", message: written.message });
-      for (const edit of plan.combos) step(await io.setSlot("combos", edit.index, edit.after));
-      for (const edit of plan.morse) step(await io.setSlot("morse", edit.index, edit.after));
-      for (const edit of plan.forks) step(await io.setSlot("forks", edit.index, edit.after));
-      if (plan.macroOps) step(await io.writeMacros(plan.macroOps));
-      setRun({ phase: "done", written: total - failed, failed });
-    } catch (err) {
-      setRun({ phase: "error", message: err instanceof Error ? err.message : String(err) });
-    } finally {
-      history.clear();
-      dispatch({ type: "historySuspend", suspended: false });
-    }
+  const execute = async (choice: TransformChoice, plan: TransformPlan) => {
+    const changes = planSize(plan);
+    if (changes === 0 || busy) return;
+    setRun({ phase: "running" });
+    const result = await io.apply("apply_transform", choice);
+    if (result.ok) setRun({ phase: "done", changes, drafted: state.batchMode });
+    else setRun(result.guarded ? { phase: "idle" } : { phase: "error", message: result.message });
   };
 
   /** The chip aggregates key cells with slot-table and macro-region writes;
@@ -137,14 +111,13 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
           <p className="mt-1.5 text-body leading-relaxed text-faint">
             Converts a PC-style keymap to its macOS counterpart (and back — the swap is
             its own inverse). Rewrites every binding that names Ctrl or GUI: keys on all
-            layers, combos, morse slots, forks, and macro steps. Changes are written to
-            the keyboard immediately; export a file first if you want both variants.
+            layers, combos, morse slots, forks, and macro steps. One step to undo.
           </p>
           <div className="mt-4 flex items-center gap-2 border-t border-line-soft pt-4">
             <Button
               variant="primary"
-              disabled={busy || blocked !== null || planSize(osPlan) === 0}
-              onClick={() => execute(osPlan)}
+              disabled={busy || planSize(osPlan) === 0}
+              onClick={() => execute({ transform: "ctrl-gui-swap" }, osPlan)}
             >
               Swap everywhere
             </Button>
@@ -226,8 +199,8 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
           <div className="mt-4 flex items-center gap-2 border-t border-line-soft pt-4">
             <Button
               variant="primary"
-              disabled={busy || blocked !== null || from === to || planSize(layoutPlan) === 0}
-              onClick={() => execute(layoutPlan)}
+              disabled={busy || from === to || planSize(layoutPlan) === 0}
+              onClick={() => execute({ transform: "alpha-layout", from, to, migrations }, layoutPlan)}
             >
               Switch {LAYOUTS.find((entry) => entry.id === from)?.label} →{" "}
               {LAYOUTS.find((entry) => entry.id === to)?.label}
@@ -240,19 +213,12 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
           </div>
         </Panel>
 
-        {blocked !== null && (
-          <div className="text-center text-body text-warn">{blocked}</div>
-        )}
-        {run.phase === "running" && (
-          <div className="text-center text-body text-accent">
-            Writing {run.done}/{run.total}…
-          </div>
-        )}
+        {run.phase === "running" && <div className="text-center text-body text-accent">Writing…</div>}
         {run.phase === "done" && (
-          <div className={run.failed ? "text-center text-body text-warn" : "text-center text-body text-ok"}>
-            {run.failed
-              ? `Wrote ${run.written} changes; ${run.failed} failed — see the key inspector.`
-              : `Wrote ${run.written} ${run.written === 1 ? "change" : "changes"} to the keyboard.`}
+          <div className="text-center text-body text-ok">
+            {run.drafted
+              ? `${run.changes} ${run.changes === 1 ? "change" : "changes"} in the draft.`
+              : `Wrote ${run.changes} ${run.changes === 1 ? "change" : "changes"} to the keyboard.`}
           </div>
         )}
         {run.phase === "error" && (

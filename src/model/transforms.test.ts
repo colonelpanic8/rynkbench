@@ -11,7 +11,6 @@ import {
   planOsSwap,
   planSize,
   primaryHid,
-  transformBlockedReason,
   type TransformInput,
 } from "./transforms";
 
@@ -259,21 +258,5 @@ describe("plan sizing", () => {
     // disagreed by exactly the slot and macro writes.
     expect(planKeyCount(plan)).toBe(1);
     expect(planSize(plan)).toBe(planKeyCount(plan) + plan.combos.length + 1);
-  });
-});
-
-describe("transformBlockedReason", () => {
-  it("refuses while batch mode is on", () => {
-    // Batch mode intercepts io.setKey but not io.setSlot/io.writeMacros, so a
-    // run would put the tables on the device and stage the keys.
-    expect(transformBlockedReason(true, 0)).toMatch(/staged edits/);
-  });
-
-  it("refuses while edits are staged, even with batch mode already off", () => {
-    expect(transformBlockedReason(false, 3)).toMatch(/staged edits/);
-  });
-
-  it("allows a run on a clean workbench", () => {
-    expect(transformBlockedReason(false, 0)).toBeNull();
   });
 });

@@ -3,7 +3,8 @@ import type { KeyAction } from "../../model/action-types";
 import { testWorkbench, type DeepPartial } from "../../test/workbench";
 import { getMessages, resetMessages } from "../messages/store";
 import type { KeyWrite, WorkbenchIo, WorkbenchState } from "../../workbench";
-import { guardIo } from "./guardIo";
+import { guardIo, guardJudge } from "./guardIo";
+import { storedImage } from "../../workbench/draft/want";
 
 const key = (code: string): KeyAction => ({ Single: { Key: { Hid: code } } }) as KeyAction;
 const mo = (layer: number): KeyAction => ({ Single: { LayerOn: layer } }) as KeyAction;
@@ -65,21 +66,9 @@ describe("guardIo", () => {
     expect(writes).toEqual([]);
   });
 
-  it("judges several keys as one change: a swap asks nothing", async () => {
-    const { io, writes } = setup();
-    const swap: KeyWrite[] = [
-      { layer: 0, row: 0, col: 0, action: mo(1) },
-      { layer: 0, row: 0, col: 1, action: key("A") },
-    ];
-    expect(await io.writeKeys(swap)).toEqual({ ok: true });
-    expect(getMessages().confirm).toBeNull();
-    expect(writes).toEqual(swap);
-  });
-
   it("does not send a key the keyboard already holds", async () => {
     const { io, writes } = setup();
     expect(await io.setKey(0, 0, 0, key("A"))).toEqual({ ok: true });
-    expect(await io.writeKeys([{ layer: 0, row: 0, col: 1, action: mo(1) }])).toEqual({ ok: true });
     expect(writes).toEqual([]);
   });
 
@@ -90,5 +79,17 @@ describe("guardIo", () => {
     });
     expect(await io.applyBatch()).toMatchObject({ ok: false, guarded: true });
     expect(writes).toEqual([]);
+  });
+
+  it("judges an operation's result as one change: a swap asks nothing, a cut-off asks", async () => {
+    const workbench = testWorkbench({ bundle: { caps: { num_cols: 2, num_layers: 2 } }, state: {} });
+    const judge = guardJudge(workbench.bundle);
+    const image = (layers: KeyAction[][]) => ({ ...storedImage(workbench.state), layers, metadata: [] });
+    const before = image([[key("A"), mo(1)], [key("B"), "No"]]);
+    expect(await judge(before, image([[mo(1), key("A")], [key("B"), "No"]]))).toEqual({ ok: true });
+    expect(getMessages().confirm).toBeNull();
+    const cut = judge(before, image([[key("A"), key("C")], [key("B"), "No"]]));
+    await answer(false);
+    expect(await cut).toEqual({ ok: false, message: "Rejected, so nothing was changed", guarded: true });
   });
 });

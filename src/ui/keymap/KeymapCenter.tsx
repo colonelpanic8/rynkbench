@@ -164,7 +164,7 @@ export function KeymapCenter() {
 
   /** Paint gives a key the RGB Lighting tab's light, on the layer shown; a stroke is one undo step. */
   const paintKey = (key: KeyView, brush: KeyLight) => {
-    if (key.ledId !== undefined) lights.set(brush, [key.ledId]);
+    if (key.ledId !== undefined) lights.paint(brush, key.ledId);
   };
 
   /** A key on the lit board: its LED's colour (a lock light lit, a battery above its level) and effect. */

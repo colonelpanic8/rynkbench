@@ -11,6 +11,8 @@ Each layer imports only from layers below it. The rules are tests (`src/architec
    │
  workbench/     the open workbench without a screen: state, reducer, io, draft
    │
+ operations/    named changes, image in, image out: the catalog Flows and WebMCP will call
+   │
  sync/          the one write path: read, plan the difference, write, read back
  layers/        layer structure: rewrite plans for move, delete, duplicate
  config/        layout files in and out
@@ -25,7 +27,8 @@ Each layer imports only from layers below it. The rules are tests (`src/architec
 | Layer | Lines | Holds | Never imports |
 |---|---|---|---|
 | `ui/` | 21,400 | Screens (`Workbench.tsx`, areas in `areas.ts`), the context (`state.tsx`), hooks, words (`terms.ts`, `labels.ts`), themes, key faces, the canvas, Guard's questions (`guard/`) | a transport or simulated board, the wire package |
-| `workbench/` | 2,700 | `initial-state`, `reducer` (+ `reduce-lighting`, `reduce-settings`), `pending`, `lighting-drafts`, `io` (+ `io-keys`, `io-layers`, `io-lighting`, `io-settings`), `draft/`, `usage`, `layer-impact` | `ui/`, a transport |
+| `workbench/` | 2,700 | `initial-state`, `reducer` (+ `reduce-lighting`, `reduce-settings`), `pending`, `lighting-drafts`, `io` (+ `io-keys`, `io-layers`, `io-lighting`, `io-settings`), `apply` (an operation's result as one commit), `draft/`, `usage`, `layer-impact` | `ui/`, a transport |
+| `operations/` | 450 | Each operation (`keys`, `layers`, `lighting`, `transform`), the `catalog` with `runOperation`, input checks, Guard's view of an image (ADR 0019) | a session, a reader or writer, `workbench/`, `ui/` |
 | `sync/` | 430 | `image`, `plan`, `write`, `conflicts` (ADR 0012, `docs/sync.md`) | `ui/`, `workbench/`, a transport |
 | `layers/`, `config/`, `domain/`, `firmware/` | 2,100 | Layer rewrites; layout files; the graph and Guard (ADR 0011); firmware releases | `ui/`, `workbench/` |
 | `model/` | 4,900 | Key slots, combos, macros, morse, pointing, history, transforms, `lighting/`, `boards/`, the workbench state's types | `ui/`, `workbench/` |
@@ -62,7 +65,7 @@ Take a key changed in the key editor.
 1. **A screen never writes.** It calls `io` (from `useWorkbench()`), and every key write passes Guard first (ADR 0011).
 2. **`io` decides when.** In Draft the change only changes what you want; the draft is its difference from `base`, what the keyboard held at the last read (ADR 0010, ADR 0018). In Live it is written at once and narrated by actions (`…Start`, then `…Ok` or `…Err`), and `base` with it.
 3. **The reducer is the only place state changes** (`workbench/reducer.ts`). It is pure; topic events from the keyboard arrive through it too.
-4. **Bulk writes go through the one write path.** Send, layer moves and (later) operations and Flows build the keyboard they want as an image; `sync/` plans only the difference, writes it and reads it back (ADR 0012, `docs/sync.md`).
+4. **A bulk change is an operation** (ADR 0019): a pure function from the image you want to the next, listed in the catalog (`operations/`). `io.apply(name, input)` runs it, lets Guard judge the result (the screen's `judge`), and makes it one commit: in Draft it waits for Send, in Live it goes at once through the one write path, all or nothing. `sync/` plans only the difference, writes it and reads it back (ADR 0012, `docs/sync.md`).
 5. **One Undo** (ADR 0018): every edit is a commit to what you want and one step of the history, kept in the workbench state as a patch. Undo commits the inverse, through Guard and the mode like any edit: in Live, Send's path writes it to the keyboard.
 
 ## Where to start reading
@@ -74,6 +77,7 @@ Take a key changed in the key editor.
 | How it reaches the keyboard | `workbench/io.ts`, then `docs/sync.md` |
 | What the draft is | `workbench/draft/changes.ts`, ADR 0010 |
 | What protects a layout | `domain/guard.ts`, ADR 0011 |
+| What a Flow or an assistant can call | `operations/catalog.ts`, `workbench/apply.ts`, ADR 0019 |
 | What a keyboard can do | `capabilities/`, ADR 0002 |
 | How a screen gets all this | `ui/state.tsx` (`useWorkbench`), `ui/Workbench.tsx` |
 | How screens are tested | `src/test/workbench.tsx` (`renderInWorkbench`) |

@@ -55,7 +55,6 @@ import type {
 } from "../session/types";
 import type { BoardProfile } from "./boards";
 import type { KeyboardModel } from "./keyboard";
-import type { LayerRewrite } from "../layers/management";
 import type { KeyboardImage, PatchEntry, SyncItem } from "../sync";
 import type { History } from "./history";
 
@@ -348,8 +347,10 @@ export type WorkbenchAction =
   | { type: "draftRevert"; items: SyncItem[] }
   /** Draft edits of any stored item: these items as you want them. */
   | { type: "wantSet"; values: Array<{ item: SyncItem; value: unknown }> }
-  /** What you want, whole (a layer move in Draft). */
-  | { type: "wantImage"; image: KeyboardImage }
+  /** An operation's result (ADR 0019): what you want, whole, as one step; `join`
+   *  puts it in the last step (Live putting back a send that failed); a layer
+   *  rewrite's `layerOrder` (destination → source slot) moves the layer on show with it. */
+  | { type: "commit"; image: KeyboardImage; join?: boolean; layerOrder?: number[] }
   /** The keyboard was read (Send's read-back): the base is this image. */
   | { type: "draftStored"; image: KeyboardImage }
   /** A kept draft put back: each item based on `before`, wanted as `after`. */
@@ -368,9 +369,7 @@ export type WorkbenchAction =
     }
   | { type: "defaultLayer"; layer: number }
   | { type: "layerOperationStart" }
-  | { type: "layerOperationApplied"; rewrite: LayerRewrite }
-  /** A layer move, delete or duplicate in Draft: what you want, rewritten; `order` is destination → source slot. */
-  | { type: "layerRewriteDrafted"; image: KeyboardImage; order: number[] }
+  | { type: "layerOperationDone" }
   | { type: "layerOperationError"; message: string }
   | { type: "layerMetadataSet"; layer: number; metadata: LayerMetadata }
   | {

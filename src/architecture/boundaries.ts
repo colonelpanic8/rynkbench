@@ -26,7 +26,7 @@ export interface BoundaryRule {
 }
 
 const LAYER_FOLDERS = new Set([
-  "session", "config", "model", "layers", "firmware", "capabilities", "domain", "sync", "workbench", "ui", "vendor", "architecture",
+  "session", "config", "model", "layers", "firmware", "capabilities", "domain", "sync", "operations", "workbench", "ui", "vendor", "architecture",
 ]);
 
 /** Top-level folder of a project-relative path: `src/ui/x.ts` is `ui`, and a
@@ -40,7 +40,9 @@ export function layerOf(path: string): string {
 }
 
 /** Below the workbench: everything the workbench may build on. */
-const BELOW_WORKBENCH = ["session", "config", "model", "layers", "firmware", "capabilities", "domain", "sync"];
+const BELOW_WORKBENCH = ["session", "config", "model", "layers", "firmware", "capabilities", "domain", "sync", "operations"];
+/** The pure parts of the write path: what an image is and how two compare. */
+const PURE_SYNC = ["src/sync/image", "src/sync/items", "src/sync/patch", "src/sync/plan"];
 const CORE_LAYERS = new Set([...BELOW_WORKBENCH, "workbench"]);
 const BACKENDS = ["webhid", "webserial", "webbluetooth", "native", "native-ble", "offline", "mock"];
 
@@ -76,6 +78,19 @@ export const BOUNDARY_RULES: BoundaryRule[] = [
     why: "The write path (src/sync, ADR 0012) works for every keyboard: it uses the session interface, never a transport or a simulated board.",
     breaks: (from, to) =>
       layerOf(from) === "sync" && BACKENDS.some((b) => to === `src/session/${b}` || to.startsWith(`src/session/${b}/`)),
+  },
+  {
+    id: "operations-are-pure",
+    why: "An operation (ADR 0019) is image in, image out: it builds only on the model, the reference graph, the layer planners and the image's pure parts, never on a session, a reader or a writer.",
+    breaks: (from, to) =>
+      layerOf(from) === "operations" &&
+      !["operations", "model", "domain", "layers", "vendor"].includes(layerOf(to)) &&
+      !PURE_SYNC.includes(to),
+  },
+  {
+    id: "operations-above-the-write-path",
+    why: "Operations sit between the write path and the workbench: the layers below them never import them.",
+    breaks: (from, to) => BELOW_WORKBENCH.includes(layerOf(from)) && layerOf(from) !== "operations" && layerOf(to) === "operations",
   },
   {
     id: "core-below-the-workbench",

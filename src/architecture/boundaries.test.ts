@@ -80,6 +80,25 @@ describe("the rules themselves", () => {
   });
 });
 
+describe("operations (ADR 0019)", () => {
+  it("are pure, below the workbench and above the write path", () => {
+    const violations = findViolations({
+      "src/operations/ok.ts": 'import type { K } from "../sync/image";\nimport { p } from "../layers/management";\nimport { g } from "../domain";',
+      "src/operations/reads.ts": 'import { readImage } from "../sync/read";\nimport { s } from "../session/types";',
+      "src/operations/up.ts": 'import { w } from "../workbench";',
+      "src/sync/down.ts": 'import { o } from "../operations";',
+      "src/workbench/ok.ts": 'import { o } from "../operations";',
+    });
+    expect(violations.map((v) => `${v.rule} ${v.from}`).sort()).toEqual([
+      "core-below-the-workbench src/operations/up.ts",
+      "operations-above-the-write-path src/sync/down.ts",
+      "operations-are-pure src/operations/reads.ts",
+      "operations-are-pure src/operations/reads.ts",
+      "operations-are-pure src/operations/up.ts",
+    ]);
+  });
+});
+
 describe("architecture boundaries (ratchet)", () => {
   it("has no violation beyond the baseline, and the baseline holds nothing fixed", () => {
     const violations = findViolations(readSources());

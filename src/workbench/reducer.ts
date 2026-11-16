@@ -5,11 +5,10 @@
 
 import type { EncoderAction, KeyAction } from "../vendor/rynk-wasm/rynk_wasm";
 import type { WorkbenchAction, WorkbenchState } from "../model/workbench-state";
-import { normalizePointingConfig } from "../model/pointing";
 import { draftEditCount } from "./draft/selectors";
 import { applyPatch, patchBetween, withValues, type KeyboardImage } from "../sync";
 import { emptyHistory, recordStep, travel } from "./draft/history";
-import { atBase, storedImage, wantOf, withBase, withItemsAtBase, withRead, withStored, withWant } from "./draft/want";
+import { atBase, wantOf, withBase, withItemsAtBase, withRead, withStored, withWant } from "./draft/want";
 import { encoderPendingId, keyPendingId } from "./pending";
 import { isLightingAction, reduceLighting } from "./reduce-lighting";
 import { isSettingsAction, reduceSettings } from "./reduce-settings";
@@ -67,10 +66,10 @@ function withLiveBase(state: WorkbenchState, parts: readonly (keyof KeyboardImag
 /** Edits: each changes what you want and is one step of the history (ADR 0018).
  *  Reads change it too, by following the keyboard, and are no step. */
 const COMMITS = new Set<WorkbenchAction["type"]>([
-  "keyStage", "encoderStage", "slotStage", "wantSet", "layerRewriteDrafted", "paint", "erase", "draftReset",
+  "keyStage", "encoderStage", "slotStage", "wantSet", "commit", "paint", "erase", "draftReset",
   "conditionalDraft", "conditionalDraftReset", "pointingDraftSet", "pointingDraftReset", "draftRevert", "batchDiscard",
   "keyWriteStart", "encoderWriteStart", "slotWriteStart", "fieldWriteStart", "morseProfileWriteStart",
-  "morseProfileDeleteStart", "defaultLayer", "layerMetadataSet", "layerOperationApplied", "lightingStateSet",
+  "morseProfileDeleteStart", "defaultLayer", "layerMetadataSet", "lightingStateSet",
   "scenePolicySet", "wakeLayersSet", "extensionStateSet",
 ]);
 /** A Live write that failed puts back what it changed: that joins its step. */
@@ -95,7 +94,8 @@ export function makeWorkbenchReducer(cols: number) {
     if (next === state) return state;
     const live = LIVE_WRITES[act.type];
     if (live) next = withLiveBase(next, live);
-    if (COMMITS.has(act.type) || FAILED_WRITES.has(act.type)) next = withStep(state, next, FAILED_WRITES.has(act.type));
+    const join = FAILED_WRITES.has(act.type) || (act.type === "commit" && act.join === true);
+    if (COMMITS.has(act.type) || join) next = withStep(state, next, join);
     return next;
   };
 
@@ -171,8 +171,10 @@ export function makeWorkbenchReducer(cols: number) {
         return withItemsAtBase(state, act.items);
       case "wantSet":
         return withWant(state, withValues(wantOf(state), act.values));
-      case "wantImage":
-        return withWant(state, act.image);
+      case "commit": {
+        const next = withWant(state, act.image);
+        return act.layerOrder ? { ...next, uiLayer: movedLayer(state.uiLayer, act.layerOrder), selection: null } : next;
+      }
       case "draftStored":
         return withBase(state, act.image);
       case "draftRestore": {
@@ -223,50 +225,8 @@ export function makeWorkbenchReducer(cols: number) {
         layerMetadata[act.layer] = act.metadata;
         return { ...state, layerMetadata, layerBusy: false, layerError: null };
       }
-      case "layerRewriteDrafted":
-        return {
-          ...withWant(state, act.image),
-          uiLayer: movedLayer(state.uiLayer, act.order),
-          selection: null,
-          layerBusy: false,
-          layerError: null,
-        };
-      case "layerOperationApplied": {
-        const rewrite = act.rewrite;
-        const pointing = rewrite.pointing ? normalizePointingConfig(rewrite.pointing) : null;
-        const uiLayer = movedLayer(state.uiLayer, rewrite.order);
-        const next: WorkbenchState = {
-          ...state,
-          layers: rewrite.layers,
-          layerMetadata: rewrite.metadata,
-          pointingConfig: pointing,
-          pointingDraft: pointing ? structuredClone(pointing) : null,
-          pointingBusy: false,
-          pointingError: null,
-          defaultLayer: rewrite.defaultLayer,
-          activeLayers: rewrite.activeLayers,
-          currentLayer: Math.max(rewrite.defaultLayer, ...rewrite.activeLayers),
-          uiLayer,
-          combos: rewrite.combos,
-          morse: rewrite.morse,
-          forks: rewrite.forks,
-          behaviorOptions: rewrite.behaviorOptions,
-          autoMouseLayers: rewrite.autoMouseLayers,
-          scenes: rewrite.scenes,
-          runtimeConditionalScenes: rewrite.runtimeConditionalScenes,
-          runtimeConditionalDraft: rewrite.runtimeConditionalScenes,
-          lightingOutputMode: state.lightingOutputMode
-            ? { ...state.lightingOutputMode, wake_layers: rewrite.wakeLayers }
-            : null,
-          encoders: {},
-          layerDrafts: {},
-          pending: {},
-          layerBusy: false,
-          layerError: null,
-        };
-        // The keyboard holds the rewrite, and so does what you want.
-        return { ...next, base: storedImage(next) };
-      }
+      case "layerOperationDone":
+        return { ...state, layerBusy: false, layerError: null };
       case "topicLayers":
         return {
           ...withRead(state, { defaultLayer: act.defaultLayer }),

@@ -28,6 +28,8 @@ import type {
 } from "../model/workbench-state";
 import { firmwareFactsOf, resolveCapabilities } from "../capabilities";
 import type { SendOptions } from "./draft/send";
+import type { InputOf, OperationName } from "../operations";
+import { applyOperation, passEverything, type Judge } from "./apply";
 import { keyIo } from "./io-keys";
 import { layerIo } from "./io-layers";
 import { lightingIo } from "./io-lighting";
@@ -41,9 +43,12 @@ export type IoWriteResult = { ok: true } | { ok: false; message: string; guarded
 export type KeyWrite = { layer: number; row: number; col: number; action: KeyAction };
 
 export interface WorkbenchIo {
+  /** An operation (ADR 0019) on what you want: judged by Guard, one commit and
+   *  one Undo step; in Draft it waits for Send, in Live it is sent at once, all or nothing. */
+  apply<Name extends OperationName>(name: Name, input: InputOf<Name>): Promise<IoWriteResult>;
   setKey(layer: number, row: number, col: number, action: KeyAction): Promise<IoWriteResult>;
-  /** Several keys as one change (a swap, a transform), so Guard judges them together. All are tried; the first failure is returned. */
-  writeKeys(edits: readonly KeyWrite[], options?: { onWritten?: (ok: boolean) => void }): Promise<IoWriteResult>;
+  /** Several keys as one change (a swap, a paste): the `set_keys` operation. */
+  writeKeys(edits: readonly KeyWrite[]): Promise<IoWriteResult>;
   /** Undo or Redo: the step back or again, as an edit; in Live the keyboard follows (ADR 0018). */
   travel(direction: "undo" | "redo"): Promise<IoWriteResult>;
   /** Send the draft: only what differs from a fresh read, checked for changes made
@@ -133,6 +138,10 @@ export interface IoOptions {
   cols: number;
   onDisconnect: () => void;
   features?: IoFeatures;
+  /** Guard's say on an operation's result (ADR 0019); without one, everything goes ahead. */
+  judge?: Judge;
+  /** Which half of a split board each LED is on. */
+  ledNodes?: Readonly<Record<number, number>>;
 }
 
 /** What every io part works with. */
@@ -142,6 +151,8 @@ export interface IoContext {
   dispatch: WorkbenchDispatch;
   cols: number;
   features: IoFeatures;
+  judge: Judge;
+  ledNodes: Readonly<Record<number, number>>;
   /** In Draft, puts these items in what you want and answers; in Live, answers null and the caller writes. */
   draft(values: Array<{ item: SyncItem; value: unknown }>): IoWriteResult | null;
 }
@@ -151,7 +162,7 @@ export function makeIo(
   session: RynkSession,
   getState: () => WorkbenchState,
   dispatch: WorkbenchDispatch,
-  { cols, onDisconnect, features = NO_IO_FEATURES }: IoOptions,
+  { cols, onDisconnect, features = NO_IO_FEATURES, judge = passEverything, ledNodes = {} }: IoOptions,
 ): WorkbenchIo {
   const draft: IoContext["draft"] = (values) => {
     const state = getState();
@@ -160,8 +171,9 @@ export function makeIo(
     dispatch({ type: "wantSet", values });
     return { ok: true };
   };
-  const context: IoContext = { session, getState, dispatch, cols, features, draft };
+  const context: IoContext = { session, getState, dispatch, cols, features, judge, ledNodes, draft };
   return {
+    apply: (name, input) => applyOperation(context, name, input),
     ...keyIo(context),
     ...layerIo(context),
     ...lightingIo(context),
