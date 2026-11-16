@@ -1,7 +1,8 @@
 // The persisted policy that lets the USB cable pick the output transport.
 
 import { useEffect, useState } from "react";
-import { errorMessage, useWorkbench } from "../state";
+import { errorMessage } from "../../session/errors";
+import { useWorkbench } from "../state";
 
 export function AutoSwitchToggle() {
   const { bundle } = useWorkbench();

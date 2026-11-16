@@ -1,0 +1,208 @@
+// The io's layers: the default layer, names, and the structural operations
+// (duplicate, move, delete), which plan the rewritten layout against a fresh
+// read and write only the difference (ADR 0012), rolling back on failure.
+
+import type { RynkSession } from "../session/types";
+import type { WorkbenchState } from "../model/workbench-state";
+import { same } from "../model/deep-equal";
+import { planSync, readImage, writePlan } from "../sync";
+import {
+  planLayerDuplicate,
+  planLayerRewrite,
+  type LayerRewrite,
+  type LayerRewriteSnapshot,
+  type LayerStructureOperation,
+} from "../layers/management";
+import { conditionalTablesEqual } from "../model/lighting/compare";
+import { errorMessage } from "../session/errors";
+import { pointingDraftDirty, stagedEditCount } from "./draft/selectors";
+import type { IoContext, IoFeatures, IoWriteResult, WorkbenchIo } from "./io";
+
+type LayerIo = Pick<
+  WorkbenchIo,
+  "setDefaultLayer" | "renameLayer" | "duplicateLayer" | "moveLayer" | "deleteLayer" | "refreshLayerState"
+>;
+
+async function readLayerRewriteSnapshot(
+  session: RynkSession,
+  state: WorkbenchState,
+  config: IoFeatures,
+): Promise<LayerRewriteSnapshot> {
+  if (state.layerMetadata === null) {
+    throw new Error("this firmware does not support persistent layer metadata");
+  }
+  if (state.behaviorOptions === null) {
+    throw new Error("behavior options could not be read, so layer references cannot be rewritten safely");
+  }
+  if (!config.pointingSupported) {
+    throw new Error("pointing configuration could not be read, so layer references cannot be rewritten safely");
+  }
+  if (state.lightingState !== null && !config.lightingOutputSupported) {
+    throw new Error("lighting wake layers could not be read, so layer references cannot be rewritten safely");
+  }
+  const { layerStateComplete, ...image } = await readImage(session, { ...config, layerMetadata: true });
+  if (!layerStateComplete) {
+    throw new Error("complete active-layer state is required before editing layer structure");
+  }
+  return { ...image, compiledScenes: state.compiledScenes, compiledConditionalScenes: state.conditionalScenes };
+}
+
+function assertLayerRewriteReadback(expected: LayerRewriteSnapshot, actual: LayerRewriteSnapshot): void {
+  // A rewrite carries its `order` (which slot came from where); a read never does.
+  const comparable = ({ order: _order, ...snapshot }: LayerRewriteSnapshot & { order?: number[] }) => ({
+    ...snapshot,
+    compiledScenes: [],
+    compiledConditionalScenes: [],
+    pointing: snapshot.pointing
+      ? { ...snapshot.pointing, revision: 0 }
+      : null,
+  });
+  if (!same(comparable(expected), comparable(actual))) {
+    throw new Error("layer transaction read-back did not match the requested rewrite");
+  }
+}
+
+export function layerIo(context: IoContext): LayerIo {
+  const { session, getState, dispatch, features } = context;
+
+  const rejectLayerOperation = (message: string): IoWriteResult => {
+    dispatch({ type: "layerOperationError", message });
+    return { ok: false, message };
+  };
+
+  const runLayerStructure = async (
+    operation: LayerStructureOperation | { type: "duplicate"; layer: number },
+  ): Promise<IoWriteResult> => {
+    const before = getState();
+    if (before.layerBusy) return { ok: false, message: "another layer operation is running" };
+    if (
+      before.lightingBusy ||
+      Object.values(before.pending).some((item) => item.status === "pending")
+    ) {
+      return rejectLayerOperation("wait for pending device writes before editing layers");
+    }
+    if (stagedEditCount(before) > 0) {
+      return rejectLayerOperation("apply or discard staged batch edits before editing layers");
+    }
+    if (pointingDraftDirty(before)) {
+      return rejectLayerOperation("apply or discard staged pointing edits before editing layers");
+    }
+    if (Object.keys(before.layerDrafts).length > 0) {
+      return rejectLayerOperation("apply or discard staged layer lighting before editing layers");
+    }
+    if (!conditionalTablesEqual(before.runtimeConditionalDraft, before.runtimeConditionalScenes)) {
+      return rejectLayerOperation("apply or discard staged conditional lighting before editing layers");
+    }
+    dispatch({ type: "layerOperationStart" });
+    let original: LayerRewriteSnapshot | null = null;
+    let writing = false;
+    try {
+      original = await readLayerRewriteSnapshot(session, getState(), features);
+      let plan: LayerRewrite;
+      if (operation.type === "duplicate") {
+        const baseName = original.metadata[operation.layer]?.name;
+        if (!baseName) throw new Error(`layer ${operation.layer} is not occupied`);
+        const existing = new Set(
+          original.metadata.filter((slot) => slot.occupied).map((slot) => slot.name),
+        );
+        let name = `${baseName} copy`;
+        for (let suffix = 2; existing.has(name); suffix += 1) name = `${baseName} copy ${suffix}`;
+        plan = planLayerDuplicate(
+          original,
+          operation.layer,
+          name,
+          features.sceneCapacity,
+          features.conditionalSceneCapacity,
+        );
+      } else {
+        plan = planLayerRewrite(original, operation);
+      }
+      writing = true;
+      await writePlan(session, planSync(original, plan)); // only what moves (ADR 0012)
+      const readback = await readLayerRewriteSnapshot(session, getState(), features);
+      assertLayerRewriteReadback(plan, readback);
+      dispatch({ type: "keyHistoryClear" });
+      dispatch({ type: "layerOperationApplied", rewrite: { ...readback, order: plan.order } });
+      return { ok: true };
+    } catch (error) {
+      let message = errorMessage(error);
+      if (original && writing) {
+        try {
+          const now = await readLayerRewriteSnapshot(session, getState(), features);
+          await writePlan(session, planSync(now, original));
+        } catch (rollbackError) {
+          message += `; rollback also failed: ${errorMessage(rollbackError)}`;
+        }
+      }
+      dispatch({ type: "layerOperationError", message });
+      return { ok: false, message };
+    }
+  };
+
+  return {
+    setDefaultLayer(layer) {
+      const prev = getState().defaultLayer;
+      dispatch({ type: "defaultLayer", layer });
+      session.keymap.setDefaultLayer(layer).catch(() => {
+        dispatch({ type: "defaultLayer", layer: prev });
+      });
+    },
+    async renameLayer(layer, name) {
+      const state = getState();
+      if (state.layerBusy) {
+        return { ok: false, message: "another layer operation is running" };
+      }
+      const trimmed = name.trim();
+      if (!trimmed) return rejectLayerOperation("layer name must not be empty");
+      if (new TextEncoder().encode(trimmed).length > 32) {
+        return rejectLayerOperation("layer name must be at most 32 UTF-8 bytes");
+      }
+      if (
+        state.layerMetadata?.some(
+          (candidate, index) => index !== layer && candidate.occupied && candidate.name === trimmed,
+        )
+      ) {
+        return rejectLayerOperation(`layer name '${trimmed}' is already in use`);
+      }
+      const metadata = state.layerMetadata?.[layer];
+      if (!metadata?.occupied) {
+        return rejectLayerOperation(`layer ${layer} is not an occupied device layer`);
+      }
+      dispatch({ type: "layerOperationStart" });
+      try {
+        await session.keymap.setLayerMetadata(layer, { occupied: true, name: trimmed });
+        const readback = await session.keymap.getLayerMetadata(layer);
+        if (!readback.occupied || readback.name !== trimmed) {
+          throw new Error("layer name read-back did not match the write");
+        }
+        dispatch({ type: "layerMetadataSet", layer, metadata: readback });
+        return { ok: true };
+      } catch (error) {
+        const message = errorMessage(error);
+        dispatch({ type: "layerOperationError", message });
+        return { ok: false, message };
+      }
+    },
+    duplicateLayer(layer) {
+      return runLayerStructure({ type: "duplicate", layer });
+    },
+    moveLayer(layer, to) {
+      return runLayerStructure({ type: "move", layer, to });
+    },
+    deleteLayer(layer) {
+      return runLayerStructure({ type: "delete", layer });
+    },
+    refreshLayerState() {
+      session.keymap.layerState().then(
+        (snapshot) =>
+          dispatch({
+            type: "topicLayers",
+            defaultLayer: snapshot.defaultLayer,
+            activeLayers: snapshot.activeLayers,
+            complete: snapshot.complete,
+          }),
+        () => {},
+      );
+    },
+  };
+}

@@ -4,17 +4,16 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
-import type { ConnectedBundle } from "./state";
+import type { ConnectedBundle } from "../workbench";
+import { WorkbenchContext, useWorkbench } from "./state";
 import {
-  WorkbenchContext,
   canTravelKeyEditHistory,
   hasPendingConfigurationWrite,
   initialWorkbenchState,
   ioFeaturesFor,
   makeIo,
   makeWorkbenchReducer,
-  useWorkbench,
-} from "./state";
+} from "../workbench";
 import { TopBar } from "./TopBar";
 import { KeymapCenter } from "./keymap/KeymapCenter";
 import { KeymapInspector } from "./keymap/SideInspector";

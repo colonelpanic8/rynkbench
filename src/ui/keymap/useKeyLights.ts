@@ -6,8 +6,8 @@
 
 import { useMemo } from "react";
 import type { LightingRgb8 } from "../../model/lighting-types";
-import { rgbToHex } from "../color";
-import { effectRgb } from "../lighting/effect";
+import { rgbToHex } from "../../model/lighting/color";
+import { effectRgb } from "../../model/lighting/effect";
 import {
   colorsInUse,
   keyLightOf,
@@ -16,10 +16,11 @@ import {
   recolorCells,
   recolorRules,
   type KeyLight,
-} from "../lighting/keyLight";
-import { statusLightOf } from "../lighting/statusLight";
-import { targetPreviewEffects } from "../lighting/preview";
-import { lightingDraftFor, useWorkbench } from "../state";
+} from "../../model/lighting/key-light";
+import { statusLightOf } from "../../model/lighting/status-light";
+import { targetPreviewEffects } from "../../model/lighting/preview";
+import { lightingDraftFor } from "../../workbench";
+import { useWorkbench } from "../state";
 import { useCapability } from "../use-capabilities";
 
 export function useKeyLights() {

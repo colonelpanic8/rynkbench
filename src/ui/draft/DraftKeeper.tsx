@@ -8,7 +8,7 @@
 import { useEffect, useRef } from "react";
 import { readSetting, SETTING_KEYS, writeSetting } from "../settings";
 import { useWorkbench } from "../state";
-import { draftSnapshot, parseStoredDraft } from "./changes";
+import { draftSnapshot, parseStoredDraft } from "../../workbench/draft/changes";
 import { earlierDraft, setEarlier } from "./earlier";
 import { useDraft } from "./useDraft";
 import { useLink } from "./link";

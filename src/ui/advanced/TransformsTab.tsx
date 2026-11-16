@@ -3,7 +3,8 @@
 
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { stagedEditCount, useWorkbench } from "../state";
+import { stagedEditCount } from "../../workbench";
+import { useWorkbench } from "../state";
 import { Button, Chip, Panel, SectionLabel } from "../kit";
 import { CenterScroll } from "./bits";
 import { layerName as nameOfLayer } from "../layer-names";
@@ -16,7 +17,7 @@ import {
   type AlphaLayout,
   type LayerMigration,
   type TransformPlan,
-} from "./transforms";
+} from "../../model/transforms";
 
 const LAYOUTS: Array<{ id: AlphaLayout; label: string }> = [
   { id: "qwerty", label: "QWERTY" },

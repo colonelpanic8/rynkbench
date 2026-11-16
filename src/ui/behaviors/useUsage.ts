@@ -3,7 +3,7 @@
 
 import { useMemo } from "react";
 import { useWorkbench } from "../state";
-import { analyzeUsage, type UsageReport } from "../advanced/usage";
+import { analyzeUsage, type UsageReport } from "../../workbench/usage";
 
 export function useUsageReport(): UsageReport {
   const { bundle, state } = useWorkbench();

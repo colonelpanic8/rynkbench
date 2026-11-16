@@ -6,7 +6,7 @@ import { parseDocument } from "../../config/document";
 import { offlineGlove80Catalog, openOfflineGlove80 } from "../../session/offline/glove80";
 import { renderInWorkbench } from "../../test/workbench";
 import { openBundle } from "../bundle";
-import { initialWorkbenchState } from "../state";
+import { initialWorkbenchState } from "../../workbench";
 import { BehaviorLibrary, LibraryEntry } from "./BehaviorLibrary";
 
 beforeAll(() => {

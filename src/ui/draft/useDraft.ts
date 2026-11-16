@@ -6,7 +6,7 @@
 import { useMemo, useRef } from "react";
 import { askConfirm, showToast } from "../messages/store";
 import { useWorkbench } from "../state";
-import { draftGroups, draftSize, lightingLayers, type DraftGroup } from "./changes";
+import { draftGroups, draftSize, lightingLayers, type DraftGroup } from "../../workbench/draft/changes";
 import { discardDraftHistory, resetDraftHistory } from "./useDraftHistory";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;

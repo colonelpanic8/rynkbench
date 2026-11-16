@@ -8,7 +8,8 @@ import { initSync as initRynkSync } from "../vendor/rynk-wasm/rynk_wasm";
 import { parseDocument, renderDocument, snapshotFromState } from "../config/document";
 import { openOfflineGlove80 } from "../session/offline/glove80";
 import { openBundle } from "./bundle";
-import { initialWorkbenchState, WorkbenchContext } from "./state";
+import { initialWorkbenchState } from "../workbench";
+import { WorkbenchContext } from "./state";
 import { useDocumentTransfer, type DocumentTransfer } from "./transfer-actions";
 
 beforeAll(() => {

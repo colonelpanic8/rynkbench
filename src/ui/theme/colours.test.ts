@@ -15,8 +15,6 @@ const TOKEN_SOURCES = new Set(["src/ui/theme/themes.ts"]);
 
 /** Files that work with colour as data: what they hold is content, not chrome. */
 const COLOUR_AS_DATA: Record<string, string> = {
-  "src/ui/color.ts": "turns a stored LED colour into a CSS value",
-  "src/ui/lighting/stockMagicLayer.ts": "the LED colours of MoErgo's stock Magic layer, written to the keyboard",
   "src/ui/lighting/ColorPicker.tsx":
     "the hue spectrum, and a picker thumb that must show on every hue in either theme",
   "src/ui/lighting/BackgroundPanel.tsx": "the hue spectrum of the hue slider",

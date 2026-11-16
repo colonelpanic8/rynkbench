@@ -8,13 +8,13 @@ import type { GuardFinding, GuardInput } from "../../domain";
 import { decodeMacros } from "../../model/macros";
 import { same } from "../../model/deep-equal";
 import type { KeyAction } from "../../model/action-types";
-import type { ConnectedBundle } from "../state";
+import type { ConnectedBundle } from "../../workbench";
 import { keyAtPosition, keyPlaceName } from "../key-address";
 import { layerName } from "../layer-names";
 import { askConfirm, showToast } from "../messages/store";
-import type { IoWriteResult, KeyWrite, WorkbenchIo, WorkbenchState } from "../state";
+import type { IoWriteResult, KeyWrite, WorkbenchIo, WorkbenchState } from "../../workbench";
 import { askRequest, overwriteRequest, stopText, type GuardNames } from "./words";
-import { discardStagedSlots } from "../draft/slotStage";
+import { discardStagedSlots } from "../../workbench/draft/slot-stage";
 
 function sideOf(state: WorkbenchState, cols: number, layers: KeyAction[][]): GuardInput {
   return {

@@ -7,7 +7,8 @@ import { useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import type { KeyAction } from "../../model/action-types";
 
-import { useWorkbench, type WorkbenchState } from "../state";
+import { useWorkbench } from "../state";
+import { type WorkbenchState } from "../../workbench";
 import {
   keyClipboardShortcut,
   parseKeyActionClipboard,

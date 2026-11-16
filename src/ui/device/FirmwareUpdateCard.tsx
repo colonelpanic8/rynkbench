@@ -12,7 +12,8 @@ import {
 } from "../../firmware/native";
 import { describeBuild, parseBuildLabel } from "../../session/build-identity";
 import { Button, Chip, Panel, Row, SectionLabel } from "../kit";
-import { errorMessage, useWorkbench } from "../state";
+import { errorMessage } from "../../session/errors";
+import { useWorkbench } from "../state";
 
 export function FirmwareUpdateCard() {
   const { bundle, io } = useWorkbench();

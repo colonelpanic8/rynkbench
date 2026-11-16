@@ -7,7 +7,7 @@ import { WorkbenchContext } from "../state";
 import { LayerLighting } from "./LayerLighting";
 import { KeymapCenter } from "./KeymapCenter";
 import { openBundle } from "../bundle";
-import { initialWorkbenchState } from "../state";
+import { initialWorkbenchState } from "../../workbench";
 import { mockProvider } from "../../session/mock/board";
 import { glove80Board } from "../../session/mock/glove80";
 import { effectColor } from "../lighting/decor";

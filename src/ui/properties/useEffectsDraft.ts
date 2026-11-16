@@ -8,8 +8,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LightingExtensionParam, LightingExtensionState } from "../../model/lighting-types";
-import type { ExtensionParamWrite } from "../state";
-import { paramEffects, useWorkbench } from "../state";
+import type { ExtensionParamWrite } from "../../workbench";
+import { paramEffects } from "../../workbench";
+import { useWorkbench } from "../state";
 import { useDeviceDraft } from "../device-draft";
 import { SETTING_KEYS, readSetting, writeSetting } from "../settings";
 import { same } from "../../model/deep-equal";

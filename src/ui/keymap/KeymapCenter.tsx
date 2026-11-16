@@ -14,19 +14,13 @@ import { PREFERENCES, usePreference } from "../preferences";
 import { useFaceContext } from "../keyface/useFaceContext";
 import { keyAddressLabel } from "../key-address";
 
-import {
-  encoderPendingId,
-  keyPendingId,
-  lightingBaseFor,
-  lightingDraftFor,
-  pointingDraftDirty,
-  useWorkbench,
-} from "../state";
-import { stagedBetween } from "../lighting/compare";
+import { encoderPendingId, keyPendingId, lightingBaseFor, lightingDraftFor, pointingDraftDirty } from "../../workbench";
+import { useWorkbench } from "../state";
+import { stagedBetween } from "../../model/lighting/compare";
 
 import { effectAnim, effectColor } from "../lighting/decor";
-import { isDark } from "../lighting/effect";
-import { targetPreviewEffects } from "../lighting/preview";
+import { isDark } from "../../model/lighting/effect";
+import { targetPreviewEffects } from "../../model/lighting/preview";
 import { RowMenu, type MenuEntry } from "../RowMenu";
 import { KeyHoverCard } from "./KeyHoverCard";
 import { CanvasPill } from "./CanvasPill";
@@ -35,9 +29,9 @@ import { useKeyMoves } from "./useKeyMoves";
 import { useLightView } from "./lightView";
 import { LightsButton } from "./LightsButton";
 import { beginStroke } from "../draft/useDraftHistory";
-import { shownColor, type KeyLight } from "../lighting/keyLight";
+import { shownColor, type KeyLight } from "../../model/lighting/key-light";
 import { useKeyLights } from "./useKeyLights";
-import { cssEmissiveRgb } from "../color";
+import { cssEmissiveRgb } from "../../model/lighting/color";
 import { useKeyClipboard } from "./useKeyClipboard";
 import {
   activePointingDevices,

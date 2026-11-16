@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import type { LightingRgb8 } from "../../model/lighting-types";
-import { cssRgb, hexToRgb, LED_PRESETS, rgbToHex } from "../color";
+import { cssRgb, hexToRgb, LED_PRESETS, rgbToHex } from "../../model/lighting/color";
 import { showToast } from "../messages/store";
 import { cx } from "../kit";
 import { PencilIcon } from "../icons";

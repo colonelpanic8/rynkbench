@@ -239,8 +239,9 @@ production bundle. Enable them only for a particular build/startup with
   error `isUnsupportedError` recognizes (`src/session/unsupported.ts`) — the
   UI relies on that to tell "not supported" from "read failed".
 - **Connect-time snapshot.** `src/ui/bundle.ts` reads everything the workbench
-  needs off a fresh session in one pass; `src/ui/state.tsx` is the single
-  reducer + `io` facade the UI mutates through afterwards.
+  needs off a fresh session in one pass; `src/workbench` holds the single
+  reducer and the `io` facade the UI changes it through afterwards, without
+  React (ADR 0017). The whole map is `docs/ARCHITECTURE.md`.
 - **`src/vendor/rynk-wasm`** is an ignored build output containing the Rynk
   protocol client compiled to WASM with `wasm-pack`. The browser owns transports
   (Web Serial/WebHID choosers, stream locks, hot-plug); the WASM owns

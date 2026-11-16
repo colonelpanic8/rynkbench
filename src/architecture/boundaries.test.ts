@@ -64,6 +64,20 @@ describe("the rules themselves", () => {
       "ui-never-imports-wire-types",
     ]);
   });
+
+  it("keeps the workbench between the core layers and the screens", () => {
+    const violations = findViolations({
+      "src/workbench/a.ts": 'import { s } from "../ui/state";\nimport { m } from "../session/mock/board";',
+      "src/workbench/ok.ts": 'import { p } from "../sync";\nimport type { R } from "../session/types";',
+      "src/sync/b.ts": 'import { w } from "../workbench";',
+      "src/ui/ok.tsx": 'import { w } from "../workbench";',
+    });
+    expect(violations.map((v) => `${v.rule} ${v.from}`).sort()).toEqual([
+      "core-below-the-workbench src/sync/b.ts",
+      "core-never-imports-ui src/workbench/a.ts",
+      "workbench-uses-the-session-interface src/workbench/a.ts",
+    ]);
+  });
 });
 
 describe("architecture boundaries (ratchet)", () => {

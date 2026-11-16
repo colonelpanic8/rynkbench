@@ -11,7 +11,7 @@ import { ortho60Board } from "../../session/mock/ortho60";
 import { stub48Board } from "../../session/mock/stub48";
 import { renderInWorkbench } from "../../test/workbench";
 import { openBundle } from "../bundle";
-import { initialWorkbenchState } from "../state";
+import { initialWorkbenchState } from "../../workbench";
 import { LayerLightingSettings } from "./LayerLightingSettings";
 import { LightingSection } from "./LightingSection";
 

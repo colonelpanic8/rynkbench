@@ -27,15 +27,15 @@ import { EffectsSection } from "./properties/EffectsSection";
 import { FirmwareOptions } from "./properties/FirmwareOptions";
 import { LayerLightingSettings } from "./properties/LayerLightingSettings";
 import { LightingSection } from "./properties/LightingSection";
-import { initialWorkbenchState } from "./state";
+import { initialWorkbenchState } from "../workbench";
 import { getWording, termFor } from "./terms";
 import { Workbench } from "./Workbench";
 
 // The workbench opens on the keymap; the section to open instead is set here
 // before each drawing. Nothing else about the starting state changes.
 const opened = vi.hoisted(() => ({ section: "keymap" as SectionId }));
-vi.mock("./state", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./state")>();
+vi.mock("../workbench", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../workbench")>();
   return {
     ...actual,
     initialWorkbenchState: (bundle: ConnectedBundle) => ({

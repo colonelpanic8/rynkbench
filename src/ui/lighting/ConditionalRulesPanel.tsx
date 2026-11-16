@@ -23,20 +23,20 @@ import type {
   LightingSplitLink,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import { useWorkbench } from "../state";
-import { conditionalTablesEqual } from "./compare";
+import { conditionalTablesEqual } from "../../model/lighting/compare";
 import { ApplyBar, Button, SectionLabel, Segmented, TextInput, cx } from "../kit";
 import { useCapability } from "../use-capabilities";
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, TrashIcon } from "../icons";
-import { cssEmissiveRgb } from "../color";
-import { describeRuleConditions, runtimeConditionalSupported } from "./firmwareRules";
-import { describeEffect, effectRgb } from "./effect";
+import { cssEmissiveRgb } from "../../model/lighting/color";
+import { describeRuleConditions, runtimeConditionalSupported } from "../../model/lighting/firmware-rules";
+import { describeEffect, effectRgb } from "../../model/lighting/effect";
 import { EffectEditor } from "./EffectEditor";
 import { keyAddressWithLegend } from "../key-address";
 import { layerName } from "../layer-names";
-import { appendRule, moveRule, newRule, removeRule, replaceRule, retargetLayer, rulesOnLayer } from "./rules";
-import type { Rule, Rules } from "./rules";
+import { appendRule, moveRule, newRule, removeRule, replaceRule, retargetLayer, rulesOnLayer } from "../../model/lighting/rules";
+import type { Rule, Rules } from "../../model/lighting/rules";
 import { RULES, hasLayerIndicatorConditions, hasLightingFeature } from "../../session/lighting-features";
-import { maskHasLayer, setLayerInMask } from "./wakeLayers";
+import { maskHasLayer, setLayerInMask } from "../../model/lighting/wake-layers";
 import { useLayerNames } from "../layer-names";
 
 const CHARGE_STATES: LightingChargeCondition[] = ["Any", "Charging", "Discharging", "Unknown"];

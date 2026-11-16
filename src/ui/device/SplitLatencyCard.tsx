@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { SplitCentralLatencyState } from "../../vendor/rynk-wasm/rynk_wasm";
-import { errorMessage, useWorkbench } from "../state";
+import { errorMessage } from "../../session/errors";
+import { useWorkbench } from "../state";
 import { useDeviceDraft } from "../device-draft";
 import { SaveBar } from "../write-status";
 import { Button, Chip, Panel, SectionLabel } from "../kit";

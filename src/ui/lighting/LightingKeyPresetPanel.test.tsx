@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { testWorkbench } from "../../test/workbench";
 import { WorkbenchContext } from "../state";
 import { LightingKeyPresetPanel } from "./LightingKeyPresetPanel";
-import { replaceLightingKeyRules } from "./lightingKeyPresets";
+import { replaceLightingKeyRules } from "../../model/lighting/key-presets";
 
 function render(batchMode: boolean, current: unknown = "No") {
   const value = testWorkbench({

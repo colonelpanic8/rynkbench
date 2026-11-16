@@ -7,7 +7,7 @@ import { layerName } from "../layer-names";
 import { useWorkbench } from "../state";
 import { Button } from "../kit";
 import { CloseIcon, SpinnerIcon } from "../icons";
-import type { DraftGroup } from "./changes";
+import type { DraftGroup } from "../../workbench/draft/changes";
 import { useDraft } from "./useDraft";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;

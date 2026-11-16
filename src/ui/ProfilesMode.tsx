@@ -9,7 +9,8 @@ import {
   replaceProfilePositions,
   type MatrixPosition,
 } from "./profiles";
-import { morseProfilePendingId, useWorkbench } from "./state";
+import { morseProfilePendingId } from "../workbench";
+import { useWorkbench } from "./state";
 import { useDeviceDraft } from "./device-draft";
 import { emptyMorseProfile } from "../model/slots";
 import { MORSE_MODES } from "./morse-profile";

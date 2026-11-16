@@ -7,7 +7,7 @@ import { useWorkbench } from "../state";
 import { Chip, Panel, SectionLabel } from "../kit";
 import { WarningIcon } from "../icons";
 import { CenterScroll } from "./bits";
-import type { LayerUsage, SiteRef, SiteTarget } from "./usage";
+import type { LayerUsage, SiteRef, SiteTarget } from "../../workbench/usage";
 import { useUsageReport } from "../behaviors/useUsage";
 
 /** The places something is used. A key is a link: it opens the keymap on that

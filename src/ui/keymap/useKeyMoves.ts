@@ -9,7 +9,8 @@ import { planKeyDrop, type KeyPlace } from "../../model/key-moves";
 import { keyAddressLabel } from "../key-address";
 
 import { showToast } from "../messages/store";
-import { keyPendingId, useWorkbench } from "../state";
+import { keyPendingId } from "../../workbench";
+import { useWorkbench } from "../state";
 import { useKeyText } from "../useKeyText";
 
 export interface DragState {

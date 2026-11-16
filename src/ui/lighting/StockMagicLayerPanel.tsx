@@ -2,8 +2,9 @@ import { useRef, useState } from "react";
 import { Button } from "../kit";
 import { useCapabilities } from "../use-capabilities";
 import { layerName } from "../layer-names";
-import { hasPendingConfigurationWrite, useWorkbench } from "../state";
-import { STOCK_PROFILE_KEYS, writeStockMagicLayer } from "./stockMagicLayer";
+import { hasPendingConfigurationWrite } from "../../workbench";
+import { useWorkbench } from "../state";
+import { STOCK_PROFILE_KEYS, writeStockMagicLayer } from "../../model/lighting/stock-magic-layer";
 
 export function StockMagicLayerPanel({ layer }: { layer: number }) {
   const { bundle, state, io, dispatch } = useWorkbench();

@@ -1,6 +1,6 @@
-// Drives the undo and redo of what is staged (draftHistory.ts): records a step
-// each time the staged keys or the layers' lighting change, stages them back
-// on undo, and starts over when the draft is sent or discarded
+// Drives the undo and redo of what is staged (workbench/draft/history.ts):
+// records a step each time the staged keys or the layers' lighting change,
+// stages them back on undo, and starts over when the draft is sent or discarded
 // (resetDraftHistory). A Paint stroke (beginStroke, from pointer down to
 // pointer up) is one step. In Live and in a file only lighting is staged, so
 // its steps are lighting; the Workbench undoes them in turn with key writes.
@@ -9,11 +9,11 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } fro
 import { keyActionGlyph } from "../labels";
 import { layerName, layerNamesOf } from "../layer-names";
 import { showToast } from "../messages/store";
-import { lightingDraftFor } from "../state";
+import { lightingDraftFor } from "../../workbench";
 import { nextEditOrder } from "../../model/history";
 import type { WorkbenchAction, WorkbenchState } from "../../model/workbench-state";
-import { layerLightingActions } from "./changes";
-import { emptyHistory, isEmptyStep, record, redo, stepBetween, undo, type DraftHistory, type DraftImage, type Step } from "./draftHistory";
+import { layerLightingActions } from "../../workbench/draft/changes";
+import { emptyHistory, isEmptyStep, record, redo, stepBetween, undo, type DraftHistory, type DraftImage, type Step } from "../../workbench/draft/history";
 
 let history: DraftHistory = emptyHistory();
 /** The next change is not an edit but a discard or an undo, which always

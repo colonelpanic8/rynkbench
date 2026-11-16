@@ -27,8 +27,8 @@ import { buildKeyboardModel } from "../model/keyboard";
 import { resolveBoardProfile } from "../model/boards";
 import type { LayerMetadata, LightingTopology, RuntimeLightingRule, RynkSession } from "../session/types";
 import { isUnsupportedError } from "../session/unsupported";
-import type { ConnectedBundle } from "./state";
-import { errorMessage } from "./state";
+import type { ConnectedBundle } from "../workbench";
+import { errorMessage } from "../session/errors";
 
 const EMPTY_TOPOLOGY: LightingTopology = {
   revision: 0,

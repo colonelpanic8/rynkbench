@@ -4,10 +4,10 @@
 
 import type { LightingEffect } from "../../vendor/rynk-wasm/rynk_wasm";
 import { Segmented, TextInput } from "../kit";
-import { rgbToHsv, hsvToRgb } from "../color";
+import { rgbToHsv, hsvToRgb } from "../../model/lighting/color";
 import { ColorPicker } from "./ColorPicker";
-import type { EffectKind, EffectTiming } from "./effect";
-import { buildEffect, effectKind, effectRgb, effectTiming } from "./effect";
+import type { EffectKind, EffectTiming } from "../../model/lighting/effect";
+import { buildEffect, effectKind, effectRgb, effectTiming } from "../../model/lighting/effect";
 
 export function NumberField({
   label,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Fork, Morse } from "../../model/action-types";
-import type { UsageReport } from "../advanced/usage";
+import type { UsageReport } from "../../workbench/usage";
 import { libraryRows, searchRows, stillUsedText, unusedRows, usageBadge, type LibraryInput } from "./library";
 
 const key = (code: string) => ({ Key: { Hid: code } }) as never;

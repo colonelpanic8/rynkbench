@@ -5,15 +5,16 @@ import { SectionLabel, cx } from "../kit";
 import { useCapabilities } from "../use-capabilities";
 import { keyAddressLabel } from "../key-address";
 import { layerName } from "../layer-names";
-import { hasPendingConfigurationWrite, useWorkbench } from "../state";
+import { hasPendingConfigurationWrite } from "../../workbench";
+import { useWorkbench } from "../state";
 import { hasLayerIndicatorConditions } from "../../session/lighting-features";
 import {
   installedLightingKeyKind,
   lightingKeyAction,
   writeLightingKeyPreset,
   type LightingKeyKind,
-} from "./lightingKeyPresets";
-import { maskHasLayer } from "./wakeLayers";
+} from "../../model/lighting/key-presets";
+import { maskHasLayer } from "../../model/lighting/wake-layers";
 
 const PRESETS: Array<{ kind: LightingKeyKind; label: string; hint: string }> = [
   {

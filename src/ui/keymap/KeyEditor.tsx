@@ -10,7 +10,8 @@ import type { Action, KeyAction } from "../../model/action-types";
 import { keyFace } from "../keyface/keyFace";
 import { useFaceContext } from "../keyface/useFaceContext";
 import { keyAddressLabel, keyPlaceName } from "../key-address";
-import { keyPendingId, useWorkbench } from "../state";
+import { keyPendingId } from "../../workbench";
+import { useWorkbench } from "../state";
 import { useCapabilities } from "../use-capabilities";
 
 import { WarningIcon } from "../icons";

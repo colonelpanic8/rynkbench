@@ -26,7 +26,7 @@ export interface BoundaryRule {
 }
 
 const LAYER_FOLDERS = new Set([
-  "session", "config", "model", "layers", "firmware", "capabilities", "domain", "sync", "ui", "vendor", "architecture",
+  "session", "config", "model", "layers", "firmware", "capabilities", "domain", "sync", "workbench", "ui", "vendor", "architecture",
 ]);
 
 /** Top-level folder of a project-relative path: `src/ui/x.ts` is `ui`, and a
@@ -39,13 +39,15 @@ export function layerOf(path: string): string {
   return parts.length > 2 ? parts[1] : "app";
 }
 
-const CORE_LAYERS = new Set(["session", "config", "model", "layers", "firmware", "capabilities", "domain", "sync"]);
+/** Below the workbench: everything the workbench may build on. */
+const BELOW_WORKBENCH = ["session", "config", "model", "layers", "firmware", "capabilities", "domain", "sync"];
+const CORE_LAYERS = new Set([...BELOW_WORKBENCH, "workbench"]);
 const BACKENDS = ["webhid", "webserial", "webbluetooth", "native", "native-ble", "offline", "mock"];
 
 export const BOUNDARY_RULES: BoundaryRule[] = [
   {
     id: "core-never-imports-ui",
-    why: "Logic must run without the screen: session, config, model, layers, firmware and sync never import ui or the app shell.",
+    why: "Logic must run without the screen: session, config, model, layers, firmware, sync and the workbench never import ui or the app shell.",
     breaks: (from, to) => CORE_LAYERS.has(layerOf(from)) && ["ui", "app"].includes(layerOf(to)),
   },
   {
@@ -74,6 +76,17 @@ export const BOUNDARY_RULES: BoundaryRule[] = [
     why: "The write path (src/sync, ADR 0012) works for every keyboard: it uses the session interface, never a transport or a simulated board.",
     breaks: (from, to) =>
       layerOf(from) === "sync" && BACKENDS.some((b) => to === `src/session/${b}` || to.startsWith(`src/session/${b}/`)),
+  },
+  {
+    id: "core-below-the-workbench",
+    why: "The workbench (ADR 0017) sits on the core layers and below the screens: nothing it builds on imports it.",
+    breaks: (from, to) => BELOW_WORKBENCH.includes(layerOf(from)) && layerOf(to) === "workbench",
+  },
+  {
+    id: "workbench-uses-the-session-interface",
+    why: "The workbench writes to every keyboard the same way: through the session interface, never a transport or a simulated board.",
+    breaks: (from, to) =>
+      layerOf(from) === "workbench" && BACKENDS.some((b) => to === `src/session/${b}` || to.startsWith(`src/session/${b}/`)),
   },
   {
     id: "ui-never-imports-backends",

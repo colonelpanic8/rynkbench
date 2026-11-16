@@ -9,16 +9,16 @@ Live site: https://moosylog.github.io/rynkbench/ (GitHub Pages, deployed from `m
 - Every change keeps the guards green; never add to a baseline or an allow-list to make a test pass. Fix the code.
 - A decision that shapes the code goes in an ADR (`docs/adr/`, next number, one page, linked from its README).
 
-## Layers (src/architecture/boundaries.ts)
-- `session/` talks to keyboards (transports, the simulated boards); `config/` reads and writes layout files; `model/` holds plain data and pure functions; `domain/` the reference graph; `capabilities/` what a keyboard can do; `sync/` the one write path (read, plan the difference, write, read back; ADR 0012); `ui/` the screens.
-- Core layers never import `ui/`. Screens never import a transport or the simulated boards; they use the session interface.
+## Layers (src/architecture/boundaries.ts; the map: docs/ARCHITECTURE.md)
+- `session/` talks to keyboards (transports, the simulated boards); `config/` reads and writes layout files; `model/` holds plain data and pure functions; `domain/` the reference graph; `capabilities/` what a keyboard can do; `sync/` the one write path (read, plan the difference, write, read back; ADR 0012); `workbench/` the open workbench without a screen: state, reducer, `io`, the draft (ADR 0017); `ui/` the screens.
+- Core layers and `workbench/` never import `ui/`; nothing below `workbench/` imports it. Screens never import a transport or the simulated boards; they use the session interface.
 - Screens never import the generated wire package (`src/vendor/rynk-wasm`): action types come from `model/action-types.ts`, geometry from `model/keyboard.ts`. Older files on the baseline (`boundaries.baseline.json`) leave it when touched; the guard fails on a new one.
 - What a screen offers is asked of capabilities (`ui/use-capabilities.ts`), never by probing firmware or testing a nullable field (`src/architecture/probing.ts`).
 
 ## Where things go
-- A rule about keys, layers or bindings: a pure function in `model/` with its own test (see `model/key-slots.ts`). Screens only show it and call `io`.
+- A rule about keys, layers, bindings or lighting: a pure function in `model/` with its own test (see `model/key-slots.ts`, `model/lighting/`). Logic that needs the workbench, the reference graph or the write path: `workbench/`. Screens only show it and call `io` (ADR 0017).
 - Which screens and sections exist: `ui/areas.ts`. Keyboard-wide settings (name, keyboard, firmware options, lighting output): Layout properties, `ui/properties/` (ADR 0015). The app's words, in both voices: `ui/terms.ts`.
-- When changes reach the keyboard: Draft or Live (ADR 0010, `ui/draft/`). New staged state joins the draft (`draft/changes.ts`), never a separate Apply.
+- When changes reach the keyboard: Draft or Live (ADR 0010, `workbench/draft/`; the hooks in `ui/draft/`). New staged state joins the draft (`workbench/draft/changes.ts`), never a separate Apply.
 - How anything reaches the keyboard: the one write path, `sync/` (ADR 0012, `docs/sync.md`): read fresh, `planSync` only the difference, `syncTo` writes and reads back. Never write a whole table or keymap "to be sure", never send an unchanged item; a bulk change (a transform, a Flow, a layer move) becomes a wanted image and goes through `syncTo`.
 - What protects a layout: Rynkbench Guard (ADR 0011). Rules in `domain/guard.ts` (stop or ask, only what a change breaks); every key write passes `io` (`ui/guard/guardIo.ts`); several keys that form one change go through `io.writeKeys`. Guard speaks with its label: `askConfirm({ guard: true })`, `showToast(…, { guard: true })`.
 - A question before something that cannot be undone: `askConfirm`; a note that something happened: `showToast` (`ui/messages/store.ts`). Never `window.confirm`/`alert`.
@@ -44,7 +44,7 @@ Live site: https://moosylog.github.io/rynkbench/ (GitHub Pages, deployed from `m
 - No Nix here? `npm run wasm:ci` puts the WASM clients from the newest green Checks run with the same build recipe into `src/vendor`, so every test runs locally. Never commit `src/vendor`.
 - `npm run ship` (only when asked): push, wait for Checks, merge to `master` only when green, wait for the deploy (one retry for Pages' own hiccups). `npm run ship -- --check` stops after Checks.
 - Browser checks only when asked or at the end of a feature, once: screenshots (scaled, or a zoomed region) and `find`; never a full page snapshot (the keyboard alone is thousands of lines).
-- Search only in `src/` and `docs/`; `.rgignore` hides golden files and fixtures (open one by path when needed). Big files (`ui/state.tsx`, `session/link-session.ts`, `session/mock/board.ts`): find the line first, then read only that range.
+- Search only in `src/` and `docs/`; `.rgignore` hides golden files and fixtures (open one by path when needed). Big files (`session/link-session.ts`, `session/mock/board.ts`): find the line first, then read only that range.
 - One feature per session, with a short brief; this file and the ADRs carry what a new session needs.
 - When a change touches a module that writes to the keyboard, move its writes onto the one path in the same change (ADR 0013); never add a write that bypasses Guard and the draft.
 
@@ -53,5 +53,5 @@ Live site: https://moosylog.github.io/rynkbench/ (GitHub Pages, deployed from `m
 - Look at a change in a browser before calling it done: open https://moosylog.github.io/rynkbench/ after the deploy, start a new Glove80 layout and try what changed.
 
 ## Docs
-- `docs/todo.md` — what is left, cheapest first: take one item per session and strike it when it ships.
+- `docs/ARCHITECTURE.md` — the layers and how a change flows. `docs/todo.md` — what is left, cheapest first: take one item per session and strike it when it ships.
 - `docs/ux-brief.md` — the UX brief (areas, flows, principles). `docs/adr/` — decisions, newest last. `docs/glossary.md` — words. `docs/sync.md` — how writing to the keyboard works. `docs/firmware/` — patches proposed for RMK.

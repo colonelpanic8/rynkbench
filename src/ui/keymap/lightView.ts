@@ -3,7 +3,7 @@
 // over keys gives them the tab's light. The tab and the canvas share this.
 
 import { useSyncExternalStore } from "react";
-import type { KeyLight } from "../lighting/keyLight";
+import type { KeyLight } from "../../model/lighting/key-light";
 
 export interface LightView {
   open: boolean;

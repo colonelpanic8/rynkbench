@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { errorMessage, useWorkbench } from "../state";
+import { errorMessage } from "../../session/errors";
+import { useWorkbench } from "../state";
 import { Button, Panel } from "../kit";
 import { WarningIcon } from "../icons";
 import { askConfirm, type ConfirmRequest } from "../messages/store";

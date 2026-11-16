@@ -6,10 +6,11 @@
 
 import { useEffect, useState } from "react";
 import { layerName } from "../layer-names";
-import { pointingDraftDirty, useWorkbench } from "../state";
+import { pointingDraftDirty } from "../../workbench";
+import { useWorkbench } from "../state";
 import { useCapabilities } from "../use-capabilities";
 import { askConfirm, showToast } from "../messages/store";
-import { deletionBlockedMessage, layerDeletionBlockers } from "../keymap/layerImpact";
+import { deletionBlockedMessage, layerDeletionBlockers } from "../../workbench/layer-impact";
 import { useTerms } from "../terms";
 import { cx } from "../kit";
 import { GripIcon, MoreIcon, StarIcon } from "../icons";

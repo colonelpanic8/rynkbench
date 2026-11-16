@@ -11,7 +11,7 @@ import { forkIsEmpty, morseIsEmpty } from "../../model/slots";
 import type { Term, TermId, Wording } from "../terms";
 import { actionLabel, keyActionGlyph, type LayerNames } from "../labels";
 import { morseProfileSummary } from "../morse-profile";
-import type { SiteRef, UsageReport } from "../advanced/usage";
+import type { SiteRef, UsageReport } from "../../workbench/usage";
 
 export type LibraryKind = "macros" | "morse" | "forks" | "profiles";
 

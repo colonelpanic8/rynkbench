@@ -9,7 +9,8 @@ import type {
 } from "../../model/action-types";
 
 
-import { encoderPendingId, useWorkbench } from "../state";
+import { encoderPendingId } from "../../workbench";
+import { useWorkbench } from "../state";
 import { ActionEditor } from "./ActionEditor";
 
 import { LayerPointing } from "./LayerPointing";

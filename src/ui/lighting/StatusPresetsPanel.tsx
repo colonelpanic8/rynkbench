@@ -12,10 +12,10 @@ import { useCapability } from "../use-capabilities";
 import { layerName } from "../layer-names";
 import { useWorkbench } from "../state";
 import { StockMagicLayerPanel } from "./StockMagicLayerPanel";
-import { stockMagicIndicatorKeys } from "./stockMagicLayer";
-import { GLOVE80_BAR_LAYOUTS, glove80ConnectionKeys, installGlove80StatusRules, writeGlove80StatusSetup } from "./statusPresets";
-import type { Glove80BarLayout } from "./statusPresets";
-import { layersInMask } from "./wakeLayers";
+import { stockMagicIndicatorKeys } from "../../model/lighting/stock-magic-layer";
+import { GLOVE80_BAR_LAYOUTS, glove80ConnectionKeys, installGlove80StatusRules, writeGlove80StatusSetup } from "../../model/lighting/status-presets";
+import type { Glove80BarLayout } from "../../model/lighting/status-presets";
+import { layersInMask } from "../../model/lighting/wake-layers";
 import { hasConnectionEffectsConditions, hasLayerIndicatorConditions } from "../../session/lighting-features";
 
 const selectClass = "mt-1 w-full rounded-md border border-line bg-raised px-2 py-1.5 text-body text-ink";

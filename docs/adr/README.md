@@ -20,5 +20,6 @@ One short page per decision that shapes the code, so the reason survives the peo
 | [0014](0014-themes-preferences-key-faces.md) | GLIDE's themes, Settings and key faces | Accepted |
 | [0015](0015-layout-properties.md) | Layout properties, as in GLIDE | Accepted |
 | [0016](0016-rgb-lighting-the-glide-way.md) | RGB lighting the GLIDE way (staged) | Accepted |
+| [0017](0017-a-core-for-the-workbench.md) | A core for the workbench: `workbench/` between the core and the screens | Accepted |
 
 The glossary is in [../glossary.md](../glossary.md).

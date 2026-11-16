@@ -12,8 +12,8 @@ import { ConnectScreen } from "./ui/ConnectScreen";
 import { SpinnerIcon } from "./ui/icons";
 import { Workbench } from "./ui/Workbench";
 import { setLink } from "./ui/draft/link";
-import type { ConnectedBundle } from "./ui/state";
-import { errorMessage } from "./ui/state";
+import type { ConnectedBundle } from "./workbench";
+import { errorMessage } from "./session/errors";
 
 const MOCKS_ENABLED = import.meta.env.VITE_ENABLE_MOCKS === "1";
 

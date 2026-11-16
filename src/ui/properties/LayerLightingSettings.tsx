@@ -11,9 +11,9 @@ import { layerName } from "../layer-names";
 import { useWorkbench } from "../state";
 import { useCapabilities, useCapability } from "../use-capabilities";
 import { Button, SectionLabel, Segmented, cx } from "../kit";
-import { maskHasLayer, setLayerInMask } from "../lighting/wakeLayers";
-import { layerLightingActions } from "../draft/changes";
-import type { Cells } from "../draft/draftHistory";
+import { maskHasLayer, setLayerInMask } from "../../model/lighting/wake-layers";
+import { layerLightingActions } from "../../workbench/draft/changes";
+import type { Cells } from "../../workbench/draft/history";
 
 const POLICIES: Array<{ id: LightingLayerPolicy; label: string; hint: string }> = [
   { id: "EffectiveOnly", label: "Top layer only", hint: "Only the topmost active layer lights" },

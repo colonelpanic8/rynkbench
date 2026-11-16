@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { testWorkbench } from "../../test/workbench";
 import { WorkbenchContext } from "../state";
-import type { WorkbenchState } from "../state";
+import type { WorkbenchState } from "../../workbench";
 import { KeymapInspector } from "./SideInspector";
 
 const UNSUPPORTED = "does not expose runtime pointing configuration";

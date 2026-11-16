@@ -8,7 +8,7 @@ import { glove80Board } from "../../session/mock/glove80";
 import { ortho60Board } from "../../session/mock/ortho60";
 import { renderInWorkbench } from "../../test/workbench";
 import { openBundle } from "../bundle";
-import { initialWorkbenchState } from "../state";
+import { initialWorkbenchState } from "../../workbench";
 import { EffectsSection } from "./EffectsSection";
 
 async function onBoard(spec: BoardSpec, run: (bundle: ConnectedBundle) => void): Promise<void> {

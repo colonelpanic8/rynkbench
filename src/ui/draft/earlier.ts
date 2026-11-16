@@ -3,7 +3,7 @@
 
 import { useSyncExternalStore } from "react";
 import { useWorkbench } from "../state";
-import { restoreActions, type StoredDraft } from "./changes";
+import { restoreActions, type StoredDraft } from "../../workbench/draft/changes";
 
 /** A draft kept from an earlier visit, offered back until restored or forgotten. */
 let earlier: StoredDraft | null = null;

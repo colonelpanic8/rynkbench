@@ -4,7 +4,7 @@ import { initSync } from "../vendor/moergo-config-wasm/moergo_config_wasm";
 import type { ExtensionCatalog } from "./document";
 import { detectFormat, parseDocument, renderDocument, snapshotFromState } from "./document";
 import { exportDocument } from "./transfer";
-import type { WorkbenchState } from "../ui/state";
+import type { WorkbenchState } from "../model/workbench-state";
 import type { Morse } from "../vendor/rynk-wasm/rynk_wasm";
 import { GO60_KEYS } from "../model/boards/go60";
 import type { LightingTopology } from "../session/types";

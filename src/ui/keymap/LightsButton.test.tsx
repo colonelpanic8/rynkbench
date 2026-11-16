@@ -10,7 +10,7 @@ import { plain36Board } from "../../session/mock/plain36";
 import { stub48Board } from "../../session/mock/stub48";
 import { renderInWorkbench } from "../../test/workbench";
 import { openBundle } from "../bundle";
-import { initialWorkbenchState } from "../state";
+import { initialWorkbenchState } from "../../workbench";
 import { LightsButton } from "./LightsButton";
 
 async function onBoard(spec: BoardSpec, run: (bundle: ConnectedBundle) => void): Promise<void> {

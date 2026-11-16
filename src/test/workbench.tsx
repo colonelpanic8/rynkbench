@@ -8,7 +8,8 @@
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ConnectedBundle, WorkbenchState } from "../model/workbench-state";
-import { WorkbenchContext, initialWorkbenchState, type WorkbenchContextValue } from "../ui/state";
+import { WorkbenchContext, type WorkbenchContextValue } from "../ui/state";
+import { initialWorkbenchState } from "../workbench/initial-state";
 import { DocumentTransferContext, type DocumentTransfer } from "../ui/transfer-actions";
 
 /** Every field optional, all the way down; field names and types still checked. */

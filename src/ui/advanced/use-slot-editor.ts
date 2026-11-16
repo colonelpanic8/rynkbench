@@ -5,8 +5,9 @@
 
 import { useState } from "react";
 import { takeBehaviorFocus } from "../behaviors/focus";
-import type { SlotKind, SlotValueOf } from "../state";
-import { slotPendingId, useWorkbench } from "../state";
+import type { SlotKind, SlotValueOf } from "../../workbench";
+import { slotPendingId } from "../../workbench";
+import { useWorkbench } from "../state";
 import { same } from "../../model/deep-equal";
 
 export interface SlotEntry<T> {

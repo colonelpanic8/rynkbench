@@ -7,7 +7,7 @@ import { useMemo } from "react";
 import type { LightingBackgroundMode } from "../../vendor/rynk-wasm/rynk_wasm";
 import { useWorkbench } from "../state";
 import { useDeviceDraft } from "../device-draft";
-import { cssRgb, hsvToRgb } from "../color";
+import { cssRgb, hsvToRgb } from "../../model/lighting/color";
 import { ApplyBar, Segmented, cx } from "../kit";
 import { BigSwitch } from "../properties/BigSwitch";
 

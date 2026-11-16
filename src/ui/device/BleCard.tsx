@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { BleStatus, PeripheralStatus } from "../../vendor/rynk-wasm/rynk_wasm";
-import { errorMessage, useWorkbench } from "../state";
+import { errorMessage } from "../../session/errors";
+import { useWorkbench } from "../state";
 import { Button, Chip, Panel, SectionLabel, cx } from "../kit";
 import { BatteryGlyph, BleIcon } from "../icons";
 import { readBleStatus } from "./ble-status";

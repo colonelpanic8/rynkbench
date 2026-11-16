@@ -15,7 +15,7 @@ just dev-mocks      # the app with simulated boards, no keyboard needed
 
 - **Tests that guard the structure:** `npx vitest run src/architecture` (import boundaries and capability probing, both ratcheted).
 - **The new layers:** `src/capabilities/` (what the firmware offers) and `src/domain/` (who refers to what).
-- **The Usage tab** (Advanced mode, Usage) now runs on the reference graph; `src/ui/advanced/usage.golden.test.ts` holds 90 golden cases from the previous implementation. Key references in it are links: click one to open the keymap on that key.
+- **The Usage tab** (Advanced mode, Usage) now runs on the reference graph; `src/workbench/usage.golden.test.ts` holds 90 golden cases from the previous implementation. Key references in it are links: click one to open the keymap on that key.
 - **Light theme:** a Dark or Light button in the top bar switches themes (dark is the default and the choice is remembered). The light colors are a first proposal checked for contrast by `src/ui/theme/themes.test.ts`, not yet reviewed by eye; the connect screen has no toggle yet.
 - **Wording:** a Technical or Friendly button in the top bar switches the names of the seven modes and the Advanced tabs (Morse becomes Tap patterns, Forks becomes Conditional keys, and so on). Technical is today's wording and the default. The friendly names are proposals in `src/ui/terms.ts`.
 - **Deleting a layer** (keymap, trash button) now says up front which keys and combos still use the layer, instead of reading the keyboard and reporting only the first.

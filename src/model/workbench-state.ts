@@ -5,7 +5,7 @@
 //
 // Interim home: these types mix domain state (layers, tables, lighting) with
 // application state (mode, selection, pending writes). They are split in a
-// later phase; until then, no layer below the UI may depend on ui/state.tsx.
+// later phase. The reducer and io that use them are in src/workbench (ADR 0017).
 
 import type { MacroOp } from "../vendor/rynk-wasm/rynk_wasm";
 import type {

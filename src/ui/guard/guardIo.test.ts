@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { KeyAction } from "../../model/action-types";
 import { testWorkbench, type DeepPartial } from "../../test/workbench";
 import { getMessages, resetMessages } from "../messages/store";
-import type { KeyWrite, WorkbenchIo, WorkbenchState } from "../state";
+import type { KeyWrite, WorkbenchIo, WorkbenchState } from "../../workbench";
 import { guardIo } from "./guardIo";
 
 const key = (code: string): KeyAction => ({ Single: { Key: { Hid: code } } }) as KeyAction;

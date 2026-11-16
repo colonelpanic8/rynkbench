@@ -7,9 +7,9 @@ import { layerName } from "../layer-names";
 import { useWorkbench } from "../state";
 import { SectionLabel } from "../kit";
 import { effectColor } from "./decor";
-import { firmwareRuleGroups } from "./firmwareRules";
-import { previewActiveLayers } from "./preview";
-import { layersInMask } from "./wakeLayers";
+import { firmwareRuleGroups } from "../../model/lighting/firmware-rules";
+import { previewActiveLayers } from "../../model/lighting/preview";
+import { layersInMask } from "../../model/lighting/wake-layers";
 import { lightingKeyLegend } from "./keyLegend";
 import { useLayerNames } from "../layer-names";
 

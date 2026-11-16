@@ -4,13 +4,13 @@
 
 import type { ReactNode } from "react";
 import type { LightingEffect, LightingRgb8 } from "../../model/lighting-types";
-import type { KeyLight } from "../lighting/keyLight";
-import { BATTERY_LEVELS, type Lock, type StatusLight } from "../lighting/statusLight";
-import { STATUS_COLORS } from "../lighting/statusPresets";
+import type { KeyLight } from "../../model/lighting/key-light";
+import { BATTERY_LEVELS, type Lock, type StatusLight } from "../../model/lighting/status-light";
+import { STATUS_COLORS } from "../../model/lighting/status-presets";
 import { effectColor } from "../lighting/decor";
-import type { EffectKind } from "../lighting/effect";
+import type { EffectKind } from "../../model/lighting/effect";
 import { ColorChoice } from "../lighting/ColorChoice";
-import { LED_PRESETS } from "../color";
+import { LED_PRESETS } from "../../model/lighting/color";
 import { cx } from "../kit";
 import type { KeyLights } from "./useKeyLights";
 
