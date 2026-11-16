@@ -91,7 +91,7 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
       setRun({ phase: "error", message: blocked });
       return;
     }
-    dispatch({ type: "keyHistorySuspend", suspended: true });
+    dispatch({ type: "historySuspend", suspended: true });
     history.clear();
     let done = 0;
     let failed = 0;
@@ -103,7 +103,7 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
     };
     try {
       const keys = plan.keys.map((edit) => ({ layer: edit.layer, row: edit.row, col: edit.col, action: edit.after }));
-      const written = await io.writeKeys(keys, { history: "invalidate", onWritten: (ok) => step({ ok }) });
+      const written = await io.writeKeys(keys, { onWritten: (ok) => step({ ok }) });
       if (!written.ok && written.guarded) return setRun({ phase: "error", message: written.message });
       for (const edit of plan.combos) step(await io.setSlot("combos", edit.index, edit.after));
       for (const edit of plan.morse) step(await io.setSlot("morse", edit.index, edit.after));
@@ -114,7 +114,7 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
       setRun({ phase: "error", message: err instanceof Error ? err.message : String(err) });
     } finally {
       history.clear();
-      dispatch({ type: "keyHistorySuspend", suspended: false });
+      dispatch({ type: "historySuspend", suspended: false });
     }
   };
 

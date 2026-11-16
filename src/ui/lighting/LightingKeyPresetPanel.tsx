@@ -69,7 +69,7 @@ export function LightingKeyPresetPanel({
       const result = await writeLightingKeyPreset(
         {
           setKey: (preset, action) =>
-            io.setKey(preset.layer, preset.row, preset.col, action, { history: "invalidate" }),
+            io.setKey(preset.layer, preset.row, preset.col, action),
           applyRules: (rules) => io.applyConditionalScenes(rules),
         },
         state.runtimeConditionalDraft,

@@ -106,7 +106,6 @@ export function layerIo(context: IoContext): LayerIo {
       await writePlan(session, planSync(original, plan)); // only what moves (ADR 0012)
       const readback = await readLayerRewriteSnapshot(session, getState(), features);
       assertLayerRewriteReadback(plan, readback);
-      dispatch({ type: "keyHistoryClear" });
       dispatch({ type: "layerOperationApplied", rewrite: { ...readback, order: plan.order } });
       return { ok: true };
     } catch (error) {

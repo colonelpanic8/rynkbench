@@ -2,13 +2,11 @@
 // other screens, history, settings), the side panel of layers and combos, and
 // the keymap; the other screens open in its place with their own tabs.
 
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import type { ConnectedBundle } from "../workbench";
 import { WorkbenchContext, useWorkbench } from "./state";
 import {
-  canTravelKeyEditHistory,
-  hasPendingConfigurationWrite,
   initialWorkbenchState,
   ioFeaturesFor,
   makeIo,
@@ -19,8 +17,7 @@ import { KeymapCenter } from "./keymap/KeymapCenter";
 import { KeymapInspector } from "./keymap/SideInspector";
 import { DraftKeeper } from "./draft/DraftKeeper";
 import { guardIo } from "./guard/guardIo";
-import { useDraftHistory } from "./draft/useDraftHistory";
-import { oneHistory } from "./draft/oneHistory";
+import { useHistory } from "./draft/useHistory";
 import { ComboEditor } from "./keymap/ComboEditor";
 import { ComboFocusCanvas } from "./keymap/ComboFocusCanvas";
 import { useComboFocus } from "./keymap/useComboFocus";
@@ -36,13 +33,11 @@ import { LIBRARY_ORDER } from "./behaviors/library";
 import { ResizeHandle, usePaneSize } from "./panes";
 import { SETTING_KEYS } from "./settings";
 import { InspectorShell, cx } from "./kit";
-import { historyShortcut, keyEditHistoryLabel } from "../model/history";
-import { layerName } from "./layer-names";
+import { historyShortcut } from "../model/history";
 import { useTerms } from "./terms";
 import { getLocaleId, subscribeLocale } from "./locale";
 import { areaOfSection, areasFor, sectionTerm, type Area, type AreaId, type SectionId } from "./areas";
 import { DocumentTransferContext, useDocumentTransfer } from "./transfer-actions";
-import { showToast } from "./messages/store";
 /** The sections of the current area, when it has more than one. */
 function SectionTabs({
   sections,
@@ -227,72 +222,8 @@ export function Workbench({
     [bundle, onClose],
   );
 
-  // Undo and redo say what they did, with the way back on the toast.
-  const travel = useCallback(
-    async (direction: "undo" | "redo"): Promise<void> => {
-      const entry =
-        direction === "undo"
-          ? stateRef.current.keyEditHistory.past.at(-1)
-          : stateRef.current.keyEditHistory.future.at(-1);
-      const result = direction === "undo" ? await io.undoKeyEdit() : await io.redoKeyEdit();
-      if (!result.ok) return;
-      const named = (layer: number) => layerName(stateRef.current.layerMetadata, layer);
-      const label = entry ? keyEditHistoryLabel(entry, named) : "key edit";
-      const back = direction === "undo" ? "redo" : "undo";
-      showToast(`${direction === "undo" ? "Undone" : "Redone"}: ${label}`, {
-        action: {
-          label: back === "undo" ? "Undo" : "Redo",
-          run: () => {
-            if (canTravelKeyEditHistory(stateRef.current, back)) void travel(back);
-          },
-        },
-      });
-    },
-    [io],
-  );
-
-  const historyBusy = hasPendingConfigurationWrite(state);
-  const historyOperation = state.keyEditHistory.operation;
-  const undoEntry = state.keyEditHistory.past.at(-1);
-  const redoEntry = state.keyEditHistory.future.at(-1);
-  const deviceHistory = useMemo(
-    () => ({
-      canUndo: canTravelKeyEditHistory(state, "undo"),
-      canRedo: canTravelKeyEditHistory(state, "redo"),
-      phase: historyOperation
-        ? historyOperation.direction === "undo"
-          ? ("undoing" as const)
-          : ("redoing" as const)
-        : historyBusy
-          ? ("writing" as const)
-          : ("idle" as const),
-      error: state.keyEditHistory.error,
-      undoLabel: undoEntry ? keyEditHistoryLabel(undoEntry, (layer) => layerName(state.layerMetadata, layer)) : null,
-      redoLabel: redoEntry ? keyEditHistoryLabel(redoEntry, (layer) => layerName(state.layerMetadata, layer)) : null,
-      undo: () => travel("undo"),
-      redo: () => travel("redo"),
-      clear: () => dispatch({ type: "keyHistoryClear" }),
-    }),
-    [historyBusy, historyOperation, redoEntry, state, travel, undoEntry],
-  );
-  // One Undo for keys and lights, in Draft, Live and a file alike (draft/oneHistory.ts).
-  const stagedHistory = useDraftHistory(state, dispatch, bundle.caps.num_cols);
-  const history = useMemo(
-    () => oneHistory(state.batchMode, deviceHistory, stagedHistory, state.keyEditHistory),
-    // The staged history's undo and redo read it when called.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      state.batchMode,
-      state.keyEditHistory,
-      deviceHistory,
-      stagedHistory.canUndo,
-      stagedHistory.canRedo,
-      stagedHistory.undoLabel,
-      stagedHistory.redoLabel,
-      stagedHistory.tops.past,
-      stagedHistory.tops.future,
-    ],
-  );
+  // One Undo and Redo, in Draft, Live and a file alike (ADR 0018).
+  const history = useHistory(state, io, dispatch);
   const historyRef = useRef(history);
   useEffect(() => {
     historyRef.current = history;

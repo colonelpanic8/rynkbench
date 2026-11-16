@@ -55,9 +55,9 @@ import type {
 } from "../session/types";
 import type { BoardProfile } from "./boards";
 import type { KeyboardModel } from "./keyboard";
-import type { KeyEditHistory, KeyEditHistoryEntry } from "./history";
 import type { LayerRewrite } from "../layers/management";
 import type { KeyboardImage, PatchEntry, SyncItem } from "../sync";
+import type { History } from "./history";
 
 /** The screen on show: one section of one area (src/ui/areas.ts). */
 export type Mode =
@@ -272,11 +272,8 @@ export interface WorkbenchState {
   selection: Selection | null;
   /** `${layer}:${row}:${col}` or `e:${layer}:${id}` → write status. */
   pending: Record<string, PendingInfo>;
-  /** Successful direct matrix-key edits only. Compound presets, imports,
-   *  encoders, lighting, and advanced tables deliberately do not enter it. */
-  keyEditHistory: KeyEditHistory;
-  /** Bulk configuration transactions suspend history traversal. */
-  keyEditHistorySuspended: boolean;
+  /** Every commit, for Undo and Redo, in Draft, Live and a file alike (ADR 0018). */
+  history: History;
   /** Draft mode (ADR 0010): edits change what you want, and Send writes the
    *  difference; in Live each edit is written at once. */
   batchMode: boolean;
@@ -333,21 +330,13 @@ export type WorkbenchAction =
       message: string;
     }
   | { type: "keyErrDismiss"; layer: number; row: number; col: number }
-  | { type: "keyHistoryRecord"; entry: KeyEditHistoryEntry }
-  | {
-      type: "keyHistoryStart";
-      direction: "undo" | "redo";
-      entry: KeyEditHistoryEntry;
-    }
-  | {
-      type: "keyHistoryFinish";
-      direction: "undo" | "redo";
-      entry: KeyEditHistoryEntry;
-    }
-  | { type: "keyHistoryFail"; direction: "undo" | "redo"; message: string }
-  | { type: "keyHistoryClear" }
-  | { type: "keyHistorySuspend"; suspended: boolean }
-  | { type: "keyHistoryErrorDismiss" }
+  /** Undo or Redo: what you want takes the step back or again. */
+  | { type: "historyTravel"; direction: "undo" | "redo" }
+  /** A Paint stroke opens (pointer down) or closes: its changes are one step. */
+  | { type: "historyStroke"; open: boolean }
+  /** A bulk write (an import, a transform) runs: its changes are no step. */
+  | { type: "historySuspend"; suspended: boolean }
+  | { type: "historyClear" }
   | { type: "batchMode"; enabled: boolean }
   /** Draft edits: what you want changes; the keyboard is not written. */
   | { type: "keyStage"; layer: number; row: number; col: number; action: KeyAction }

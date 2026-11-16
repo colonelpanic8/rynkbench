@@ -51,7 +51,7 @@ Take a key changed in the key editor.
    │                    read-back ─▶ base   (what reached the keyboard leaves the draft)
    │                                                                 │
    └─ Live:  dispatch keyWriteStart ──▶ session.keymap.setKey ───────┤
-             keyWriteOk / keyWriteErr + key history                  │
+             keyWriteOk / keyWriteErr                                │
                                                                      ▼
                                             session (one interface) ─▶ transport ─▶ keyboard
                                                                      │
@@ -63,7 +63,7 @@ Take a key changed in the key editor.
 2. **`io` decides when.** In Draft the change only changes what you want; the draft is its difference from `base`, what the keyboard held at the last read (ADR 0010, ADR 0018). In Live it is written at once and narrated by actions (`…Start`, then `…Ok` or `…Err`), and `base` with it.
 3. **The reducer is the only place state changes** (`workbench/reducer.ts`). It is pure; topic events from the keyboard arrive through it too.
 4. **Bulk writes go through the one write path.** Send, layer moves and (later) operations and Flows build the keyboard they want as an image; `sync/` plans only the difference, writes it and reads it back (ADR 0012, `docs/sync.md`).
-5. **Undo** is the draft's history in Draft and the keyboard's key history in Live, until ADR 0013 makes them one.
+5. **One Undo** (ADR 0018): every edit is a commit to what you want and one step of the history, kept in the workbench state as a patch. Undo commits the inverse, through Guard and the mode like any edit: in Live, Send's path writes it to the keyboard.
 
 ## Where to start reading
 

@@ -84,7 +84,7 @@ export function useDocumentTransfer(): DocumentTransfer {
       return;
     }
     // Imports are bulk, cross-feature writes outside direct-key history.
-    dispatch({ type: "keyHistorySuspend", suspended: true });
+    dispatch({ type: "historySuspend", suspended: true });
     history.clear();
     setPhase("importing");
     setReport(null);
@@ -139,7 +139,7 @@ export function useDocumentTransfer(): DocumentTransfer {
       setReport(errorReport(`Could not import ${file.name}`, error));
     } finally {
       history.clear();
-      dispatch({ type: "keyHistorySuspend", suspended: false });
+      dispatch({ type: "historySuspend", suspended: false });
       setPhase(null);
     }
   };

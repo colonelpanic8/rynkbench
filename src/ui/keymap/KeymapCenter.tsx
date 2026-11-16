@@ -28,7 +28,7 @@ import { CarriedKey } from "./CarriedKey";
 import { useKeyMoves } from "./useKeyMoves";
 import { useLightView } from "./lightView";
 import { LightsButton } from "./LightsButton";
-import { beginStroke } from "../draft/useDraftHistory";
+import { beginStroke } from "../draft/useHistory";
 import { shownColor, type KeyLight } from "../../model/lighting/key-light";
 import { useKeyLights } from "./useKeyLights";
 import { cssEmissiveRgb } from "../../model/lighting/color";
@@ -246,7 +246,7 @@ export function KeymapCenter() {
           onKeyPointerDown={(key) => {
             moves.cancelKeyboardMove();
             if (light.brush) {
-              beginStroke();
+              beginStroke(dispatch);
               paintKey(key, light.brush);
             } else dispatch({ type: "select", selection: { type: "key", row: key.row, col: key.col } });
           }}

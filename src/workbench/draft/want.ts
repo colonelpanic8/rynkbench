@@ -15,6 +15,7 @@ import type { EncoderAction } from "../../model/action-types";
 import type { LightingOverlayCell } from "../../model/lighting-types";
 import { sceneTableWithLayer } from "../../model/lighting/preview";
 import {
+  applyPatch,
   itemKey,
   mutableLighting,
   patchBetween,
@@ -228,4 +229,11 @@ export function withLightingRead(state: WorkbenchState, read: LightingState): Wo
   if (!state.lightingState) return { ...state, lightingState: read };
   const next = withRead(state, { lightingState: mutableLighting(read) });
   return { ...next, lightingState: { ...read, ...mutableLighting(next.lightingState!) } };
+}
+
+/** The workbench as Undo or Redo would leave it; null when there is no step. */
+export function travelled(state: WorkbenchState, direction: "undo" | "redo"): WorkbenchState | null {
+  const step = (direction === "undo" ? state.history.past : state.history.future).at(-1);
+  if (!step) return null;
+  return withWant(state, applyPatch(wantOf(state), step.changes, direction === "undo" ? "before" : "after"));
 }

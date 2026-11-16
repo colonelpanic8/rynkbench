@@ -7,7 +7,6 @@ import { useMemo, useRef } from "react";
 import { askConfirm, showToast } from "../messages/store";
 import { useWorkbench } from "../state";
 import { draftGroups, draftSize, groupItems, type DraftGroup } from "../../workbench/draft/changes";
-import { discardDraftHistory, resetDraftHistory } from "./useDraftHistory";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -33,7 +32,6 @@ export function useDraft() {
       const total = size;
       const sent = await io.applyBatch();
       if (!sent.ok && sent.guarded) return false; // Guard has said why
-      resetDraftHistory();
       const left = draftSize(draftGroups(latest.current));
       if (sent.ok && left === 0) {
         showToast(`${plural(total, "change")} sent: the keyboard has them all`, { tone: "ok" });
@@ -79,7 +77,6 @@ export function useDraft() {
   };
 
   function discardAll() {
-    discardDraftHistory();
     dispatch({ type: "batchDiscard" });
   }
 }

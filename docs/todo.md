@@ -8,7 +8,7 @@ In this order; decisions in ADR 0017 and an update of ADR 0002.
 
 1. **A safety net.** Render tests for the RGB screens; a simulated board without RGB or Bluetooth; a test that opens every area and section on every simulated board.
 2. **A core for the workbench.** Reducer and `io` out of `ui/state.tsx` into `workbench/`; 3,400 lines of domain logic out of `ui/`; `docs/ARCHITECTURE.md`. One go, no parallel sessions.
-3. **The draft holds the whole keyboard** (the rest of ADR 0013): macros, layer names and moves, settings; one history in Draft and Live.
+3. ~~**The draft holds the whole keyboard** (the rest of ADR 0013): macros, layer names and moves, settings; one history in Draft and Live.~~ ADR 0018, three commits on `redesign`.
 4. **Operations.** Image in, image out, judged by Guard, applied as one undo step; transforms, presets and rule panels onto them (closes the rule-path and atomic-setup items below).
 5. **Capabilities and `offer()`** for everything a screen offers; any time after the safety net.
 6. **The doors:** `describe(image)`, then Flows and WebMCP behind flags.
@@ -23,7 +23,7 @@ In this order; decisions in ADR 0017 and an update of ADR 0002.
 9. **Remove the overlay's leftover state.** With the Lighting screen gone, `lightingTarget` is always "overlay" and the overlay draft is never edited; the reducer cases, `activeLighting*`, and the state tests built around them can go. Keep the device's applied overlay for the live view.
 10. **Rule writes onto the one path (ADR 0012/0013).** The condition rules panel, the lighting key presets and the stock Magic layer still write the whole rule table at once; the status setups and every key's light already stage their rules in the draft. Moving them makes rules undoable and sent with everything else.
 11. **Status setups are not atomic in Live.** Their keys are written at once while their rules wait in the draft until you pause; a failed send leaves keys without lights. Stage the keys with the rules.
-12. **The draft history's module-level state** (`useDraftHistory.ts`: history, skip, stroke) leaks between tests and windows; a store per Workbench would not.
+12. ~~**The draft history's module-level state** (`useDraftHistory.ts`: history, skip, stroke) leaks between tests and windows; a store per Workbench would not.~~ The history is workbench state (ADR 0018).
 
 ## Large
 

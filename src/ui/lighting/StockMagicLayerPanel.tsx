@@ -27,7 +27,7 @@ export function StockMagicLayerPanel({ layer }: { layer: number }) {
       const result = await writeStockMagicLayer(
         {
           setKey: (row, col, action) =>
-            io.setKey(layer, row, col, action, { history: "invalidate" }),
+            io.setKey(layer, row, col, action),
           applyScenes: (cells) => io.applyScenes(cells),
           applyRules: (rules) => io.applyConditionalScenes(rules),
           setWakeLayers: (mask) => io.setWakeLayers(mask),

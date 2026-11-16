@@ -5,10 +5,10 @@
 
 import type { EncoderAction, KeyAction } from "../vendor/rynk-wasm/rynk_wasm";
 import type { WorkbenchAction, WorkbenchState } from "../model/workbench-state";
-import { reduceKeyEditHistory } from "../model/history";
 import { normalizePointingConfig } from "../model/pointing";
 import { draftEditCount } from "./draft/selectors";
-import { applyPatch, withValues, type KeyboardImage } from "../sync";
+import { applyPatch, patchBetween, withValues, type KeyboardImage } from "../sync";
+import { emptyHistory, recordStep, travel } from "./draft/history";
 import { atBase, storedImage, wantOf, withBase, withItemsAtBase, withRead, withStored, withWant } from "./draft/want";
 import { encoderPendingId, keyPendingId } from "./pending";
 import { isLightingAction, reduceLighting } from "./reduce-lighting";
@@ -64,6 +64,26 @@ function withLiveBase(state: WorkbenchState, parts: readonly (keyof KeyboardImag
   return { ...state, base };
 }
 
+/** Edits: each changes what you want and is one step of the history (ADR 0018).
+ *  Reads change it too, by following the keyboard, and are no step. */
+const COMMITS = new Set<WorkbenchAction["type"]>([
+  "keyStage", "encoderStage", "slotStage", "wantSet", "layerRewriteDrafted", "paint", "erase", "draftReset",
+  "conditionalDraft", "conditionalDraftReset", "pointingDraftSet", "pointingDraftReset", "draftRevert", "batchDiscard",
+  "keyWriteStart", "encoderWriteStart", "slotWriteStart", "fieldWriteStart", "morseProfileWriteStart",
+  "morseProfileDeleteStart", "defaultLayer", "layerMetadataSet", "layerOperationApplied", "lightingStateSet",
+  "scenePolicySet", "wakeLayersSet", "extensionStateSet",
+]);
+/** A Live write that failed puts back what it changed: that joins its step. */
+const FAILED_WRITES = new Set<WorkbenchAction["type"]>([
+  "keyWriteErr", "encoderWriteErr", "slotWriteErr", "fieldWriteErr", "morseProfileWriteErr", "morseProfileDeleteErr",
+]);
+
+function withStep(before: WorkbenchState, after: WorkbenchState, join: boolean): WorkbenchState {
+  const changes = patchBetween(wantOf(before), wantOf(after));
+  const history = recordStep(after.history, changes, join);
+  return history === after.history ? after : { ...after, history };
+}
+
 export function makeWorkbenchReducer(cols: number) {
   const reduce = (state: WorkbenchState, act: WorkbenchAction): WorkbenchState => {
     if (isLightingAction(act)) return reduceLighting(state, act);
@@ -71,9 +91,12 @@ export function makeWorkbenchReducer(cols: number) {
     return reduceRest(state, act);
   };
   return function reducer(state: WorkbenchState, act: WorkbenchAction): WorkbenchState {
-    const next = reduce(state, act);
+    let next = reduce(state, act);
+    if (next === state) return state;
     const live = LIVE_WRITES[act.type];
-    return live && next !== state ? withLiveBase(next, live) : next;
+    if (live) next = withLiveBase(next, live);
+    if (COMMITS.has(act.type) || FAILED_WRITES.has(act.type)) next = withStep(state, next, FAILED_WRITES.has(act.type));
+    return next;
   };
 
   function reduceRest(state: WorkbenchState, act: WorkbenchAction): WorkbenchState {
@@ -116,55 +139,17 @@ export function makeWorkbenchReducer(cols: number) {
         const { [id]: _gone, ...pending } = state.pending;
         return { ...state, pending };
       }
-      case "keyHistoryRecord":
-        return {
-          ...state,
-          keyEditHistory: reduceKeyEditHistory(state.keyEditHistory, {
-            type: "record",
-            entry: act.entry,
-          }),
-        };
-      case "keyHistoryStart":
-        return {
-          ...state,
-          keyEditHistory: reduceKeyEditHistory(state.keyEditHistory, {
-            type: "start",
-            direction: act.direction,
-            entry: act.entry,
-          }),
-        };
-      case "keyHistoryFinish":
-        return {
-          ...state,
-          keyEditHistory: reduceKeyEditHistory(state.keyEditHistory, {
-            type: "finish",
-            direction: act.direction,
-            entry: act.entry,
-          }),
-        };
-      case "keyHistoryFail":
-        return {
-          ...state,
-          keyEditHistory: reduceKeyEditHistory(state.keyEditHistory, {
-            type: "fail",
-            direction: act.direction,
-            message: act.message,
-          }),
-        };
-      case "keyHistoryClear":
-        return {
-          ...state,
-          keyEditHistory: reduceKeyEditHistory(state.keyEditHistory, { type: "clear" }),
-        };
-      case "keyHistorySuspend":
-        return { ...state, keyEditHistorySuspended: act.suspended };
-      case "keyHistoryErrorDismiss":
-        return {
-          ...state,
-          keyEditHistory: reduceKeyEditHistory(state.keyEditHistory, {
-            type: "dismissError",
-          }),
-        };
+      case "historyTravel": {
+        const moved = travel(state.history, act.direction);
+        if (!moved) return state;
+        return { ...withWant(state, applyPatch(wantOf(state), moved.patch)), history: moved.history };
+      }
+      case "historyStroke":
+        return { ...state, history: { ...state.history, stroke: act.open ? "open" : "none" } };
+      case "historySuspend":
+        return { ...state, history: { ...state.history, suspended: act.suspended } };
+      case "historyClear":
+        return { ...state, history: { ...emptyHistory(), suspended: state.history.suspended } };
       case "batchMode": {
         // Leaving Draft needs the drafted keys, encoders and slots sent or
         // discarded, never silently written or dropped.

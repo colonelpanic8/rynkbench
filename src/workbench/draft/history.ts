@@ -1,136 +1,48 @@
-// Undo and redo for what is drafted: the drafted keys (in Draft) and the layers'
-// lighting (always staged first; in Live sent once painting pauses). Every
-// change in one go (a key, a paste, a swap, a light) is one step, and a Paint
-// stroke, however many keys it crosses, is one step too (`merge`). Undo stages
-// them back. Each step has its place in time (`order`, model/history.ts), so
-// in Live it undoes in turn with the keys written to the keyboard. Send and
-// Discard start a new history, as the draft starts over. Pure; the hook that
-// drives it is in ui/draft/useDraftHistory.ts.
+// One history in Draft, Live and a file (ADR 0018): the list of commits, each
+// kept as its items with their value before and after (a patch, not two
+// images), up to 100. Undo commits the inverse patch and Redo the patch again;
+// the mode decides when the keyboard is written, as for any edit. A Paint
+// stroke, however many keys it crosses, is one step. Send and a mode switch
+// leave the history alone; Discard is a step like any other. It belongs to the
+// open workbench and starts over with another keyboard or file. Pure.
 
-import type { KeyAction } from "../../model/action-types";
-import { sameValue } from "../../model/deep-equal";
-import type { LightingOverlayCell } from "../../model/lighting-types";
-import type { Rules } from "../../model/lighting/rules";
+import type { History, HistoryStep } from "../../model/history";
+import { invertPatch, joinPatches, type PatchEntry } from "../../sync";
 
-export interface KeyChange {
-  layer: number;
-  row: number;
-  col: number;
-  from: KeyAction;
-  to: KeyAction;
-}
+export type { History, HistoryStep };
 
-/** A layer's lighting draft, by LED. */
-export type Cells = Record<number, LightingOverlayCell>;
+export const HISTORY_LIMIT = 100;
 
-/** One layer's whole lighting draft before and after. */
-export interface LightChange {
-  layer: number;
-  from: Cells;
-  to: Cells;
-}
+export const emptyHistory = (): History => ({ past: [], future: [], stroke: "none", suspended: false });
 
-export interface Step {
-  /** When it was done, among every edit (model/history.ts nextEditOrder). */
-  order: number;
-  keys: KeyChange[];
-  lights: LightChange[];
-  /** The rule table (status lights) before and after; null when it stayed. */
-  rules: { from: Rules; to: Rules } | null;
-}
-
-export interface DraftHistory {
-  past: Step[];
-  future: Step[];
-}
-
-/** A key by its place. */
-export interface KeyPlace {
-  layer: number;
-  row: number;
-  col: number;
-}
-
-/** What a step is taken from: the keys, the drafted ones, and each layer's lighting and the rules. */
-export interface DraftImage {
-  layers: KeyAction[][];
-  /** The keys that differ from the keyboard. */
-  draftedKeys: readonly KeyPlace[];
-  lighting: Cells[];
-  rules: Rules;
-}
-
-export const emptyHistory = (): DraftHistory => ({ past: [], future: [] });
-export const isEmptyStep = (step: Step) => step.keys.length === 0 && step.lights.length === 0 && step.rules === null;
-
-// Cells and rules are built by Rynkbench and read back from the keyboard, so
-// they are compared without regard to key order.
-const same = sameValue;
-
-/** What a state transition changed: the keys among those drafted before or
- *  after it, each layer's lighting, and the rules. */
-export function stepBetween(before: DraftImage, after: DraftImage, cols: number, order = 0): Step {
-  const places = new Map<string, KeyPlace>();
-  for (const place of [...before.draftedKeys, ...after.draftedKeys]) places.set(`${place.layer}:${place.row}:${place.col}`, place);
-  const keys: KeyChange[] = [];
-  for (const { layer, row, col } of places.values()) {
-    const from = before.layers[layer]?.[row * cols + col] ?? "No";
-    const to = after.layers[layer]?.[row * cols + col] ?? "No";
-    if (!same(from, to)) keys.push({ layer, row, col, from, to });
+/** A commit: a new step (the future is gone), or joined to the last one (the rest
+ *  of a Paint stroke, or a write that failed and put things back). */
+export function recordStep(history: History, changes: readonly PatchEntry[], join = false): History {
+  if (history.suspended || changes.length === 0) return history;
+  const last = history.past.at(-1);
+  if ((join || history.stroke === "joined") && last) {
+    const joined = joinPatches(last.changes, changes);
+    const past = joined.length === 0 ? history.past.slice(0, -1) : [...history.past.slice(0, -1), { changes: joined }];
+    return { ...history, past, future: join ? history.future : [] };
   }
-  const lights: LightChange[] = [];
-  for (let layer = 0; layer < Math.max(before.lighting.length, after.lighting.length); layer += 1) {
-    const from = before.lighting[layer] ?? {};
-    const to = after.lighting[layer] ?? {};
-    if (!same(from, to)) lights.push({ layer, from, to });
-  }
-  const rules = same(before.rules, after.rules) ? null : { from: before.rules, to: after.rules };
-  return { order, keys, lights, rules };
-}
-
-/** Two steps one after the other as one, in the first one's place in time:
- *  each thing from where the first found it to where the second left it; what
- *  ends where it started drops out. */
-export function merge(first: Step, second: Step): Step {
-  const keyAt = (change: KeyChange) => `${change.layer}:${change.row}:${change.col}`;
-  const keys = new Map(first.keys.map((change) => [keyAt(change), change]));
-  for (const change of second.keys) {
-    const earlier = keys.get(keyAt(change));
-    keys.set(keyAt(change), earlier ? { ...change, from: earlier.from } : change);
-  }
-  const lights = new Map(first.lights.map((change) => [change.layer, change]));
-  for (const change of second.lights) {
-    const earlier = lights.get(change.layer);
-    lights.set(change.layer, earlier ? { ...change, from: earlier.from } : change);
-  }
-  const rules = first.rules && second.rules ? { from: first.rules.from, to: second.rules.to } : (second.rules ?? first.rules);
+  if (join) return history;
   return {
-    order: first.order,
-    keys: [...keys.values()].filter((change) => !same(change.from, change.to)),
-    lights: [...lights.values()].filter((change) => !same(change.from, change.to)).sort((a, b) => a.layer - b.layer),
-    rules: rules && !same(rules.from, rules.to) ? rules : null,
+    ...history,
+    past: [...history.past, { changes }].slice(-HISTORY_LIMIT),
+    future: [],
+    stroke: history.stroke === "open" ? "joined" : history.stroke,
   };
 }
 
-/** A new step: it goes on the past, and the future is gone. With `join`, it
- *  joins the last step instead (the rest of a Paint stroke). */
-export function record(history: DraftHistory, step: Step, join = false): DraftHistory {
-  if (isEmptyStep(step)) return history;
-  const last = history.past.at(-1);
-  if (!join || !last) return { past: [...history.past, step], future: [] };
-  const joined = merge(last, step);
-  return { past: isEmptyStep(joined) ? history.past.slice(0, -1) : [...history.past.slice(0, -1), joined], future: [] };
-}
-
-/** The step undo takes back and the history after it; null when there is none. */
-export function undo(history: DraftHistory): { step: Step; history: DraftHistory } | null {
-  const step = history.past.at(-1);
+/** The step Undo or Redo takes, the patch that does it, and the history after. */
+export function travel(history: History, direction: "undo" | "redo"): { patch: PatchEntry[]; step: HistoryStep; history: History } | null {
+  const from = direction === "undo" ? history.past : history.future;
+  const step = from.at(-1);
   if (!step) return null;
-  return { step, history: { past: history.past.slice(0, -1), future: [...history.future, step] } };
-}
-
-export function redo(history: DraftHistory): { step: Step; history: DraftHistory } | null {
-  const step = history.future.at(-1);
-  if (!step) return null;
-  return { step, history: { past: [...history.past, step], future: history.future.slice(0, -1) } };
+  const rest = from.slice(0, -1);
+  const moved =
+    direction === "undo"
+      ? { ...history, past: rest, future: [...history.future, step], stroke: "none" as const }
+      : { ...history, past: [...history.past, step], future: rest, stroke: "none" as const };
+  return { patch: direction === "undo" ? invertPatch(step.changes) : [...step.changes], step, history: moved };
 }

@@ -65,7 +65,7 @@ export function StatusPresetsPanel() {
     }
     const result = await writeGlove80StatusSetup(
       {
-        setKey: (preset, action) => io.setKey(preset.layer, preset.row, preset.col, action, { history: "invalidate" }),
+        setKey: (preset, action) => io.setKey(preset.layer, preset.row, preset.col, action),
         applyRules: async (next) => {
           dispatch({ type: "conditionalDraft", cells: next });
           return { ok: true };

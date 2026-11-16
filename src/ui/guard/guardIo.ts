@@ -14,7 +14,7 @@ import { layerName } from "../layer-names";
 import { askConfirm, showToast } from "../messages/store";
 import type { IoWriteResult, KeyWrite, WorkbenchIo, WorkbenchState } from "../../workbench";
 import { askRequest, overwriteRequest, stopText, type GuardNames } from "./words";
-import { atBase } from "../../workbench/draft/want";
+import { atBase, travelled } from "../../workbench/draft/want";
 
 function sideOf(state: WorkbenchState, cols: number, layers: KeyAction[][]): GuardInput {
   return {
@@ -71,11 +71,18 @@ export function guardIo(io: WorkbenchIo, bundle: ConnectedBundle, getState: () =
 
   return {
     ...io,
-    async setKey(layer, row, col, action, options) {
+    async setKey(layer, row, col, action) {
       // RMK stores every key it is sent; one it already holds costs flash for nothing (ADR 0012).
       if (same(getState().layers[layer]?.[row * cols + col], action)) return { ok: true };
       const pass = await judged([{ layer, row, col, action }]);
-      return pass.ok ? io.setKey(layer, row, col, action, options) : pass;
+      return pass.ok ? io.setKey(layer, row, col, action) : pass;
+    },
+    // Undo and Redo are edits like any other: what they would make is judged.
+    async travel(direction) {
+      const after = travelled(getState(), direction);
+      if (!after) return io.travel(direction);
+      const pass = await judgedState(after, after.layers);
+      return pass.ok ? io.travel(direction) : pass;
     },
     // A morse, combo or fork slot can turn a layer on, so changing one is judged too.
     async setSlot(kind, index, value) {

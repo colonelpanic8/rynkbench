@@ -13,7 +13,7 @@ import { useCapabilities, useCapability } from "../use-capabilities";
 import { Button, SectionLabel, Segmented, cx } from "../kit";
 import { maskHasLayer, setLayerInMask } from "../../model/lighting/wake-layers";
 import { layerLightingActions } from "../../workbench/draft/changes";
-import type { Cells } from "../../workbench/draft/history";
+import type { LightingOverlayCell } from "../../model/lighting-types";
 
 const POLICIES: Array<{ id: LightingLayerPolicy; label: string; hint: string }> = [
   { id: "EffectiveOnly", label: "Top layer only", hint: "Only the topmost active layer lights" },
@@ -21,10 +21,10 @@ const POLICIES: Array<{ id: LightingLayerPolicy; label: string; hint: string }> 
 ];
 
 /** What a pre-scene Rynkbench kept in this browser: each layer's lights. */
-function localPresets(serial: string): Record<number, { cells: Cells[number][] }> {
+function localPresets(serial: string): Record<number, { cells: LightingOverlayCell[] }> {
   try {
     const raw = readSetting(SETTING_KEYS.layerLighting(serial));
-    return raw ? ((JSON.parse(raw) as { presets?: Record<number, { cells: Cells[number][] }> }).presets ?? {}) : {};
+    return raw ? ((JSON.parse(raw) as { presets?: Record<number, { cells: LightingOverlayCell[] }> }).presets ?? {}) : {};
   } catch {
     return {};
   }

@@ -2,10 +2,10 @@
 // nothing drafted, selected or in flight: what you want is what it holds.
 
 import type { ConnectedBundle, WorkbenchState } from "../model/workbench-state";
-import { initialKeyEditHistory } from "../model/history";
 import { normalizePointingConfig } from "../model/pointing";
 import { cellsToRecord } from "./lighting-drafts";
 import { storedImage } from "./draft/want";
+import { emptyHistory } from "./draft/history";
 
 export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
   const applied = cellsToRecord(bundle.overlay);
@@ -51,8 +51,7 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     compiledScenePolicy: bundle.compiledSceneStatus?.policy ?? null,
     selection: null,
     pending: {},
-    keyEditHistory: initialKeyEditHistory(),
-    keyEditHistorySuspended: false,
+    history: emptyHistory(),
     batchMode: bundle.session.kind !== "offline", // a keyboard starts in Draft (ADR 0010)
     batchBusy: false,
     batchError: null,

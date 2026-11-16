@@ -5,8 +5,7 @@
 
 import type { WorkbenchState } from "../../model/workbench-state";
 import type { RynkSession } from "../../session/types";
-import { applyPatch, conflicts, partsOf, readImage, syncTo, valueAt, type KeyboardImage, type ImageFeatures, type SyncItem } from "../../sync";
-import { sameValue } from "../../model/deep-equal";
+import { applyPatch, conflicts, partsOf, readImage, syncTo, type KeyboardImage, type ImageFeatures, type SyncItem } from "../../sync";
 import { errorMessage } from "../../session/errors";
 import { draftOf } from "./want";
 import type { WorkbenchDispatch } from "../io";
@@ -68,9 +67,5 @@ export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Pro
   /** The keyboard now holds `image`: what reached it is no longer in the draft. */
   function stored(image: KeyboardImage) {
     dispatch({ type: "draftStored", image });
-    // Sent keys are a bulk write outside per-key history, like an import.
-    if (patch.some(({ item, after }) => item.kind === "key" && sameValue(valueAt(image, item), after))) {
-      dispatch({ type: "keyHistoryClear" });
-    }
   }
 }

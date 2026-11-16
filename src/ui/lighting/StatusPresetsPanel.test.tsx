@@ -59,7 +59,6 @@ describe("Glove80 presets", () => {
         lightingExtension: null,
         batchMode: false,
         pending: {},
-        keyEditHistorySuspended: false,
         pointingBusy: false,
         batchBusy: false,
       },

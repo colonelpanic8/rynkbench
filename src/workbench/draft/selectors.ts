@@ -16,7 +16,7 @@ export function pointingDraftDirty(state: WorkbenchState): boolean {
 
 export function hasPendingConfigurationWrite(state: WorkbenchState): boolean {
   return (
-    state.keyEditHistorySuspended ||
+    state.history.suspended ||
     state.lightingBusy ||
     state.pointingBusy ||
     state.batchBusy ||
@@ -24,15 +24,8 @@ export function hasPendingConfigurationWrite(state: WorkbenchState): boolean {
   );
 }
 
-export function canTravelKeyEditHistory(
-  state: WorkbenchState,
-  direction: "undo" | "redo",
-): boolean {
-  if (state.keyEditHistory.operation || hasPendingConfigurationWrite(state)) return false;
-  // Staged batch edits sit between the history's device state and the boards':
-  // traveling would write under them and stale their restore points.
-  if (draftEditCount(state) > 0) return false;
-  return direction === "undo"
-    ? state.keyEditHistory.past.length > 0
-    : state.keyEditHistory.future.length > 0;
+/** Whether Undo or Redo may go now: there is a step, and nothing is being written. */
+export function canTravel(state: WorkbenchState, direction: "undo" | "redo"): boolean {
+  if (state.batchBusy || hasPendingConfigurationWrite(state)) return false;
+  return (direction === "undo" ? state.history.past : state.history.future).length > 0;
 }

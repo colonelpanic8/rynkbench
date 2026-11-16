@@ -29,12 +29,13 @@ export {
   paramEffects,
 } from "./lighting-drafts";
 export {
-  canTravelKeyEditHistory,
+  canTravel,
   hasPendingConfigurationWrite,
   draftEditCount,
   pointingDraftDirty,
 } from "./draft/selectors";
 export { draftOf, isDrafted, type Draft } from "./draft/want";
+export type { History, HistoryStep } from "./draft/history";
 export {
   makeIo,
   ioFeaturesFor,

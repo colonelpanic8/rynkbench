@@ -29,7 +29,6 @@ function render(batchMode: boolean, current: unknown = "No") {
         kind: "effects", layer: 1, row: 0, col: 0, led: 4,
       }),
       lightingBusy: false,
-      keyEditHistorySuspended: false,
       pointingBusy: false,
       batchBusy: false,
       pending: {},

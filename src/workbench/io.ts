@@ -41,17 +41,11 @@ export type IoWriteResult = { ok: true } | { ok: false; message: string; guarded
 export type KeyWrite = { layer: number; row: number; col: number; action: KeyAction };
 
 export interface WorkbenchIo {
-  setKey(
-    layer: number,
-    row: number,
-    col: number,
-    action: KeyAction,
-    options?: { history?: "record" | "invalidate" },
-  ): Promise<IoWriteResult>;
+  setKey(layer: number, row: number, col: number, action: KeyAction): Promise<IoWriteResult>;
   /** Several keys as one change (a swap, a transform), so Guard judges them together. All are tried; the first failure is returned. */
-  writeKeys(edits: readonly KeyWrite[], options?: { history?: "record" | "invalidate"; onWritten?: (ok: boolean) => void }): Promise<IoWriteResult>;
-  undoKeyEdit(): Promise<IoWriteResult>;
-  redoKeyEdit(): Promise<IoWriteResult>;
+  writeKeys(edits: readonly KeyWrite[], options?: { onWritten?: (ok: boolean) => void }): Promise<IoWriteResult>;
+  /** Undo or Redo: the step back or again, as an edit; in Live the keyboard follows (ADR 0018). */
+  travel(direction: "undo" | "redo"): Promise<IoWriteResult>;
   /** Send the draft: only what differs from a fresh read, checked for changes made
    *  on the keyboard since (ADR 0012). What fails stays in the draft. */
   applyBatch(options?: SendOptions): Promise<IoWriteResult>;
