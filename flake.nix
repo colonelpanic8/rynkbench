@@ -37,6 +37,47 @@
           fenix.packages.${system}.stable.rustfmt
           fenix.packages.${system}.targets.wasm32-unknown-unknown.stable.rust-std
         ];
+
+        # The Android shell adds the NDK's target std libraries. Kept separate
+        # from `rustToolchain` so a plain `nix develop` does not pull them in.
+        androidRustToolchain = fenix.packages.${system}.combine [
+          fenix.packages.${system}.stable.rustc
+          fenix.packages.${system}.stable.cargo
+          fenix.packages.${system}.stable.clippy
+          fenix.packages.${system}.stable.rust-src
+          fenix.packages.${system}.targets.wasm32-unknown-unknown.stable.rust-std
+          fenix.packages.${system}.targets.aarch64-linux-android.stable.rust-std
+          fenix.packages.${system}.targets.armv7-linux-androideabi.stable.rust-std
+          fenix.packages.${system}.targets.x86_64-linux-android.stable.rust-std
+          fenix.packages.${system}.targets.i686-linux-android.stable.rust-std
+        ];
+
+        # The SDK is unfree and its licences must be accepted to unpack it, so
+        # this is a second nixpkgs instance rather than a config on the shared
+        # one: nothing but the Android shell should need either.
+        androidPkgs = import nixpkgs {
+          inherit system;
+          config = {
+            allowUnfree = true;
+            android_sdk.accept_license = true;
+          };
+        };
+
+        androidComposition = androidPkgs.androidenv.composeAndroidPackages {
+          # Matches `compileSdk`/`targetSdk` and the AGP version in the
+          # generated gradle project under src-tauri/gen/android.
+          platformVersions = [ "36" ];
+          # 36 matches the gradle project's compileSdk; R8 asks for 35 on top
+          # of that and cannot install it itself — the store is read-only.
+          buildToolsVersions = [ "35.0.0" "36.0.0" ];
+          includeNDK = true;
+          ndkVersions = [ "27.0.12077973" ];
+          includeEmulator = false;
+          includeSystemImages = false;
+        };
+
+        androidSdk = androidComposition.androidsdk;
+        androidSdkRoot = "${androidSdk}/libexec/android-sdk";
         rustPlatform = pkgs.makeRustPlatform {
           cargo = rustToolchain;
           rustc = rustToolchain;
@@ -231,7 +272,11 @@
           # WM_CLASS res_class, which is what lets the shell associate the
           # running window with this entry instead of showing it unnamed.
           postInstall = ''
-            mv $out/bin/rynkbench-desktop $out/bin/rynkbench
+            # The crate is also a cdylib so the Android build can load it as a
+            # JNI library; on desktop that artifact is dead weight.
+            rm -rf $out/lib
+
+            mv $out/bin/rynkbench-app $out/bin/rynkbench
 
             install -Dm444 ${./src-tauri/icons/icon.png} \
               $out/share/icons/hicolor/128x128/apps/rynkbench.png
@@ -271,6 +316,32 @@
             pkgs.udev
             pkgs.webkitgtk_4_1
           ];
+        };
+
+        # Everything `cargo tauri android` needs: the SDK/NDK, a JDK, gradle,
+        # and a Rust toolchain carrying the four Android target std libraries.
+        devShells.android = pkgs.mkShell {
+          packages = [
+            androidRustToolchain
+            androidSdk
+            pkgs.cargo-ndk
+            pkgs.cargo-tauri
+            pkgs.jdk17
+            pkgs.just
+            pkgs.nodejs_22
+            pkgs.pkg-config
+          ];
+
+          ANDROID_HOME = androidSdkRoot;
+          ANDROID_SDK_ROOT = androidSdkRoot;
+          NDK_HOME = "${androidSdkRoot}/ndk/27.0.12077973";
+          JAVA_HOME = "${pkgs.jdk17}";
+
+          shellHook = ''
+            # The generated gradle project resolves aapt2 from the maven
+            # artifact, which ships a prebuilt binary the Nix store cannot run.
+            export GRADLE_OPTS="-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdkRoot}/build-tools/36.0.0/aapt2"
+          '';
         };
 
         packages.default = rynkbench;

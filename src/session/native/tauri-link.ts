@@ -25,6 +25,18 @@ export interface TauriLink {
   watchDisconnect: LinkSessionHooks["watchDisconnect"];
 }
 
+/** True inside the native shell, on any platform it is built for. */
+export function inTauri(): boolean {
+  return typeof window !== "undefined" && window.__TAURI__ !== undefined;
+}
+
+/** The Android build serves only BLE: the platform owns HID-over-GATT, so
+ *  there is no raw-HID interface for an app to open and no `rynk_list`
+ *  command on that side to ask. */
+export function onAndroid(): boolean {
+  return typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
+}
+
 export function tauri(): TauriGlobal {
   const t = window.__TAURI__;
   if (!t) throw new Error("Tauri runtime is not available");

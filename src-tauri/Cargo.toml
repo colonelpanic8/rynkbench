@@ -1,9 +1,15 @@
 [package]
-name = "rynkbench-desktop"
+name = "rynkbench-app"
 version = "0.1.0"
-description = "Rynkbench desktop shell: the web configurator in a Tauri window with native hidapi and BLE GATT transports"
+description = "Rynkbench native shell: the web configurator in a Tauri webview with native HID and BLE transports"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+
+[lib]
+# `_lib` because a lib target may not share its package's binary name on
+# Windows; the Android entry point is this library's `run`.
+name = "rynkbench_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -11,15 +17,25 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
+futures-util = "0.3"
+log = "0.4"
+tokio = { version = "1", features = ["macros", "sync", "time"] }
+
+# Desktop-only transports and UF2 firmware installs. Android has no raw-HID
+# path (the platform owns HID-over-GATT) and bluest has no Android backend, so
+# its BLE work is done by a Kotlin plugin instead.
+[target.'cfg(not(target_os = "android"))'.dependencies]
 hidapi = "2"
 # BLE GATT transport. Same crate and version the rmk fork's `rynk-ble` uses.
 bluest = "0.6"
-futures-util = "0.3"
-tokio = { version = "1", features = ["macros", "sync", "time"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 sha2 = "0.10"
 regex = "1"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+base64 = "0.22"
+serde_json = "1"
 
 [profile.release]
 strip = true

@@ -197,9 +197,9 @@ service — the one transport that also works in Chrome for Android, where the
 two USB backends don't exist. The keyboard must be paired (bonded) with the
 connecting device: the firmware only answers Rynk traffic on an encrypted link.
 The page must be served from a secure context — `localhost` counts, so local dev
-works out of the box. Alternatively, the [Tauri desktop app](#desktop-app-tauri)
-bundles the same UI with native HID and BLE transports, so no browser is needed
-at all.
+works out of the box. Alternatively, the [Tauri apps](#native-apps-tauri)
+bundle the same UI with native transports — HID and BLE on desktop, BLE on
+Android — so no browser is needed at all.
 
 ## Quick start
 
@@ -246,12 +246,19 @@ production bundle. Enable them only for a particular build/startup with
   (Web Serial/WebHID choosers, stream locks, hot-plug); the WASM owns
   request/response typing and protocol validation.
 
-## Desktop app (Tauri)
+## Native apps (Tauri)
 
-The same UI ships as a native desktop app: a Tauri shell (`src-tauri/`) serves
-the built site in a system webview and exposes the Rynk raw-HID interface
-through [hidapi](https://crates.io/crates/hidapi), since WebKit-based webviews
-have no WebHID. Build and run it from the flake:
+The same UI ships as a native app: a Tauri shell (`src-tauri/`) serves the built
+site in a system webview and provides the transports that webview lacks. Which
+transports those are differs by platform, but the frontend cannot tell — both
+backends answer the same commands.
+
+### Desktop
+
+WebKit-based webviews have neither WebHID nor Web Bluetooth, so the desktop
+shell provides both: raw HID through [hidapi](https://crates.io/crates/hidapi)
+and BLE GATT through [bluest](https://crates.io/crates/bluest). Build and run it
+from the flake:
 
 ```bash
 nix build .#rynkbench-tauri   # result/bin/rynkbench
@@ -265,6 +272,32 @@ bootloader under `/run/media/$USER`, `/media/$USER`, `/media`, or `/Volumes`.
 Firmware channels are declarative board-profile data; Glove80 and Go60 use the
 latest `colonelpanic8/moergo-config` release, but the resolver and installer do
 not otherwise contain MoErgo-specific device logic.
+
+### Android
+
+Android has no raw-HID path at all — the platform owns HID-over-GATT, so the
+vendor interface is closed to apps — and the Android WebView has no Web
+Bluetooth. BLE is therefore the one transport, served by a Kotlin plugin
+(`src-tauri/gen/android/.../RynkBlePlugin.kt`) behind the same four commands the
+desktop's bluest backend answers.
+
+```bash
+just android-apk              # release APK (unsigned)
+just android-dev              # debug APK, installed on the attached device
+```
+
+Both use the `android` devshell, which carries the Android SDK/NDK (via
+`androidenv`, unfree and licence-accepting) and the Rust Android targets. The
+generated gradle project under `src-tauri/gen/android/` is committed, because
+the Kotlin plugin and the Bluetooth manifest entries live in it; re-running
+`cargo tauri android init` would overwrite them.
+
+The app attaches to a **bonded** keyboard by address and never scans: the
+firmware's host advertisement does not carry the Rynk service UUID, and a
+keyboard busy being a keyboard is not advertising at all. So pair the keyboard
+with the phone first, in Android's Bluetooth settings, and the app will find it.
+That also keeps the permission ask to *Nearby devices* (`BLUETOOTH_CONNECT`)
+with no location permission.
 
 ## The Rynk WASM build artifact
 

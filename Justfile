@@ -64,3 +64,18 @@ tauri:
 # devshell for the Rust toolchain and GTK/WebKit libraries).
 tauri-run: build
     cd src-tauri && cargo run
+
+# Build the Android APK. Gradle and the NDK come from the `android` devshell,
+# which is separate from the default one: it carries the Android SDK/NDK and
+# the Rust Android targets, but none of the desktop GTK/WebKit stack.
+android-apk target="aarch64":
+    nix develop .#android --command bash -c 'npm run build && cargo tauri android build --apk --target {{target}}'
+
+# Build and install a debug APK on the attached device (`adb devices`).
+android-dev target="aarch64":
+    nix develop .#android --command bash -c 'npm run build && cargo tauri android build --debug --apk --target {{target}}'
+    adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
+
+# Open the generated gradle project's Rust/Kotlin in a shell with the toolchain.
+android-shell:
+    nix develop .#android

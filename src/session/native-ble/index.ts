@@ -1,11 +1,13 @@
-// Bluetooth backend for the Tauri desktop app: the same vendored rynk-wasm
-// client as every other transport, with GATT I/O in the Rust process (bluest),
-// because WebKitGTK/WKWebView shipped neither WebHID nor Web Bluetooth.
+// Bluetooth backend for the Tauri app: the same vendored rynk-wasm client as
+// every other transport, with GATT I/O on the native side, because neither
+// WebKitGTK/WKWebView nor the Android WebView ships Web Bluetooth. Desktop
+// serves these commands from bluest and Android from a Kotlin plugin; this
+// side cannot tell them apart.
 //
 // Unlike the HID backends this is a plain byte stream — no 32-byte reports, no
 // padding — so it feeds the wasm deframer the way the Web Serial backend does.
 //
-// Wire shape (see src-tauri/src/ble.rs):
+// Wire shape (see src-tauri/src/ble.rs and src-tauri/src/ble_android.rs):
 // - invoke("rynk_ble_list")  -> BleCandidate[] connected devices exposing Rynk
 // - invoke("rynk_ble_open")  { id? } -> { label }  attaches, starts the reader
 // - invoke("rynk_ble_send")  { bytes }   writes one frame (Rust chunks it)
@@ -15,7 +17,13 @@
 
 import type { LinkSession } from "../link-session";
 import { openLinkSession } from "../open-link";
-import { firstHandshake, openTauriLink, tauri, type TauriLinkWire } from "../native/tauri-link";
+import {
+  firstHandshake,
+  inTauri,
+  openTauriLink,
+  tauri,
+  type TauriLinkWire,
+} from "../native/tauri-link";
 import type { SessionProvider } from "../types";
 
 const WIRE: TauriLinkWire = {
@@ -38,8 +46,8 @@ export const nativeBleProvider: SessionProvider = {
   kind: "nativeble",
   title: "Bluetooth (native)",
   description:
-    "Connect to an already-paired Rynk keyboard over Bluetooth LE through the desktop app.",
-  available: () => typeof window !== "undefined" && window.__TAURI__ !== undefined,
+    "Connect to an already-paired Rynk keyboard over Bluetooth LE through the native app.",
+  available: () => inTauri(),
   connect: () => connectBle(),
   reconnect: () => {
     if (!hasConnected) throw new Error("No Bluetooth keyboard has been connected yet");
@@ -53,8 +61,8 @@ async function connectBle(preferredId: string | null = null): Promise<LinkSessio
   const candidates = await tauri().core.invoke<BleCandidate[]>("rynk_ble_list");
   if (!candidates.length) {
     throw new Error(
-      "No connected Rynk keyboard found over Bluetooth. Pair and connect it first — " +
-        "the desktop app attaches to an already-connected device rather than scanning.",
+      "No paired Rynk keyboard found over Bluetooth. Pair it with this device first — " +
+        "the native app attaches to a bonded keyboard rather than scanning for one.",
     );
   }
   if (preferredId) {

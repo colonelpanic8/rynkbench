@@ -1,8 +1,8 @@
-// Native backend for the Tauri desktop app: the same vendored rynk-wasm
+// Native backend for the Tauri desktop app (desktop only — see `available`): the same vendored rynk-wasm
 // client as the browser transports, but raw-HID I/O lives in the Rust process
 // (hidapi), because WebKitGTK/WKWebView never shipped WebHID.
 //
-// Wire shape (see src-tauri/src/main.rs):
+// Wire shape (see src-tauri/src/hid.rs):
 // - invoke("rynk_list")  -> Candidate[] every Rynk interface, with serials
 // - invoke("rynk_open")  { path? } -> { label }   opens one, starts the reader
 // - invoke("rynk_send")  { bytes }      writes one frame (Rust splits reports)
@@ -13,7 +13,14 @@
 import type { LinkSession } from "../link-session";
 import { openLinkSession } from "../open-link";
 import type { SessionProvider, SessionTarget } from "../types";
-import { firstHandshake, openTauriLink, tauri, type TauriLinkWire } from "./tauri-link";
+import {
+  firstHandshake,
+  inTauri,
+  onAndroid,
+  openTauriLink,
+  tauri,
+  type TauriLinkWire,
+} from "./tauri-link";
 
 const WIRE: TauriLinkWire = {
   open: "rynk_open",
@@ -36,7 +43,7 @@ export const nativeProvider: SessionProvider = {
   kind: "native",
   title: "USB (native)",
   description: "Connect to a Rynk keyboard over USB through the desktop app's HID backend.",
-  available: () => typeof window !== "undefined" && window.__TAURI__ !== undefined,
+  available: () => inTauri() && !onAndroid(),
   listTargets: listNativeTargets,
   connect: (targetId) => connectNative(null, targetId),
   reconnect: () => {

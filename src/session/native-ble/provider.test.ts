@@ -55,9 +55,9 @@ describe("native BLE provider", () => {
     expect(openedIds).toEqual(["Device(1)", "Device(1)"]);
   });
 
-  it("explains that the keyboard must already be connected", async () => {
+  it("explains that the keyboard must already be paired", async () => {
     withTauri(vi.fn(() => Promise.resolve([])));
 
-    await expect(nativeBleProvider.connect()).rejects.toThrow(/already-connected|connect it first/i);
+    await expect(nativeBleProvider.connect()).rejects.toThrow(/pair it with this device first/i);
   });
 });
