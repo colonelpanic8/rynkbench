@@ -77,6 +77,7 @@ export function useBehaviorActions() {
         confirmLabel: "Delete anyway",
         cancelLabel: "Keep it",
         danger: true,
+        showMe: row.places.some((place) => place.target) ? () => goTo(row.places.find((place) => place.target)?.target ?? null) : undefined,
       });
       if (!yes) return;
     }

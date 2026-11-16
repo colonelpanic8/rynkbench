@@ -19,6 +19,8 @@ export interface ConfirmRequest {
   guard?: boolean;
   /** Names and places, behind Show details rather than in the message. */
   details?: string[];
+  /** Adds Show me: it answers no and takes you to the first place concerned. */
+  showMe?: () => void;
 }
 
 export interface PendingConfirm extends ConfirmRequest {

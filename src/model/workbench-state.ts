@@ -354,7 +354,8 @@ export type WorkbenchAction =
    *  puts it in the last step (Live putting back a send that failed); a layer
    *  rewrite's `layerOrder` (destination → source slot) moves the layer on show with it. */
   | { type: "commit"; image: KeyboardImage; join?: boolean; layerOrder?: number[]; labels?: BehaviorLabels }
-  /** Labels kept for this keyboard or read from a file (ADR 0020): no step. */
+  /** Labels kept for this keyboard or read from a file (ADR 0020), without those
+   *  on empty slots: no step. */
   | { type: "labelsLoaded"; labels: BehaviorLabels }
   /** The keyboard was read (Send's read-back): the base is this image. */
   | { type: "draftStored"; image: KeyboardImage }

@@ -9,6 +9,7 @@ import type { ConfigFormat, ExtensionCatalog } from "../config/document";
 import { documentAdapterFor } from "../config/adapters";
 import { draftEditCount, pointingDraftDirty } from "../workbench";
 import { useWorkbench } from "./state";
+import { labelsFromToml } from "../config/behavior-labels";
 import { errorReport } from "./TransferReport";
 import type { TransferReport } from "./TransferReport";
 import { profileById } from "../model/boards/profiles";
@@ -105,6 +106,8 @@ export function useDocumentTransfer(): DocumentTransfer {
       // later export template: its matrix and layer grids have a different
       // shape. Same-board imports still retain labels and editor-owned JSON.
       imported.current = result.converted ? null : text;
+      // The file's names for its behaviors come with them (ADR 0020).
+      if (!result.converted && codec.detectFormat(text) === "toml") dispatch({ type: "labelsLoaded", labels: labelsFromToml(text) });
       if (offline && !result.converted) setWorkspaceName(file.name);
       const parts = [
         result.changedKeys > 0

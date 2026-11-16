@@ -11,6 +11,7 @@ import { applyPatch, patchBetween, withValues, type KeyboardImage } from "../syn
 import { emptyHistory, recordStep, travel } from "./draft/history";
 import { atBase, wantOf, withBase, withItemsAtBase, withRead, withStored, withWant } from "./draft/want";
 import { encoderPendingId, keyPendingId } from "./pending";
+import { labelsFor } from "./labels";
 import { isLightingAction, reduceLighting } from "./reduce-lighting";
 import { isSettingsAction, reduceSettings } from "./reduce-settings";
 
@@ -175,7 +176,7 @@ export function makeWorkbenchReducer(cols: number) {
       case "wantSet":
         return withWant(state, withValues(wantOf(state), act.values));
       case "labelsLoaded":
-        return { ...state, labels: act.labels };
+        return { ...state, labels: labelsFor(act.labels, wantOf(state)) };
       case "commit": {
         const next = { ...withWant(state, act.image), labels: act.labels ?? state.labels };
         return act.layerOrder ? { ...next, uiLayer: movedLayer(state.uiLayer, act.layerOrder), selection: null } : next;

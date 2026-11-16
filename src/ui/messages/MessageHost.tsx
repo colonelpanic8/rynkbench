@@ -73,6 +73,17 @@ function ConfirmDialog({ request }: { request: PendingConfirm }) {
               {showDetails ? "Hide details" : "Show details"}
             </Button>
           )}
+          {request.showMe && (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                request.resolve(false);
+                request.showMe?.();
+              }}
+            >
+              Show me
+            </Button>
+          )}
           <Button variant="ghost" autoFocus onClick={() => request.resolve(false)}>
             {request.cancelLabel ?? (request.guard ? "Reject" : "Cancel")}
           </Button>

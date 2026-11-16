@@ -13,6 +13,11 @@ describe("the message host", () => {
     expect(html).not.toContain("turned on by"); // the details wait behind the button
   });
 
+  it("offers Show me when the question names a place to go", () => {
+    void askConfirm({ guard: true, title: "Home is still used in 2 places", confirmLabel: "Delete anyway", showMe: () => {} });
+    expect(renderToString(<MessageHost />)).toContain("Show me");
+  });
+
   it("keeps an ordinary question plain", () => {
     void askConfirm({ title: "Delete the Magic layer?", confirmLabel: "Delete layer" });
     const html = renderToString(<MessageHost />);

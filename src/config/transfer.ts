@@ -30,6 +30,7 @@ import {
   snapshotFromState,
 } from "./document";
 import type { ConfigFormat, ExtensionCatalog, ImportNote, RuntimeSnapshot } from "./document";
+import { withTomlLabels } from "./behavior-labels";
 
 export interface ImportResult {
   format: ConfigFormat;
@@ -651,12 +652,9 @@ export function exportDocument(
       `Cannot export an incomplete device snapshot. Reconnect and try again.\n\nFailed reads:\n- ${incompleteReads.join("\n- ")}`,
     );
   }
-  return renderDocument(
-    snapshotFromState(state, bluetoothNameOf(previous, catalog, topology)),
-    catalog,
-    format,
-    previous,
-  );
+  const text = renderDocument(snapshotFromState(state, bluetoothNameOf(previous, catalog, topology)), catalog, format, previous);
+  // The behaviors' names and descriptions, which the keyboard does not store (ADR 0020).
+  return format === "toml" ? withTomlLabels(text, state.labels) : text;
 }
 
 /** The BLE advertising name the document being replaced carries. The keyboard

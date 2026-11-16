@@ -4,6 +4,7 @@ import { glove80Board } from "../session/mock/glove80";
 import type { RynkSession } from "../session/types";
 import type { KeyAction, Morse } from "../vendor/rynk-wasm/rynk_wasm";
 import { emptyMorse } from "../model/slots";
+import { noLabels, withLabel } from "../model/behavior-labels";
 import { openBundle } from "../ui/bundle";
 import { initialWorkbenchState } from "./initial-state";
 import { ioFeaturesFor, makeIo, type IoOptions, type WorkbenchIo } from "./io";
@@ -134,6 +135,16 @@ describe("behavior operations (ADR 0020)", () => {
       expect(state().history.past).toHaveLength(2);
       expect(await io.travel("undo")).toEqual({ ok: true });
       expect(state().labels.morse).toEqual({});
+    });
+  });
+
+  it("takes kept or filed labels without those on slots that hold nothing", async () => {
+    await withBoard(true, async (_session, io, state) => {
+      const free = state().morse.findIndex((morse) => morse.actions.length === 0);
+      expect(await io.apply("create_behavior", { kind: "morse", value: tapA })).toEqual({ ok: true });
+      const labels = withLabel(withLabel(noLabels(), "morse", free, { name: "Kept", description: "" }), "morse", free + 1, { name: "Gone", description: "" });
+      const reducer = makeWorkbenchReducer(2);
+      expect(reducer(state(), { type: "labelsLoaded", labels }).labels.morse).toEqual({ [free]: { name: "Kept", description: "" } });
     });
   });
 });
