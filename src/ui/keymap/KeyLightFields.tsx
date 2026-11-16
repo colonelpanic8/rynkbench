@@ -1,15 +1,17 @@
 // The fields under a chosen light in the RGB Lighting tab: a colour and its
-// effect; for a status light what it shows (a lock, the battery, a Bluetooth
-// profile, USB) and that one's own fields. Every colour is the same ColorChoice.
+// effect, at a named speed or (Custom) with its timing in numbers; for a
+// status light what it shows (a lock, the battery, a Bluetooth profile, USB)
+// and that one's own fields. Every colour is the same ColorChoice.
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { LightingEffect, LightingRgb8 } from "../../model/lighting-types";
-import type { KeyLight } from "../../model/lighting/key-light";
+import { SPEEDS, speedOf, speedTiming, type KeyLight, type Speed } from "../../model/lighting/key-light";
 import { BATTERY_LEVELS, type Lock, type StatusLight } from "../../model/lighting/status-light";
 import { STATUS_COLORS } from "../../model/lighting/status-presets";
 import { effectColor } from "../lighting/decor";
 import type { EffectKind } from "../../model/lighting/effect";
 import { ColorChoice } from "../lighting/ColorChoice";
+import { EffectTimingFields } from "../lighting/EffectEditor";
 import { LED_PRESETS } from "../../model/lighting/color";
 import { cx } from "../kit";
 import type { KeyLights } from "./useKeyLights";
@@ -21,10 +23,11 @@ const EFFECTS: Array<{ id: EffectKind; label: string }> = [
   { id: "Blink", label: "Blink" },
   { id: "Breathe", label: "Breathe" },
 ];
-const SPEEDS = [
-  { id: 500, label: "Fast" },
-  { id: 1000, label: "Normal" },
-  { id: 2000, label: "Slow" },
+const SPEED_CHOICES: Array<{ id: Speed | "custom"; label: string }> = [
+  { id: SPEEDS.fast, label: "Fast" },
+  { id: SPEEDS.normal, label: "Normal" },
+  { id: SPEEDS.slow, label: "Slow" },
+  { id: "custom", label: "Custom" },
 ];
 /** Whose battery a light shows: the firmware numbers the halves 0 (left) and 1 (right). */
 const HALVES = [
@@ -118,6 +121,8 @@ export function KeyLightFields({ light, lights, onChange }: {
   lights: KeyLights;
   onChange: (light: KeyLight) => void;
 }) {
+  // Custom was picked, or a number typed: the numbers stay open even while they match a named speed.
+  const [numbers, setNumbers] = useState(false);
   const color = (value: LightingRgb8 | null, pick: (next: LightingRgb8 | null) => void, darkTitle?: string) => (
     <ColorChoice
       value={value}
@@ -130,18 +135,39 @@ export function KeyLightFields({ light, lights, onChange }: {
   );
 
   if (light.kind === "color") {
+    const animated = light.effect !== "Solid";
+    const speed = speedOf(light.effect, light.timing);
+    const custom = numbers || speed === null;
     return (
       <>
         <Field label="Color">{color(light.color, (next) => next && onChange({ ...light, color: next }))}</Field>
         <Field label="Effect">
-          <div className="flex flex-wrap items-center gap-2">
-            <Segments options={EFFECTS} value={light.effect} onPick={(effect) => onChange({ ...light, effect })} />
-            {light.effect !== "Solid" && (
-              <Segments
-                options={SPEEDS}
-                value={light.timing.periodMs}
-                onPick={(periodMs) => onChange({ ...light, timing: { ...light.timing, periodMs } })}
-              />
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Segments options={EFFECTS} value={light.effect} onPick={(effect) => onChange({ ...light, effect })} />
+              {animated && (
+                <Segments
+                  options={SPEED_CHOICES}
+                  value={custom ? "custom" : speed}
+                  onPick={(id) => {
+                    setNumbers(id === "custom");
+                    if (id !== "custom") onChange({ ...light, timing: speedTiming(id) });
+                  }}
+                />
+              )}
+            </div>
+            {animated && custom && (
+              <div className="flex max-w-52 flex-col gap-1.5">
+                <EffectTimingFields
+                  kind={light.effect}
+                  timing={light.timing}
+                  clamp
+                  onTiming={(timing) => {
+                    setNumbers(true);
+                    onChange({ ...light, timing });
+                  }}
+                />
+              </div>
             )}
           </div>
         </Field>

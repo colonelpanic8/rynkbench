@@ -13,7 +13,6 @@
   "ui-never-imports-wire-types src/ui/keymap/keyManipulation.ts -> src/vendor/rynk-wasm/rynk_wasm",
   "ui-never-imports-wire-types src/ui/lighting/BackgroundPanel.tsx -> src/vendor/rynk-wasm/rynk_wasm",
   "ui-never-imports-wire-types src/ui/lighting/ConditionalRulesPanel.tsx -> src/vendor/rynk-wasm/rynk_wasm",
-  "ui-never-imports-wire-types src/ui/lighting/EffectEditor.tsx -> src/vendor/rynk-wasm/rynk_wasm",
   "ui-never-imports-wire-types src/ui/lighting/LightingKeyPresetPanel.tsx -> src/vendor/rynk-wasm/rynk_wasm",
   "ui-never-imports-wire-types src/ui/lighting/decor.ts -> src/vendor/rynk-wasm/rynk_wasm",
   "ui-never-imports-wire-types src/ui/live/LiveMode.tsx -> src/vendor/rynk-wasm/rynk_wasm",

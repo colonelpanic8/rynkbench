@@ -1,6 +1,7 @@
 // A key's light as GLIDE's Key Lighting tab offers it, on RMK's lighting:
 // - Off: a black scene cell (which also hides a firmware default);
-// - Color: a scene cell with a colour and an effect (steady, blink, breathe);
+// - Color: a scene cell with a colour and an effect (steady, blink, breathe)
+//   at a named speed or with its own timing;
 // - Layer below: no cell, so the layers underneath show;
 // - Status light: rules in the firmware's rule table (status-light.ts).
 // And the colours a layout already uses, most used first, to pick again or
@@ -8,7 +9,7 @@
 
 import type { LightingEffect, LightingOverlayCell, LightingRgb8 } from "../lighting-types";
 import { rgbToHex } from "./color";
-import { buildEffect, effectKind, effectRgb, effectTiming, type EffectKind, type EffectTiming } from "./effect";
+import { buildEffect, DEFAULT_TIMING, effectKind, effectRgb, effectTiming, type EffectKind, type EffectTiming } from "./effect";
 import { BLACK_EFFECT } from "./preview";
 import type { Rules } from "./rules";
 import { statusShownColor, withStatusLight, type StatusLight } from "./status-light";
@@ -19,6 +20,7 @@ export type KeyLight =
   | { kind: "color"; color: LightingRgb8; effect: EffectKind; timing: EffectTiming }
   | StatusLight;
 
+const BLACK: LightingRgb8 = { r: 0, g: 0, b: 0 };
 const isBlack = (c: LightingRgb8) => c.r === 0 && c.g === 0 && c.b === 0;
 const isStatus = (light: KeyLight): light is StatusLight => light.kind !== "off" && light.kind !== "below" && light.kind !== "color";
 
@@ -41,6 +43,23 @@ export function shownColor(light: KeyLight): LightingRgb8 | null {
 
 export function sameLight(a: KeyLight, b: KeyLight): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/* ---- speed -------------------------------------------------------------- */
+
+/** The speeds offered by name: a blink's or a breathe's period, in ms. */
+export const SPEEDS = { fast: 500, normal: 1000, slow: 2000 } as const;
+export type Speed = (typeof SPEEDS)[keyof typeof SPEEDS];
+
+/** A named speed's whole timing: its period, the rest as a new light has it. */
+export const speedTiming = (periodMs: Speed): EffectTiming => ({ ...DEFAULT_TIMING, periodMs });
+
+/** The named speed an effect runs at; null when any timing it stores is its
+ *  own (another period, duty, step or phase), which only its numbers can show. */
+export function speedOf(kind: EffectKind, timing: EffectTiming): Speed | null {
+  const stored = (of: EffectTiming) => JSON.stringify(effectTiming(buildEffect(kind, BLACK, of)));
+  const own = stored(timing);
+  return Object.values(SPEEDS).find((speed) => stored(speedTiming(speed)) === own) ?? null;
 }
 
 export interface LightPlan {
