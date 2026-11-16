@@ -5,11 +5,11 @@
 
 import { openProperties } from "../properties/store";
 import { CombosTab } from "./CombosTab";
-import { MorseTab } from "./MorseTab";
 import { MacrosTab } from "./MacrosTab";
 import { ForksTab } from "./ForksTab";
 import { TransformsTab } from "./TransformsTab";
 import { AllBehaviors } from "../behaviors/AllBehaviors";
+import { KindList } from "../behaviors/KindList";
 
 export type AdvancedSectionId = "combos" | "morse" | "macros" | "forks" | "transforms" | "usage";
 
@@ -18,7 +18,7 @@ export function AdvancedSection({ section }: { section: AdvancedSectionId }) {
     case "combos":
       return <CombosTab nav={null} goBehavior={() => openProperties("options")} />;
     case "morse":
-      return <MorseTab nav={null} />;
+      return <KindList kind="morse" />;
     case "macros":
       return <MacrosTab nav={null} />;
     case "forks":

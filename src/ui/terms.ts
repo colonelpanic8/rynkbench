@@ -34,6 +34,17 @@ export const TERMS = {
   "section.device": { technical: "Device", friendly: "Keyboard" },
   "section.usage": { technical: "All your behaviors", friendly: "All your behaviors" },
   "section.live": { technical: "Live", friendly: "Live view" },
+  // Tap timing (a tap pattern's own, a profile's): RMK's words, and plain ones.
+  "timing.mode": { technical: "Mode", friendly: "When a hold wins" },
+  "timing.hold": { technical: "Hold timeout", friendly: "Hold after" },
+  "timing.gap": { technical: "Gap timeout", friendly: "Next tap within" },
+  "timing.unilateral": { technical: "Unilateral tap", friendly: "Same hand types the tap" },
+  "timing.flow": { technical: "Flow tap", friendly: "Fast typing types the tap" },
+  "timing.idle": { technical: "Flow-tap prior idle", friendly: "Typing pause before a hold" },
+  "timing.retro": { technical: "Retro tap", friendly: "Tap when released alone" },
+  "timing.release": { technical: "Hold trigger on release", friendly: "Decide on release" },
+  "morse.timing": { technical: "Timing", friendly: "Timing" },
+  "morse.does": { technical: "Action", friendly: "Does" },
 } as const satisfies Record<string, Term>;
 
 export type TermId = keyof typeof TERMS;

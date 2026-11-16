@@ -3,7 +3,6 @@
   "ui-never-imports-wire-types src/ui/TopBar.tsx -> src/vendor/rynk-wasm/rynk_wasm",
   "ui-never-imports-wire-types src/ui/advanced/CombosTab.tsx -> src/vendor/rynk-wasm/rynk_wasm",
   "ui-never-imports-wire-types src/ui/advanced/ForksTab.tsx -> src/vendor/rynk-wasm/rynk_wasm",
-  "ui-never-imports-wire-types src/ui/advanced/MorseTab.tsx -> src/vendor/rynk-wasm/rynk_wasm",
   "ui-never-imports-wire-types src/ui/advanced/bits.tsx -> src/vendor/rynk-wasm/rynk_wasm",
   "ui-never-imports-wire-types src/ui/bundle.ts -> src/vendor/rynk-wasm/rynk_wasm",
   "ui-never-imports-wire-types src/ui/device/BleCard.tsx -> src/vendor/rynk-wasm/rynk_wasm",
