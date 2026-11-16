@@ -101,7 +101,7 @@ describe("settings in Draft (ADR 0018)", () => {
     await inDraft(async ({ session, io, state, dispatch }) => {
       const timing = { ...state().behavior!, combo_timeout_ms: state().behavior!.combo_timeout_ms + 7 };
       expect(await io.setBehavior(timing)).toEqual({ ok: true });
-      // As an import writes another setting: at once, also in Draft.
+      // Another setting written at once.
       const positions = [{ profile: 255, row: 0, col: 0 }];
       dispatch({ type: "fieldWriteStart", field: "morseHoldTriggerPositions", value: positions });
       await session.behavior.setHoldTriggerPositions(positions);
@@ -120,24 +120,6 @@ describe("settings in Draft (ADR 0018)", () => {
       dispatch({ type: "fieldWriteStart", field: "macros", value: [[{ Delay: 5 }]] });
       dispatch({ type: "fieldWriteErr", field: "macros", prev, message: "flash busy" });
       expect(kinds(state())).toEqual(["behavior"]);
-    });
-  });
-
-  it("deleting a tap-hold profile at once keeps drafted hold-trigger positions of other profiles", async () => {
-    await inDraft(async ({ session, io, state, dispatch }) => {
-      const profile = state().morse[0].profile;
-      expect(await io.apply("set_behavior", { kind: "profiles", slot: 0, value: profile, name: "hrm" })).toEqual({ ok: true });
-      expect(await io.setMorseHoldTriggerPositions([{ profile: 0, row: 0, col: 0 }])).toEqual({ ok: true });
-      expect(await io.applyBatch()).toEqual({ ok: true });
-
-      const wanted = [{ profile: 0, row: 0, col: 0 }, { profile: 255, row: 1, col: 1 }];
-      expect(await io.setMorseHoldTriggerPositions(wanted)).toEqual({ ok: true });
-      dispatch({ type: "morseProfileDeleteStart", index: 0 });
-      await session.behavior.deleteProfile(0);
-      dispatch({ type: "morseProfileDeleteOk", index: 0 });
-      expect(kinds(state())).toEqual(["holdTriggerPositions"]);
-      expect(await io.applyBatch()).toEqual({ ok: true });
-      expect((await session.behavior.holdTriggerPositions()).positions).toEqual([{ profile: 255, row: 1, col: 1 }]);
     });
   });
 });

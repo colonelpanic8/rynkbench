@@ -77,7 +77,6 @@ export function useHistory(state: WorkbenchState, io: WorkbenchIo, dispatch: (ac
       redoLabel: future.length > 0 ? stepLabel(future.at(-1)!, state) : null,
       undo: () => travel("undo"),
       redo: () => travel("redo"),
-      clear: () => dispatch({ type: "historyClear" }),
     }),
     // Labels name layers and morse entries as they are now.
     // eslint-disable-next-line react-hooks/exhaustive-deps

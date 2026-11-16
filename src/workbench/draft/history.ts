@@ -14,7 +14,7 @@ export type { History, HistoryStep, LabelsChange };
 
 export const HISTORY_LIMIT = 100;
 
-export const emptyHistory = (): History => ({ past: [], future: [], stroke: "none", suspended: false });
+export const emptyHistory = (): History => ({ past: [], future: [], stroke: "none" });
 
 /** Two steps one after the other as one; null when together they change nothing. */
 function joinSteps(first: HistoryStep, second: HistoryStep): HistoryStep | null {
@@ -30,7 +30,7 @@ function joinSteps(first: HistoryStep, second: HistoryStep): HistoryStep | null 
  *  of a Paint stroke, or a write that failed and put things back). `labels`: the
  *  behavior labels, when the commit changed them (ADR 0020). */
 export function recordStep(history: History, changes: readonly PatchEntry[], join = false, labels?: LabelsChange): History {
-  if (history.suspended || (changes.length === 0 && !labels)) return history;
+  if (changes.length === 0 && !labels) return history;
   const step: HistoryStep = labels ? { changes, labels } : { changes };
   const last = history.past.at(-1);
   if ((join || history.stroke === "joined") && last) {

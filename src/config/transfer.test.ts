@@ -1,19 +1,20 @@
 import { readFileSync } from "node:fs";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { initSync } from "../vendor/moergo-config-wasm/moergo_config_wasm";
-import { importDocument } from "./transfer";
-import { RULES, RUNTIME_EFFECTS_CONDITIONS } from "../session/lighting-features";
+import { readImport } from "./transfer";
+import { RUNTIME_EFFECTS_CONDITIONS } from "../session/lighting-features";
 import type { ExtensionCatalog } from "./document";
 import { renderDocument, snapshotFromState } from "./document";
 import { offlineGlove80Catalog, openOfflineGlove80 } from "../session/offline/glove80";
 import { openBundle } from "../ui/bundle";
 import { initialWorkbenchState } from "../workbench/initial-state";
-import type { RynkSession, LayerMetadata } from "../session/types";
-import type { ConnectedBundle, WorkbenchAction, WorkbenchState } from "../model/workbench-state";
+import { wantOf } from "../workbench/draft/want";
+import type { LayerMetadata } from "../session/types";
+import type { ConnectedBundle, WorkbenchState } from "../model/workbench-state";
+import type { KeyboardImage } from "../sync/image";
 import type { PointingConfig } from "../vendor/rynk-wasm/rynk_wasm";
 import { initSync as initRynkSync } from "../vendor/rynk-wasm/rynk_wasm";
 import { ruleFromWire, ruleToWire } from "../session/lighting-rules";
-import type { RuntimeLightingRule } from "../session/types";
 
 beforeAll(() => {
   initSync({
@@ -25,7 +26,6 @@ beforeAll(() => {
 const CATALOG: ExtensionCatalog = { effects: [], palettes: [], params: [] };
 
 const CAPACITY = 16;
-const KEYS = 6 * 14;
 
 /** A Glove80 MoErgo backup: all-transparent layers named by `names`. */
 const moergoDocument = (names: string[]) =>
@@ -62,46 +62,48 @@ mode = "press"
 holds = 1
 `;
 
-interface Recorded {
-  metadataWrites: [number, LayerMetadata][];
-  rowWrites: [number, number, number][];
-  actions: WorkbenchAction[];
+/** What you want on a keyboard with these layers, names and pointing configuration. */
+function wanted(layers: unknown[][], metadata: LayerMetadata[] | null, pointing: PointingConfig | null = null): KeyboardImage {
+  return {
+    metadata: metadata ?? [],
+    layers: layers as KeyboardImage["layers"],
+    encoders: [],
+    defaultLayer: 0,
+    combos: [],
+    morse: [],
+    forks: [],
+    macroOps: [],
+    behaviorOptions: null,
+    autoMouseLayers: [],
+    scenes: [],
+    runtimeConditionalScenes: [],
+    wakeLayers: 0,
+    pointing,
+  };
 }
 
-/** The slice of a connected workbench the importer touches, with a device that
- *  records what reaches it. The keymap already matches the document, so layer
- *  metadata is the only difference left to write. */
-function harness(layerMetadata: LayerMetadata[] | null) {
-  const recorded: Recorded = { metadataWrites: [], rowWrites: [], actions: [] };
-  const session = {
-    keymap: {
-      setRows: async (layer: number, row: number, actions: unknown[]) => {
-        recorded.rowWrites.push([layer, row, actions.length]);
-      },
-      setDefaultLayer: async () => {},
-      setLayerMetadata: async (layer: number, metadata: LayerMetadata) => {
-        recorded.metadataWrites.push([layer, structuredClone(metadata)]);
-      },
-    },
-  } as unknown as RynkSession;
+/** The slice of a connected workbench the importer reads. */
+function harness(rows: number, product: string, layerMetadata: LayerMetadata[] | null, pointing: PointingConfig | null = null) {
   const bundle = {
-    info: { product_name: "Glove80", vendor_id: 0x16c0, product_id: 0x27db },
+    info: { product_name: product, vendor_id: 0x16c0, product_id: 0x27db },
     caps: {
-      num_rows: 6,
+      num_rows: rows,
       num_cols: 14,
       num_layers: CAPACITY,
       macro_space_size: 512,
+      max_macros: 32,
       max_morse: 32,
       max_combos: 32,
       max_forks: 32,
     },
   } as unknown as ConnectedBundle;
+  const layers = Array.from({ length: CAPACITY }, () => Array.from({ length: rows * 14 }, () => "Transparent"));
   const state = {
     defaultLayer: 0,
-    layers: Array.from({ length: CAPACITY }, () =>
-      Array.from({ length: KEYS }, () => "Transparent"),
-    ),
+    layers,
     layerMetadata,
+    pointingConfig: pointing,
+    pointingDraft: pointing,
     behavior: null,
     behaviorOptions: null,
     morseProfileCapacity: 0,
@@ -115,223 +117,73 @@ function harness(layerMetadata: LayerMetadata[] | null) {
     combos: [],
     forks: [],
     lightingState: null,
+    lightingOutputMode: null,
     lightingControls: { output_toggle_user_action: undefined, wake_layers: 0 },
   } as unknown as WorkbenchState;
-  const dispatch = (action: WorkbenchAction) => {
-    recorded.actions.push(action);
-  };
-  return { recorded, session, bundle, state, dispatch };
+  return { bundle, state, want: wanted(layers, layerMetadata, pointing) };
 }
 
-describe("importDocument layer names", () => {
-  it("occupies and labels the slots the document configures", async () => {
+/** Cells that differ between two images' layers. */
+const differingCells = (a: KeyboardImage, b: KeyboardImage) =>
+  a.layers.reduce((sum, cells, layer) => sum + cells.filter((cell, offset) => JSON.stringify(cell) !== JSON.stringify(b.layers[layer][offset])).length, 0);
+
+describe("an import over what you want: layer names", () => {
+  it("occupies and labels the slots the document configures", () => {
     const metadata = Array.from({ length: CAPACITY }, (_, layer): LayerMetadata =>
       layer === 0 ? { occupied: true, name: "Base" } : { occupied: false, name: "" },
     );
-    const { recorded, session, bundle, state, dispatch } = harness(metadata);
+    const { bundle, state, want } = harness(6, "Glove80", metadata);
 
-    const result = await importDocument({
-      text: moergoDocument(["Base", "Symbols"]),
-      session,
-      bundle,
-      state,
-      dispatch,
-      catalog: CATALOG,
-    });
+    const result = readImport({ text: moergoDocument(["Base", "Symbols"]), bundle, state, catalog: CATALOG }).onto(state, want);
 
     // Slot 0 already matches; only slot 1 is newly occupied.
-    expect(recorded.metadataWrites).toEqual([[1, { occupied: true, name: "Symbols" }]]);
-    expect(recorded.actions).toContainEqual({
-      type: "layerMetadataSet",
-      layer: 1,
-      metadata: { occupied: true, name: "Symbols" },
-    });
+    expect(result.image.metadata[1]).toEqual({ occupied: true, name: "Symbols" });
+    expect(result.image.metadata.filter((entry, layer) => entry !== metadata[layer])).toHaveLength(1);
     expect(result.applied).toContain("1 layer name");
     expect(result.skipped).toEqual([]);
-    // Changed keys travel as whole rows, each row once however many of its keys changed.
-    expect(recorded.rowWrites.length).toBeGreaterThan(0);
-    expect(recorded.rowWrites.length).toBeLessThan(result.changedKeys);
-    expect(recorded.rowWrites.every(([, , cells]) => cells === 14)).toBe(true);
-    expect(new Set(recorded.rowWrites.map(([layer, row]) => `${layer}:${row}`)).size).toBe(
-      recorded.rowWrites.length,
-    );
+    expect(result.changedKeys).toBe(differingCells(want, result.image));
   });
 
-  it("reports rather than writes names on firmware without metadata", async () => {
-    const { recorded, session, bundle, state, dispatch } = harness(null);
+  it("reports rather than sets names on firmware without metadata", () => {
+    const { bundle, state, want } = harness(6, "Glove80", null);
 
-    const result = await importDocument({
-      text: moergoDocument(["Base"]),
-      session,
-      bundle,
-      state,
-      dispatch,
-      catalog: CATALOG,
-    });
+    const result = readImport({ text: moergoDocument(["Base"]), bundle, state, catalog: CATALOG }).onto(state, want);
 
-    expect(recorded.metadataWrites).toEqual([]);
+    expect(result.image.metadata).toEqual([]);
     expect(result.skipped).toEqual([
       "layer names (this keyboard does not store layer metadata)",
     ]);
   });
 });
 
-describe("importDocument pointing configuration", () => {
-  function pointingHarness(supported: boolean) {
-    const actions: WorkbenchAction[] = [];
-    const writes: PointingConfig[] = [];
-    const current: PointingConfig | null = supported
-      ? {
-          revision: 5,
-          device_count: 0,
-          devices: [],
-          override_count: 0,
-          overrides: [],
-        }
-      : null;
-    let accepted: PointingConfig | null = current;
-    const session = {
-      keymap: {
-        setRows: async () => {},
-        setDefaultLayer: async () => {},
-        setLayerMetadata: async () => {},
-      },
-      pointing: {
-        set: async (config: PointingConfig) => {
-          writes.push(structuredClone(config));
-          accepted = { ...structuredClone(config), revision: config.revision + 1 };
-          return structuredClone(accepted);
-        },
-        get: async () => {
-          if (!supported) throw new Error("UnknownCmd");
-          return structuredClone(accepted!);
-        },
-      },
-    } as unknown as RynkSession;
-    const bundle = {
-      info: { product_name: "Go60", vendor_id: 0x16c0, product_id: 0x27db },
-      caps: {
-        num_rows: 5,
-        num_cols: 14,
-        num_layers: CAPACITY,
-        macro_space_size: 512,
-        max_morse: 32,
-        max_combos: 32,
-        max_forks: 32,
-      },
-    } as unknown as ConnectedBundle;
-    const state = {
-      defaultLayer: 0,
-      layers: Array.from({ length: CAPACITY }, () =>
-        Array.from({ length: 5 * 14 }, () => "Transparent"),
-      ),
-      layerMetadata: null,
-      pointingConfig: current,
-      pointingDraft: current,
-      behavior: null,
-      behaviorOptions: null,
-      morseProfileCapacity: 0,
-      morseProfiles: [],
-      morseHoldTriggerPositionCapacity: null,
-      morseHoldTriggerPositions: [],
-      autoMouseLayerCapacity: 0,
-      autoMouseLayers: [],
-      macroOps: [],
-      morse: [],
-      combos: [],
-      forks: [],
-      lightingState: null,
-      lightingControls: { output_toggle_user_action: undefined, wake_layers: 0 },
-    } as unknown as WorkbenchState;
-    return {
-      actions,
-      writes,
-      session,
-      bundle,
-      state,
-      dispatch: (action: WorkbenchAction) => actions.push(action),
-    };
-  }
+describe("an import over what you want: pointing configuration", () => {
+  const current: PointingConfig = { revision: 5, device_count: 0, devices: [], override_count: 0, overrides: [] };
 
-  it("writes a complete fixed-capacity config at the live revision and adopts readback", async () => {
-    const h = pointingHarness(true);
-    const result = await importDocument({ ...h, text: pointingDocument, catalog: CATALOG });
+  it("wants a complete fixed-capacity config at the keyboard's revision", () => {
+    const { bundle, state, want } = harness(5, "Go60", null, current);
+    const result = readImport({ text: pointingDocument, bundle, state, catalog: CATALOG }).onto(state, want);
 
-    expect(h.writes).toHaveLength(1);
-    expect(h.writes[0]).toMatchObject({ revision: 5, device_count: 1, override_count: 1 });
-    expect(h.writes[0].devices).toHaveLength(4);
-    expect(h.writes[0].overrides).toHaveLength(16);
-    expect(h.actions).toContainEqual(
-      expect.objectContaining({
-        type: "pointingWriteOk",
-        config: expect.objectContaining({ revision: 6 }),
-      }),
-    );
+    expect(result.image.pointing).toMatchObject({ revision: 5, device_count: 1, override_count: 1 });
+    expect(result.image.pointing!.devices).toHaveLength(4);
+    expect(result.image.pointing!.overrides).toHaveLength(16);
     expect(result.applied).toContain("pointing configuration");
   });
 
-  it("reports pointing data when the target firmware does not support it", async () => {
-    const h = pointingHarness(false);
-    const result = await importDocument({ ...h, text: pointingDocument, catalog: CATALOG });
+  it("reports pointing data the keyboard holds none of, with the reason it could not be read", () => {
+    const { bundle, state, want } = harness(5, "Go60", null);
+    const file = readImport({ text: pointingDocument, bundle, state, catalog: CATALOG });
+    expect(file.reads.pointing).toBe(true);
 
-    expect(h.writes).toEqual([]);
-    expect(result.skipped).toContain("pointing configuration (unsupported by this keyboard)");
-  });
-
-  it("re-reads before skipping, so a failed connect-time read does not block the import", async () => {
-    const h = pointingHarness(true);
-    const state = { ...h.state, pointingConfig: null, pointingDraft: null } as WorkbenchState;
-    const result = await importDocument({ ...h, state, text: pointingDocument, catalog: CATALOG });
-
-    expect(h.writes).toHaveLength(1);
-    expect(h.writes[0]).toMatchObject({ revision: 5 });
-    expect(result.applied).toContain("pointing configuration");
+    expect(file.onto(state, want).skipped).toContain("pointing configuration (unsupported by this keyboard)");
+    const unread = file.onto(state, want, "timed out");
+    expect(unread.skipped).toContain("pointing configuration (timed out)");
+    expect(unread.image.pointing).toBeNull();
   });
 });
 
-
-describe("importDocument conditional rules", () => {
-  it("preserves document rules for the session and skips an unchanged reimport", async () => {
-    const session = openOfflineGlove80();
-    try {
-      const bundle = await openBundle(session);
-      const state = initialWorkbenchState(bundle);
-      const snapshot = snapshotFromState(state);
-      const rule: RuntimeLightingRule = {
-        cell: {
-          led_id: 0,
-          effect: { Solid: { color: { r: 255, g: 0, b: 0 } } },
-          conditions: { layer: { layer: 0, active: true }, battery: undefined, output_mode: undefined },
-        },
-        connection: undefined,
-        effects: { enabled: true },
-          layers: undefined,
-          indicators: undefined,
-      };
-      snapshot.lighting!.conditional_scenes = [ruleToWire(rule)];
-      const catalog = offlineGlove80Catalog();
-      const text = renderDocument(snapshot, catalog, "toml");
-      const replace = vi.spyOn(session.lighting.conditionalScenes, "replace");
-      const dispatch = vi.fn();
-      await importDocument({ text, session, bundle, state, dispatch, catalog });
-      expect(replace).toHaveBeenCalledExactlyOnceWith([
-        rule,
-      ]);
-      replace.mockClear();
-      const updated = await openBundle(session);
-      await importDocument({
-        text, session, bundle: updated, state: initialWorkbenchState(updated), dispatch, catalog,
-      });
-      expect(replace).not.toHaveBeenCalled();
-    } finally {
-      await session.close();
-    }
-  });
-});
-
-describe("importDocument lighting preflight", () => {
+describe("reading an import: lighting preflight", () => {
   it.each(["capacity", "unsupported", "predicates", "scenes", "layer predicates", "malformed"] as const)(
-    "rejects %s before writing earlier keymap or metadata changes",
+    "rejects %s before anything changes",
     async (failure) => {
       const session = openOfflineGlove80();
       try {
@@ -376,56 +228,13 @@ describe("importDocument lighting preflight", () => {
           text += "\n[lighting.invalid\n";
           message = /./;
         }
-        const before = await openBundle(session);
-        const dispatch = vi.fn();
-        await expect(importDocument({ text, session, bundle, state, dispatch, catalog }))
-          .rejects.toThrow(message);
-        expect(dispatch).not.toHaveBeenCalled();
-        const after = await openBundle(session);
-        expect(after.layers).toEqual(before.layers);
-        expect(after.layerMetadata).toEqual(before.layerMetadata);
-        expect(after.lightingState).toEqual(before.lightingState);
-        expect(after.runtimeConditionalScenes).toEqual(before.runtimeConditionalScenes);
+        expect(() => readImport({ text, bundle, state, catalog })).toThrow(message);
       } finally {
         await session.close();
       }
     },
   );
-
-  // Firmware built without the legacy conditional-scene endpoints advertises
-  // RULES alone, and stores layer-set and lock-indicator conditions as tagged
-  // predicates. Preflight used to demand the retired bit and refuse the import.
-  it("imports layer-set and lock-indicator conditions on rule-only firmware", async () => {
-    const session = openOfflineGlove80();
-    try {
-      const bundle = await openBundle(session);
-      const state = initialWorkbenchState(bundle);
-      const snapshot = structuredClone(snapshotFromState(state));
-      snapshot.lighting!.conditional_scenes = [ruleToWire({
-        cell: {
-          led_id: 0,
-          effect: { Solid: { color: { r: 255, g: 0, b: 0 } } },
-          conditions: { layer: undefined, battery: undefined, output_mode: undefined },
-        },
-        connection: undefined,
-        effects: undefined,
-        layers: { active: 2, inactive: 4 },
-        indicators: { num_lock: true, caps_lock: undefined, scroll_lock: undefined },
-      })];
-      const catalog = offlineGlove80Catalog();
-      const text = renderDocument(snapshot, catalog, "toml");
-      bundle.lightingCaps = { ...bundle.lightingCaps!, features: RULES };
-
-      await importDocument({ text, session, bundle, state, dispatch: vi.fn(), catalog });
-
-      expect((await openBundle(session)).runtimeConditionalScenes)
-        .toEqual(snapshot.lighting!.conditional_scenes.map(ruleFromWire));
-    } finally {
-      await session.close();
-    }
-  });
 });
-
 
 it("round-trips layer conditions through the browser configuration codec", async () => {
   const session = openOfflineGlove80();
@@ -453,11 +262,9 @@ it("round-trips layer conditions through the browser configuration codec", async
     invalidRule.layers!.inactive = 2;
     invalid.lighting!.conditional_scenes![0] = ruleToWire(invalidRule);
     expect(() => renderDocument(invalid, catalog, "toml")).toThrow(/InvalidRequest/);
-    await importDocument({
-      text, session, bundle, state: initialWorkbenchState(bundle), dispatch: vi.fn(), catalog,
-    });
-    expect((await openBundle(session)).runtimeConditionalScenes)
-      .toEqual(snapshot.lighting!.conditional_scenes.map(ruleFromWire));
+    const state = initialWorkbenchState(bundle);
+    const { image } = readImport({ text, bundle, state, catalog }).onto(state, wantOf(state));
+    expect(image.runtimeConditionalScenes).toEqual(snapshot.lighting!.conditional_scenes.map(ruleFromWire));
   } finally {
     await session.close();
   }

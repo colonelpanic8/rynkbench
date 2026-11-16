@@ -340,9 +340,6 @@ export type WorkbenchAction =
   | { type: "historyTravel"; direction: "undo" | "redo" }
   /** A Paint stroke opens (pointer down) or closes: its changes are one step. */
   | { type: "historyStroke"; open: boolean }
-  /** A bulk write (an import, a transform) runs: its changes are no step. */
-  | { type: "historySuspend"; suspended: boolean }
-  | { type: "historyClear" }
   | { type: "batchMode"; enabled: boolean }
   /** Draft edits: what you want changes; the keyboard is not written. */
   | { type: "keyStage"; layer: number; row: number; col: number; action: KeyAction }
@@ -432,7 +429,6 @@ export type WorkbenchAction =
   | { type: "pointingDraftSet"; config: PointingConfig }
   | { type: "pointingDraftReset" }
   | { type: "pointingWriteStart" }
-  | { type: "pointingWriteOk"; config: PointingConfig }
   | { type: "pointingWriteErr"; message: string }
   | { type: "pointingReloaded"; config: PointingConfig }
   | { type: "slotWriteStart"; kind: SlotKind; index: number; value: ComboDefinition | Morse | Fork }
@@ -447,18 +443,7 @@ export type WorkbenchAction =
   | { type: "slotErrDismiss"; kind: SlotKind; index: number }
   | FieldWriteAction
   | { type: "fieldWriteOk"; field: WritableField }
-  /** Drop any pending record's error by its id (slot, field, morse profile). */
+  /** Drop any pending record's error by its id (slot, field). */
   | { type: "pendingErrDismiss"; id: string }
-  | { type: "morseProfileWriteStart"; entry: MorseProfileEntry }
-  | { type: "morseProfileWriteOk"; index: number }
-  | { type: "morseProfileWriteErr"; index: number; prev: MorseProfileEntry | null; message: string }
-  | { type: "morseProfileDeleteStart"; index: number }
-  | { type: "morseProfileDeleteOk"; index: number }
-  | {
-      type: "morseProfileDeleteErr";
-      entry: MorseProfileEntry;
-      positions: MorseHoldTriggerPosition[];
-      message: string;
-    }
   | { type: "topicLedIndicator"; indicator: LedIndicator }
   | { type: "topicModifier"; modifiers: ModifierCombination };

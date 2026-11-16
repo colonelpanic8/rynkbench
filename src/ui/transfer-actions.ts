@@ -1,11 +1,12 @@
-// Document import/export orchestration (the top bar's Open, Save and name): the staged-edit guard,
-// the history suspension around a bulk write, the retained source text an
+// Document import/export orchestration (the top bar's Open, Save and name):
+// an import becomes one commit through the io, the retained source text an
 // export reuses as its template, and the phrasing of the result report.
 
 import { createContext, useContext, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { FORMAT_EXTENSION, FORMAT_LABEL } from "../config/document";
 import type { ConfigFormat, ExtensionCatalog } from "../config/document";
+import type { ImportedLayout, LayoutImport } from "../config/transfer";
 import { documentAdapterFor } from "../config/adapters";
 import { draftEditCount, pointingDraftDirty } from "../workbench";
 import { useWorkbench } from "./state";
@@ -16,6 +17,34 @@ import { profileById } from "../model/boards/profiles";
 import type { BoardDocumentTools } from "../model/boards/profiles";
 
 const boardLabel = (id: string) => profileById(id)?.name ?? id;
+
+/** What an import changed, and what it could not: anything skipped or
+ *  approximated is a caveat on an otherwise clean result, so the headline says so. */
+function importReport(
+  name: string,
+  parsed: LayoutImport,
+  { changedKeys, applied, skipped }: ImportedLayout,
+  target: string,
+  drafted: boolean,
+): TransferReport {
+  const parts = [changedKeys > 0 ? `${changedKeys} key${changedKeys === 1 ? "" : "s"}` : null, ...applied].filter(
+    (part) => part !== null,
+  );
+  const from = boardLabel(parsed.sourceBoard);
+  const to = boardLabel(parsed.targetBoard);
+  const headline =
+    parts.length === 0
+      ? parsed.converted
+        ? `${name}'s ${from} layout already matches this ${to} on every shared key`
+        : `${name} already matches ${target}`
+      : `${parsed.converted ? `Transferred ${parts.join(", ")} from ${from} to ${to} using ${name}` : `Imported ${parts.join(", ")} from ${name}`}${drafted ? " into the draft; Send writes it to the keyboard" : ""}`;
+  return {
+    outcome: skipped.length > 0 || parsed.notes.length > 0 ? "warning" : "ok",
+    headline,
+    detail: skipped.length > 0 ? `Not applied:\n  ${skipped.join("\n  ")}` : undefined,
+    notes: parsed.notes,
+  };
+}
 
 export interface DocumentTransfer {
   /** Which direction is running, or null when idle. */
@@ -34,7 +63,7 @@ export interface DocumentTransfer {
 }
 
 export function useDocumentTransfer(): DocumentTransfer {
-  const { bundle, state, dispatch, history } = useWorkbench();
+  const { bundle, state, io } = useWorkbench();
   const offline = bundle.session.kind === "offline";
   const documentTools = bundle.boardProfile?.documents;
   const adapter = documentAdapterFor(documentTools);
@@ -75,74 +104,32 @@ export function useDocumentTransfer(): DocumentTransfer {
       setReport(errorReport("Could not import configuration", error));
       return;
     }
-    if (draftEditCount(state) > 0 || pointingDraftDirty(state)) {
-      // An import writes device differences directly; staged edits would go
-      // stale underneath it.
-      setReport({
-        outcome: "error",
-        headline: "Apply or discard staged configuration edits before importing a layout.",
-      });
-      return;
-    }
-    // Imports are bulk, cross-feature writes outside direct-key history.
-    dispatch({ type: "historySuspend", suspended: true });
-    history.clear();
     setPhase("importing");
     setReport(null);
     try {
       const text = await file.text();
       const loadedCatalog = await catalog();
       const codec = requireDocumentTools();
-      requireDocumentTools(codec.detectFormat(text));
-      const result = await codec.importDocument({
-        text,
-        session: bundle.session,
-        bundle,
-        state,
-        dispatch,
-        catalog: loadedCatalog,
-      });
+      const format = codec.detectFormat(text);
+      requireDocumentTools(format);
+      const parsed = codec.readImport({ text, bundle, state, catalog: loadedCatalog });
+      // The file's names for its behaviors come with them (ADR 0020).
+      const labels = !parsed.converted && format === "toml" ? labelsFromToml(text) : undefined;
+      const drafting = state.batchMode;
+      const { layout, written } = await io.importLayout(parsed, labels);
+      if (!written.ok) {
+        setReport({ outcome: "error", headline: `Could not import ${file.name}`, detail: written.message });
+        return;
+      }
       // A document for the other board cannot safely serve as this board's
       // later export template: its matrix and layer grids have a different
       // shape. Same-board imports still retain labels and editor-owned JSON.
-      imported.current = result.converted ? null : text;
-      // The file's names for its behaviors come with them (ADR 0020).
-      if (!result.converted && codec.detectFormat(text) === "toml") dispatch({ type: "labelsLoaded", labels: labelsFromToml(text) });
-      if (offline && !result.converted) setWorkspaceName(file.name);
-      const parts = [
-        result.changedKeys > 0
-          ? `${result.changedKeys} key${result.changedKeys === 1 ? "" : "s"}`
-          : null,
-        ...result.applied,
-      ].filter((part) => part !== null);
-      const headline =
-        parts.length === 0
-          ? result.converted
-            ? `${file.name}'s ${boardLabel(result.sourceBoard)} layout already matches this ${boardLabel(result.targetBoard)} on every shared key`
-            : offline
-              ? `${file.name} already matches this workspace`
-              : `${file.name} already matches the keyboard`
-          : result.converted
-            ? `Transferred ${parts.join(", ")} from ${boardLabel(result.sourceBoard)} to ${boardLabel(result.targetBoard)} using ${file.name}`
-            : `Imported ${parts.join(", ")} from ${file.name}`;
-      // Anything the document asked for that could not be written, and anything
-      // the import had to approximate, is a caveat on an otherwise clean result
-      // — so say so in the headline rather than only in the detail below it.
-      const caveats = result.skipped.length > 0 || result.notes.length > 0;
-      setReport({
-        outcome: caveats ? "warning" : "ok",
-        headline,
-        detail:
-          result.skipped.length > 0
-            ? `Not applied:\n  ${result.skipped.join("\n  ")}`
-            : undefined,
-        notes: result.notes,
-      });
+      imported.current = parsed.converted ? null : text;
+      if (offline && !parsed.converted) setWorkspaceName(file.name);
+      setReport(importReport(file.name, parsed, layout, offline ? "this workspace" : drafting ? "the draft" : "the keyboard", drafting && !offline));
     } catch (error) {
       setReport(errorReport(`Could not import ${file.name}`, error));
     } finally {
-      history.clear();
-      dispatch({ type: "historySuspend", suspended: false });
       setPhase(null);
     }
   };

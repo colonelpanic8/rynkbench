@@ -14,7 +14,6 @@ const OVER_BUDGET: Record<string, number> = {
   "src/session/mock/board.ts": 1499,
   "src/ui/lighting/ConditionalRulesPanel.tsx": 1059,
   "src/ui/keymap/ActionEditor.tsx": 696,
-  "src/config/transfer.ts": 682,
   "src/session/mock/glove80.ts": 625,
 };
 

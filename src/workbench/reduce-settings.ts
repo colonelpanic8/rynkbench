@@ -8,14 +8,13 @@ import type { SlotKind, WorkbenchAction, WorkbenchState } from "../model/workben
 import type { KeyboardImage } from "../sync";
 import { FIELD_STATE_KEY } from "../model/workbench-state";
 import { normalizePointingConfig } from "../model/pointing";
-import { morseProfilePendingId, slotPendingId } from "./pending";
+import { slotPendingId } from "./pending";
 
 const SETTINGS_ACTION_TYPES = [
   "pointingDraftSet",
   "pointingDraftReset",
   "pointingWriteStart",
   "pointingWriteErr",
-  "pointingWriteOk",
   "pointingReloaded",
   "slotWriteStart",
   "slotWriteOk",
@@ -25,12 +24,6 @@ const SETTINGS_ACTION_TYPES = [
   "fieldWriteErr",
   "fieldWriteOk",
   "pendingErrDismiss",
-  "morseProfileWriteStart",
-  "morseProfileWriteOk",
-  "morseProfileWriteErr",
-  "morseProfileDeleteStart",
-  "morseProfileDeleteOk",
-  "morseProfileDeleteErr",
 ] as const;
 
 export type SettingsAction = Extract<WorkbenchAction, { type: (typeof SETTINGS_ACTION_TYPES)[number] }>;
@@ -65,7 +58,6 @@ export function reduceSettings(state: WorkbenchState, act: SettingsAction): Work
       return { ...state, pointingBusy: true, pointingError: null };
     case "pointingWriteErr":
       return { ...state, pointingBusy: false, pointingError: act.message };
-    case "pointingWriteOk":
     case "pointingReloaded": {
       const config = normalizePointingConfig(act.config);
       return {
@@ -127,63 +119,5 @@ export function reduceSettings(state: WorkbenchState, act: SettingsAction): Work
       const { [id]: _done, ...pending } = state.pending;
       return { ...state, pending };
     }
-    case "morseProfileWriteStart": {
-      const morseProfiles = state.morseProfiles
-        .filter((entry) => entry.index !== act.entry.index)
-        .concat(act.entry)
-        .sort((a, b) => a.index - b.index);
-      return {
-        ...state,
-        morseProfiles,
-        pending: {
-          ...state.pending,
-          [morseProfilePendingId(act.entry.index)]: { status: "pending" },
-        },
-      };
-    }
-    case "morseProfileWriteOk": {
-      const { [morseProfilePendingId(act.index)]: _done, ...pending } = state.pending;
-      return { ...state, pending };
-    }
-    case "morseProfileWriteErr": {
-      const morseProfiles = state.morseProfiles
-        .filter((entry) => entry.index !== act.index)
-        .concat(act.prev ? [act.prev] : [])
-        .sort((a, b) => a.index - b.index);
-      return {
-        ...state,
-        morseProfiles,
-        pending: {
-          ...state.pending,
-          [morseProfilePendingId(act.index)]: { status: "error", message: act.message },
-        },
-      };
-    }
-    case "morseProfileDeleteStart":
-      return {
-        ...state,
-        morseProfiles: state.morseProfiles.filter((entry) => entry.index !== act.index),
-        morseHoldTriggerPositions: state.morseHoldTriggerPositions.filter(
-          (position) => position.profile !== act.index,
-        ),
-        pending: {
-          ...state.pending,
-          [morseProfilePendingId(act.index)]: { status: "pending" },
-        },
-      };
-    case "morseProfileDeleteOk": {
-      const { [morseProfilePendingId(act.index)]: _done, ...pending } = state.pending;
-      return { ...state, pending };
-    }
-    case "morseProfileDeleteErr":
-      return {
-        ...state,
-        morseProfiles: state.morseProfiles.concat(act.entry).sort((a, b) => a.index - b.index),
-        morseHoldTriggerPositions: act.positions,
-        pending: {
-          ...state.pending,
-          [morseProfilePendingId(act.entry.index)]: { status: "error", message: act.message },
-        },
-      };
   }
 }

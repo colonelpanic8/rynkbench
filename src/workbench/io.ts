@@ -28,6 +28,9 @@ import { firmwareFactsOf, resolveCapabilities } from "../capabilities";
 import type { SendOptions } from "./draft/send";
 import type { InputOf, OperationName } from "../operations";
 import { applyOperation, passEverything, type Judge } from "./apply";
+import type { LayoutImport } from "../config/transfer";
+import type { BehaviorLabels } from "../model/behavior-labels";
+import { importLayout, type LayoutImported } from "./io-import";
 import { keyIo } from "./io-keys";
 import { layerIo } from "./io-layers";
 import { lightingIo } from "./io-lighting";
@@ -44,6 +47,9 @@ export interface WorkbenchIo {
   /** An operation (ADR 0019) on what you want: judged by Guard, one commit and
    *  one Undo step; in Draft it waits for Send, in Live it is sent at once, all or nothing. */
   apply<Name extends OperationName>(name: Name, input: InputOf<Name>): Promise<IoWriteResult>;
+  /** A layout file over what you want, committed as an operation's result is;
+   *  `labels`: the file's names for its behaviors (ADR 0020). */
+  importLayout(file: LayoutImport, labels?: BehaviorLabels): Promise<LayoutImported>;
   setKey(layer: number, row: number, col: number, action: KeyAction): Promise<IoWriteResult>;
   /** Several keys as one change (a swap, a paste): the `set_keys` operation. */
   writeKeys(edits: readonly KeyWrite[]): Promise<IoWriteResult>;
@@ -192,6 +198,7 @@ export function makeIo(
   const context: IoContext = { session, getState, dispatch, cols, features, judge, ledNodes, draft };
   return {
     apply: (name, input) => applyOperation(context, name, input),
+    importLayout: (file, labels) => importLayout(context, file, labels),
     ...keyIo(context),
     ...layerIo(context),
     ...lightingIo(context),

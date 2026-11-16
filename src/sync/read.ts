@@ -40,6 +40,7 @@ export function partsOf(image: KeyboardImage): Partial<ImageFeatures> {
     extension: image.extension !== undefined,
     extensionOverlay: image.extensionOverlay !== undefined,
     paramEffects: Object.keys(image.effectParams ?? {}).map(Number),
+    ...(image.pointing ? { pointingSupported: true } : {}),
   };
 }
 

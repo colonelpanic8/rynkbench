@@ -135,7 +135,6 @@ export function testWorkbench(parts: TestWorkbenchParts = {}): WorkbenchContextV
       redoLabel: null,
       undo: async () => {},
       redo: async () => {},
-      clear: () => {},
       ...(parts.history as object | undefined),
     } as WorkbenchContextValue["history"],
   };

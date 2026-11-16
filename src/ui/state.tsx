@@ -22,7 +22,6 @@ export interface WorkbenchContextValue {
     redoLabel: string | null;
     undo(): Promise<void>;
     redo(): Promise<void>;
-    clear(): void;
   };
 }
 
