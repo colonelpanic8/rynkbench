@@ -4,10 +4,10 @@
 // settings have their own parts (reduce-lighting.ts, reduce-settings.ts).
 
 import type { EncoderAction, KeyAction } from "../vendor/rynk-wasm/rynk_wasm";
-import type { WorkbenchAction, WorkbenchState } from "../model/workbench-state";
+import type { WorkbenchAction, WorkbenchState, WritableField } from "../model/workbench-state";
 import { draftEditCount } from "./draft/selectors";
 import { sameValue } from "../model/deep-equal";
-import { applyPatch, patchBetween, withValues, type KeyboardImage } from "../sync";
+import { applyPatch, patchBetween, valueAt, withValues, type KeyboardImage, type SyncItem } from "../sync";
 import { emptyHistory, recordStep, travel } from "./draft/history";
 import { atBase, wantOf, withBase, withItemsAtBase, withRead, withStored, withWant } from "./draft/want";
 import { encoderPendingId, keyPendingId } from "./pending";
@@ -42,27 +42,47 @@ function withEncoder(image: KeyboardImage, layer: number, id: number, action: En
   return { ...image, encoders };
 }
 
-/** Live writes and their answers: the keyboard holds what they show, so these
- *  parts of the base are set with what you want (ADR 0018). Optimistic writes
- *  set it at the start and put it back on an error, like a key. */
-const LIVE_WRITES: Partial<Record<WorkbenchAction["type"], (keyof KeyboardImage)[]>> = {
-  fieldWriteStart: ["behavior", "behaviorOptions", "macroOps", "holdTriggerPositions", "autoMouseLayers"],
-  fieldWriteErr: ["behavior", "behaviorOptions", "macroOps", "holdTriggerPositions", "autoMouseLayers"],
-  morseProfileWriteStart: ["morseProfiles"],
-  morseProfileWriteErr: ["morseProfiles"],
-  morseProfileDeleteStart: ["morseProfiles", "holdTriggerPositions"],
-  morseProfileDeleteErr: ["morseProfiles", "holdTriggerPositions"],
-  defaultLayer: ["defaultLayer"],
-  layerMetadataSet: ["metadata"],
-  pointingWriteOk: ["pointing"],
-  pointingReloaded: ["pointing"],
+const FIELD_ITEM: Record<WritableField, SyncItem> = {
+  behavior: { kind: "behavior" },
+  behaviorOptions: { kind: "behaviorOptions" },
+  macros: { kind: "macros" },
+  morseHoldTriggerPositions: { kind: "holdTriggerPositions" },
+  autoMouseLayers: { kind: "autoMouseLayers" },
 };
 
-function withLiveBase(state: WorkbenchState, parts: readonly (keyof KeyboardImage)[]): WorkbenchState {
+/** A profile's slot, and the hold-trigger positions the keyboard drops with
+ *  it: the table follows only where you had not changed it. */
+function profileDeleted(index: number, before: WorkbenchState): SyncItem[] {
+  const positions: SyncItem = { kind: "holdTriggerPositions" };
+  const untouched = sameValue(valueAt(before.base, positions), valueAt(wantOf(before), positions));
+  return [{ kind: "morseProfile", index }, ...(untouched ? [positions] : [])];
+}
+
+type LiveWrites = {
+  [Type in WorkbenchAction["type"]]?: (act: Extract<WorkbenchAction, { type: Type }>, before: WorkbenchState) => SyncItem[];
+};
+
+/** Live writes and their answers: the keyboard holds the items they name, so
+ *  the base takes those from what you want (ADR 0018); anything else drafted
+ *  stays in the draft. Optimistic writes set them at the start and put them
+ *  back on an error, like a key. */
+const LIVE_WRITES: LiveWrites = {
+  fieldWriteStart: (act) => [FIELD_ITEM[act.field]],
+  fieldWriteErr: (act) => [FIELD_ITEM[act.field]],
+  morseProfileWriteStart: (act) => [{ kind: "morseProfile", index: act.entry.index }],
+  morseProfileWriteErr: (act) => [{ kind: "morseProfile", index: act.index }],
+  morseProfileDeleteStart: (act, before) => profileDeleted(act.index, before),
+  morseProfileDeleteErr: (act, before) => profileDeleted(act.entry.index, before),
+  defaultLayer: () => [{ kind: "defaultLayer" }],
+  layerMetadataSet: (act) => [{ kind: "layerMetadata", layer: act.layer }],
+  pointingWriteOk: () => [{ kind: "pointing" }],
+  pointingReloaded: () => [{ kind: "pointing" }],
+};
+
+function withLiveBase(state: WorkbenchState, items: readonly SyncItem[]): WorkbenchState {
   const want = wantOf(state);
-  const base = { ...state.base };
-  for (const part of parts) if (base[part] !== undefined) (base as Record<string, unknown>)[part] = want[part];
-  return { ...state, base };
+  const held = items.filter((item) => valueAt(state.base, item) !== undefined);
+  return { ...state, base: withValues(state.base, held.map((item) => ({ item, value: valueAt(want, item) }))) };
 }
 
 /** Edits: each changes what you want and is one step of the history (ADR 0018).
@@ -95,8 +115,8 @@ export function makeWorkbenchReducer(cols: number) {
   return function reducer(state: WorkbenchState, act: WorkbenchAction): WorkbenchState {
     let next = reduce(state, act);
     if (next === state) return state;
-    const live = LIVE_WRITES[act.type];
-    if (live) next = withLiveBase(next, live);
+    const live = LIVE_WRITES[act.type] as ((act: WorkbenchAction, before: WorkbenchState) => SyncItem[]) | undefined;
+    if (live) next = withLiveBase(next, live(act, state));
     const join = FAILED_WRITES.has(act.type) || (act.type === "commit" && act.join === true);
     if (COMMITS.has(act.type) || join) next = withStep(state, next, join);
     return next;

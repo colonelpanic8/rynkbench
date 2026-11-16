@@ -1,7 +1,8 @@
 // Applying an operation (ADR 0019): run it on what you want, let Guard judge
 // the result, make it one commit (one Undo step), and let the mode decide when
 // the keyboard is written: in Draft on Send, in Live at once through Send's
-// path. In Live it is all or nothing: a send that stops part-way is put back.
+// path. In Live it is all or nothing: a send that stops part-way is put back,
+// unless the keyboard can no longer be read; then the change stays in the draft.
 
 import type { ConnectedBundle, WorkbenchState } from "../model/workbench-state";
 import { runOperation, type InputOf, type OperationFacts, type OperationName } from "../operations";
@@ -67,9 +68,12 @@ export async function commitImage(context: IoContext, after: KeyboardImage, opti
   dispatch({ type: "commit", image: after, layerOrder: options.layerOrder, labels: options.labels });
   if (getState().batchMode) return { ok: true };
 
-  const send = () => sendStaged(context);
+  const send = () => sendStaged(context, { settingNow: change.map(({ item }) => item) });
   const sent = await send();
   if (sent.ok) return sent;
+  // What reached the keyboard is not known, so nothing can be put back: the
+  // change stays in the draft, and Send writes what is left of it.
+  if (sent.unread) return { ok: false, message: `${sent.message}; the change is kept in the draft` };
   // Live is all or nothing: what the change set goes back, joined to the same
   // step, and the keyboard with it.
   dispatch({ type: "commit", image: applyPatch(wantOf(getState()), change, "before"), join: true, labels: labelsBefore });

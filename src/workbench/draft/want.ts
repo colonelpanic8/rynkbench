@@ -16,6 +16,7 @@ import type { LightingOverlayCell } from "../../model/lighting-types";
 import { sceneTableWithLayer } from "../../model/lighting/preview";
 import {
   applyPatch,
+  differences,
   itemKey,
   mutableLighting,
   patchBetween,
@@ -162,10 +163,10 @@ function withSettings(state: WorkbenchState, want: KeyboardImage): WorkbenchStat
   return next;
 }
 
-/** The workbench after a read: the base is what the keyboard holds now, and
- *  each item you had not changed follows it. The scene and rule fields the
- *  screens read as "on the keyboard" are the base's. */
-export function withBase(state: WorkbenchState, base: KeyboardImage): WorkbenchState {
+/** The workbench with `base` as its base: each item you had not changed
+ *  follows it. The scene and rule fields the screens read as "on the keyboard"
+ *  are the base's. */
+function following(state: WorkbenchState, base: KeyboardImage): WorkbenchState {
   const want = rebase(state.base, base, wantOf(state));
   return withWant(
     { ...state, base, scenes: base.scenes, runtimeConditionalScenes: base.runtimeConditionalScenes, pointingConfig: base.pointing },
@@ -173,7 +174,27 @@ export function withBase(state: WorkbenchState, base: KeyboardImage): WorkbenchS
   );
 }
 
-/** The workbench after some items were read or written: each set in the base, and followed where you had not changed it. */
+/** `read` with each drafted item the keyboard does not hold as you want it
+ *  left as it was based on. */
+function keepingBasedOn(basedOn: KeyboardImage, read: KeyboardImage, want: KeyboardImage): KeyboardImage {
+  const moved = differences(basedOn, read).filter(({ from }) => from !== undefined);
+  if (moved.length === 0) return read;
+  const keys = (changes: readonly { item: SyncItem }[]) => new Set(changes.map(({ item }) => itemKey(item)));
+  const drafted = keys(differences(basedOn, want));
+  const unmet = keys(differences(read, want));
+  const kept = moved.filter(({ item }) => drafted.has(itemKey(item)) && unmet.has(itemKey(item)));
+  return withValues(read, kept.map(({ item, from }) => ({ item, value: from })));
+}
+
+/** The workbench after a read: each item you had not changed follows the
+ *  keyboard. A drafted item keeps what it was based on, so Send's three-way
+ *  check still sees a change made on the keyboard since (ADR 0012); one the
+ *  keyboard already holds as you want it leaves the draft. */
+export function withBase(state: WorkbenchState, read: KeyboardImage): WorkbenchState {
+  return following(state, keepingBasedOn(state.base, read, wantOf(state)));
+}
+
+/** The workbench after some items were read: `withBase` for those items. */
 export function withStored(state: WorkbenchState, values: Iterable<{ item: SyncItem; value: unknown }>): WorkbenchState {
   return withBase(state, withValues(state.base, values));
 }
@@ -217,17 +238,26 @@ export const isDrafted = (state: WorkbenchState, item: SyncItem): boolean => dra
 
 
 /** The workbench after parts were read from the keyboard (a lighting refresh,
- *  a write's answer): the base holds them, and what you want follows where
- *  you had not changed it. A part the keyboard was not known to have is set. */
+ *  a topic): `withBase` for those parts. A part the keyboard was not known to
+ *  have is set. */
 export function withRead(state: WorkbenchState, parts: Partial<KeyboardImage>): WorkbenchState {
   return withBase(state, { ...state.base, ...parts });
 }
 
+/** The workbench after a write of yours was answered: the keyboard holds these
+ *  parts as given, drafted or not, and what you want follows where you had not
+ *  changed it. */
+export function withWritten(state: WorkbenchState, parts: Partial<KeyboardImage>): WorkbenchState {
+  return following(state, { ...state.base, ...parts });
+}
+
 /** The workbench after the lighting state was read: its counters are the
- *  keyboard's, its controls (on, brightness, background) as you want them. */
-export function withLightingRead(state: WorkbenchState, read: LightingState): WorkbenchState {
+ *  keyboard's, its controls (on, brightness, background) as you want them.
+ *  `written` when it answers a write of the controls. */
+export function withLightingRead(state: WorkbenchState, read: LightingState, written = false): WorkbenchState {
   if (!state.lightingState) return { ...state, lightingState: read };
-  const next = withRead(state, { lightingState: mutableLighting(read) });
+  const controls = { lightingState: mutableLighting(read) };
+  const next = written ? withWritten(state, controls) : withRead(state, controls);
   return { ...next, lightingState: { ...read, ...mutableLighting(next.lightingState!) } };
 }
 

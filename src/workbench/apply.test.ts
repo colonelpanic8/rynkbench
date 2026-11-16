@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { mockProvider } from "../session/mock/board";
+import { mockProvider, storedSegmentsOf } from "../session/mock/board";
 import { glove80Board } from "../session/mock/glove80";
 import type { RynkSession } from "../session/types";
 import type { KeyAction, Morse } from "../vendor/rynk-wasm/rynk_wasm";
@@ -85,6 +85,40 @@ describe("applying an operation (ADR 0019)", () => {
       expect(result).toEqual({ ok: false, message: "flash failed; nothing was changed" });
       expect(await firstTwo(session)).toEqual(before);
       expect(state().history.past).toEqual([]);
+      expect(draftOf(state()).changes).toEqual([]);
+    });
+  });
+
+  it("in Live: when the link dies during the send, the change stays in the draft", async () => {
+    await withBoard(false, async (session, io, state) => {
+      const capabilities = session.device.capabilities.bind(session.device);
+      const setRows = session.keymap.setRows.bind(session.keymap);
+      let written = 0;
+      vi.spyOn(session.keymap, "setRows").mockImplementation(async (...row) => {
+        await setRows(...row);
+        written += 1;
+      });
+      // Both rows arrive; then the keyboard is gone, so nothing can be read back.
+      const gone = vi.spyOn(session.device, "capabilities").mockImplementation(() =>
+        written < 2 ? capabilities() : Promise.reject(new Error("Session is closed")),
+      );
+      const keys = [
+        { layer: 0, row: 0, col: 0, action: letter("X") },
+        { layer: 1, row: 0, col: 0, action: letter("Y") },
+      ];
+      const result = await io.apply("set_keys", { keys });
+      expect(result).toEqual({ ok: false, message: "Session is closed; the change is kept in the draft" });
+      expect(state().layers[0][0]).toEqual(letter("X"));
+      expect(draftOf(state()).changes.map(({ item, after }) => [item, after])).toEqual([
+        [{ kind: "key", layer: 0, offset: 0 }, letter("X")],
+        [{ kind: "key", layer: 1, offset: 0 }, letter("Y")],
+      ]);
+
+      // Back again: Send finds what already arrived and stores nothing twice.
+      gone.mockRestore();
+      const stored = storedSegmentsOf(session);
+      expect(await io.applyBatch()).toEqual({ ok: true });
+      expect(storedSegmentsOf(session)).toBe(stored);
       expect(draftOf(state()).changes).toEqual([]);
     });
   });
