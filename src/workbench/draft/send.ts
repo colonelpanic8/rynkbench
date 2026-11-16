@@ -14,8 +14,8 @@ import {
   syncTo,
   valueAt,
   withValues,
-  type KeyboardImage,
   type ImageFeatures,
+  type ReadImage,
   type SyncItem,
 } from "../../sync";
 import { errorMessage } from "../../session/errors";
@@ -88,8 +88,8 @@ export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Pro
     return unread ? { ok: false, message, unread } : { ok: false, message };
   }
 
-  /** The keyboard now holds `image`: what reached it is no longer in the draft. */
-  function stored(image: KeyboardImage) {
+  /** The keyboard now holds what was read: what reached it is no longer in the draft. */
+  function stored({ activeLayers: _layers, layerStateComplete: _complete, ...image }: ReadImage) {
     dispatch({ type: "draftStored", image });
   }
 }

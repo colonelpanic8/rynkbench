@@ -53,6 +53,7 @@ describe("Send", () => {
       expect(await io.applyBatch()).toEqual({ ok: true });
       expect(storedKeysOf(session) - before).toBe(3);
       expect(draftOf(state()).changes).toEqual([]);
+      expect(state().base).not.toHaveProperty("activeLayers");
       expect(state().batchBusy).toBe(false);
       const [layer0] = await session.keymap.readAll();
       expect(layer0.actions[0]).toEqual(key("F13"));
