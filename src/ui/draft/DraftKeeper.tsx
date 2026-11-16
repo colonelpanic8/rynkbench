@@ -5,13 +5,14 @@
 // - in Live mode, sends lighting once the painting pauses (a scene is written
 //   whole, so not on every stroke).
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { readSetting, SETTING_KEYS, writeSetting } from "../settings";
 import { useWorkbench } from "../state";
 import { draftSnapshot, parseStoredDraft } from "../../workbench/draft/changes";
 import { earlierDraft, setEarlier } from "./earlier";
 import { useDraft } from "./useDraft";
 import { useLink } from "./link";
+import { later } from "./later";
 
 /** How long Live waits after the last change before writing it. */
 const LIVE_PAUSE_MS = 600;
@@ -33,15 +34,27 @@ export function DraftKeeper() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  // Keep the draft for this keyboard, a moment after each change.
+  // Keep the draft for this keyboard, a moment after each change. A reconnect
+  // remounts the workbench from a fresh read, so the draft crosses over only
+  // through the kept copy: a waiting save goes at once on unmount and pagehide.
+  const keep = useMemo(() => later(400), []);
   useEffect(() => {
-    if (draft.offline || earlierDraft.get()) return;
-    const timer = setTimeout(() => {
+    if (draft.offline || earlierDraft.get()) {
+      keep.cancel();
+      return;
+    }
+    keep.schedule(() => {
       const snapshot = draftSnapshot(state);
       writeSetting(key, snapshot ? JSON.stringify(snapshot) : "");
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [state, key, draft.offline]);
+    });
+  }, [state, key, draft.offline, keep]);
+  useEffect(() => {
+    window.addEventListener("pagehide", keep.flush);
+    return () => {
+      window.removeEventListener("pagehide", keep.flush);
+      keep.flush();
+    };
+  }, [keep]);
 
   // Without the keyboard, everything waits in the draft (ADR 0012).
   const { lost } = useLink();
