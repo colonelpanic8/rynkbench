@@ -1,13 +1,14 @@
-// Shared effect controls: the numeric field the lighting panels use, and a
-// complete LightingEffect editor (kind + color + timing) for surfaces that edit
-// a stored effect rather than a paint brush.
+// Shared effect controls: the numeric field the lighting panels use, the
+// timing fields of a blink or a breathe, and a complete LightingEffect editor
+// (kind + color + timing) for surfaces that edit a stored effect.
 
-import type { LightingEffect } from "../../vendor/rynk-wasm/rynk_wasm";
+import { useState } from "react";
+import type { LightingEffect } from "../../model/lighting-types";
 import { Segmented, TextInput } from "../kit";
 import { rgbToHsv, hsvToRgb } from "../../model/lighting/color";
 import { ColorPicker } from "./ColorPicker";
 import type { EffectKind, EffectTiming } from "../../model/lighting/effect";
-import { buildEffect, effectKind, effectRgb, effectTiming } from "../../model/lighting/effect";
+import { buildEffect, effectKind, effectRgb, effectTiming, timingBounds, typedWithin } from "../../model/lighting/effect";
 
 export function NumberField({
   label,
@@ -16,6 +17,7 @@ export function NumberField({
   unit,
   min,
   max,
+  clamp,
 }: {
   label: string;
   value: number;
@@ -23,17 +25,42 @@ export function NumberField({
   unit?: string;
   min?: number;
   max?: number;
+  /** Reports only whole numbers within min and max: anything else is held
+   *  while it is typed, and brought within them on Enter or on leaving the field. */
+  clamp?: boolean;
 }) {
+  // What is in the field while it has the focus.
+  const [typed, setTyped] = useState<string | null>(null);
+  const type = (text: string) => {
+    if (!clamp) return onChange(Number(text));
+    setTyped(text);
+    const n = Number(text);
+    if (typedWithin(text, min, max) === n && n !== value) onChange(n);
+  };
+  /** Brings what was typed within the bounds; nothing usable leaves the value as it was. */
+  const settle = (text: string | null): number => {
+    const settled = text === null ? null : typedWithin(text, min, max);
+    if (settled === null) return value;
+    if (settled !== value) onChange(settled);
+    return settled;
+  };
   return (
     <label className="flex items-center justify-between gap-2 text-body text-mute">
       {label}
       <span className="flex items-center gap-1">
         <TextInput
           type="number"
-          value={value}
+          value={typed ?? value}
           min={min}
           max={max}
-          onChange={(e) => onChange(Number(e.target.value))}
+          onChange={(e) => type(e.target.value)}
+          onBlur={() => {
+            settle(typed);
+            setTyped(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && typed !== null) setTyped(String(settle(typed)));
+          }}
           className="w-[74px] py-1 text-right"
         />
         {unit && (
@@ -46,8 +73,43 @@ export function NumberField({
 
 const KINDS: EffectKind[] = ["Solid", "Blink", "Breathe"];
 
-/** The kind + timing half of an effect, shared by the stored-effect editor and
- *  by the paint brushes, which carry a color of their own. */
+/** The numbers behind a blink or a breathe: its period, what the kind adds
+ *  (a blink's duty, a breathe's step) and its phase. */
+export function EffectTimingFields({
+  kind,
+  timing,
+  onTiming,
+  clamp,
+}: {
+  kind: EffectKind;
+  timing: EffectTiming;
+  onTiming: (timing: EffectTiming) => void;
+  /** Keeps every field to what the firmware takes (see NumberField). */
+  clamp?: boolean;
+}) {
+  if (kind === "Solid") return null;
+  const bounds = timingBounds(kind, timing);
+  const field = (name: keyof EffectTiming, label: string, unit: string) => (
+    <NumberField
+      label={label}
+      unit={unit}
+      min={bounds[name].min}
+      max={bounds[name].max}
+      clamp={clamp}
+      value={timing[name]}
+      onChange={(value) => onTiming({ ...timing, [name]: value })}
+    />
+  );
+  return (
+    <>
+      {field("periodMs", "Period", "ms")}
+      {kind === "Blink" ? field("duty", "Duty", "%") : field("stepMs", "Step", "ms")}
+      {field("phaseMs", "Phase", "ms")}
+    </>
+  );
+}
+
+/** The kind + timing half of an effect. */
 export function EffectShapeEditor({
   kind,
   timing,
@@ -59,7 +121,6 @@ export function EffectShapeEditor({
   onKind: (kind: EffectKind) => void;
   onTiming: (timing: EffectTiming) => void;
 }) {
-  const retime = (patch: Partial<EffectTiming>) => onTiming({ ...timing, ...patch });
   return (
     <>
       <Segmented
@@ -70,39 +131,7 @@ export function EffectShapeEditor({
       />
       {kind !== "Solid" && (
         <div className="flex flex-col gap-1.5">
-          <NumberField
-            label="Period"
-            unit="ms"
-            min={100}
-            value={timing.periodMs}
-            onChange={(periodMs) => retime({ periodMs })}
-          />
-          {kind === "Blink" && (
-            <NumberField
-              label="Duty"
-              unit="%"
-              min={0}
-              max={100}
-              value={timing.duty}
-              onChange={(duty) => retime({ duty })}
-            />
-          )}
-          {kind === "Breathe" && (
-            <NumberField
-              label="Step"
-              unit="ms"
-              min={1}
-              value={timing.stepMs}
-              onChange={(stepMs) => retime({ stepMs })}
-            />
-          )}
-          <NumberField
-            label="Phase"
-            unit="ms"
-            min={0}
-            value={timing.phaseMs}
-            onChange={(phaseMs) => retime({ phaseMs })}
-          />
+          <EffectTimingFields kind={kind} timing={timing} onTiming={onTiming} />
         </div>
       )}
     </>

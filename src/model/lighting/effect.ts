@@ -88,6 +88,33 @@ export function buildEffect(
   }
 }
 
+export type TimingBounds = Record<keyof EffectTiming, { min: number; max: number }>;
+
+const U32_MAX = 0xffff_ffff;
+const U16_MAX = 0xffff;
+/** The shortest period offered; the firmware itself takes anything above zero. */
+const MIN_PERIOD_MS = 100;
+
+/** What each timing field may hold. The firmware refuses a blink lit for more
+ *  than 100 percent and a breathe whose step is not shorter than its period. */
+export function timingBounds(kind: EffectKind, timing: EffectTiming): TimingBounds {
+  const breathe = kind === "Breathe";
+  return {
+    periodMs: { min: breathe ? Math.max(MIN_PERIOD_MS, timing.stepMs + 1) : MIN_PERIOD_MS, max: U32_MAX },
+    phaseMs: { min: 0, max: U32_MAX },
+    duty: { min: 0, max: 100 },
+    stepMs: { min: 1, max: Math.max(1, Math.min(U16_MAX, timing.periodMs - 1)) },
+  };
+}
+
+/** What was typed into a timing field, as the whole number within its bounds
+ *  that it stands for; null when it is not a number. */
+export function typedWithin(text: string, min = -Infinity, max = Infinity): number | null {
+  const n = Number(text);
+  if (text.trim() === "" || !Number.isFinite(n)) return null;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
 /** One-line effect summary for a rule row. */
 export function describeEffect(effect: LightingEffect): string {
   const kind = effectKind(effect);

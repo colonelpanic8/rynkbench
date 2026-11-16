@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LightingEffect } from "../../vendor/rynk-wasm/rynk_wasm";
 import { DEFAULT_TIMING } from "./effect";
-import { colorsInUse, keyLightOf, planLight, recolorCells, recolorRules } from "./key-light";
+import { colorsInUse, keyLightOf, planLight, recolorCells, recolorRules, SPEEDS, speedOf, speedTiming, type KeyLight } from "./key-light";
 import { statusLightOf, withStatusLight } from "./status-light";
 import { bleStatusRules } from "./status-presets";
 import { BLACK_EFFECT } from "./preview";
@@ -32,6 +32,48 @@ describe("a key's light", () => {
       [3, 4].map((led_id) => ({ led_id, effect: solid(), ttl_ms: undefined })),
     );
     expect(planLight({ kind: "below" }, [3], 0, [])).toEqual({ paint: [], erase: [3], rules: null });
+  });
+});
+
+describe("a light's speed", () => {
+  type Lit = Extract<KeyLight, { kind: "color" }>;
+  const lit = (effect: LightingEffect) => keyLightOf(effect) as Lit;
+  const written = (light: KeyLight) => planLight(light, [3], 0, []).paint[0].effect;
+  // Timing set outside the tab: no named speed has it.
+  const blink = (color = RED): LightingEffect => ({ Blink: { color, period_ms: 750, phase_ms: 120, duty: 30 } });
+  const breathe = (color = RED): LightingEffect => ({ Breathe: { color, period_ms: 3000, phase_ms: 400, step_ms: 8 } });
+
+  it("writes back the timing a stored light has, exactly", () => {
+    for (const effect of [blink(), breathe()]) {
+      const light = lit(effect);
+      expect(speedOf(light.effect, light.timing)).toBeNull();
+      expect(written(light)).toEqual(effect);
+    }
+  });
+
+  it("keeps that timing when the light is recoloured", () => {
+    expect(written({ ...lit(blink()), color: BLUE })).toEqual(blink(BLUE));
+    expect(written({ ...lit(breathe()), color: BLUE })).toEqual(breathe(BLUE));
+  });
+
+  it("names a speed only when the period is all that differs from a new light", () => {
+    const fast = lit({ Blink: { color: RED, period_ms: 500, phase_ms: 0, duty: DEFAULT_TIMING.duty } });
+    expect(speedOf(fast.effect, fast.timing)).toBe(SPEEDS.fast);
+    const slow = lit({ Breathe: { color: RED, period_ms: 2000, phase_ms: 0, step_ms: DEFAULT_TIMING.stepMs } });
+    expect(speedOf(slow.effect, slow.timing)).toBe(SPEEDS.slow);
+    // A named speed's period with a duty or a phase of its own is not that speed.
+    const shortBlink = lit({ Blink: { color: RED, period_ms: 1000, phase_ms: 0, duty: 10 } });
+    expect(speedOf(shortBlink.effect, shortBlink.timing)).toBeNull();
+    const offset = lit({ Breathe: { color: RED, period_ms: 1000, phase_ms: 250, step_ms: DEFAULT_TIMING.stepMs } });
+    expect(speedOf(offset.effect, offset.timing)).toBeNull();
+    // What the kind does not store cannot make it custom.
+    expect(speedOf("Blink", { ...speedTiming(SPEEDS.normal), stepMs: 3 })).toBe(SPEEDS.normal);
+  });
+
+  it("writes a named speed as its period with a new light's timing", () => {
+    expect(written({ ...lit(blink()), timing: speedTiming(SPEEDS.fast) })).toEqual({
+      Blink: { color: RED, period_ms: 500, phase_ms: 0, duty: DEFAULT_TIMING.duty },
+    });
   });
 });
 
