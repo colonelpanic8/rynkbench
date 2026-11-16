@@ -1,12 +1,10 @@
-# Rynkbench — working notes for Claude
+# Rynkbench working notes
 
-A browser workbench for RMK/Rynk keyboards (Glove80, Go60 and plain RMK boards): edit the keymap, lighting and device settings live or in a file. The look and organization follow GLIDE (moosylog/glide-src): its colours, key drawing, top bar, side panel and key editor.
-Live site: https://moosylog.github.io/rynkbench/ (GitHub Pages, deployed from `master`).
+A browser workbench for RMK/Rynk keyboards (Glove80, Go60 and plain RMK boards): edit the keymap, lighting and device settings live or in a file. The look and organization follow GLIDE: its colours, key drawing, top bar, side panel and key editor.
 
-## Rules from the owner
-- Top quality, easy to maintain, a clear structure. Leave every file you touch at least as clean as you found it.
-- Work on a branch (`redesign` so far); commit there. Push, ship and merge to `master` only when the owner asks; `master` deploys, and only from a green Checks run.
-- Every change keeps the guards green; never add to a baseline or an allow-list to make a test pass. Fix the code.
+## Rules
+- Leave every file you touch at least as clean as you found it.
+- Every change keeps the guards green. Do not add to a baseline or an allow-list to make a test pass; fix the code.
 - A decision that shapes the code goes in an ADR (`docs/adr/`, next number, one page, linked from its README).
 
 ## Layers (src/architecture/boundaries.ts; the map: docs/ARCHITECTURE.md)
@@ -39,19 +37,12 @@ Live site: https://moosylog.github.io/rynkbench/ (GitHub Pages, deployed from `m
 - Screens are tested by rendering them in a test workbench: `renderInWorkbench(<Screen />, { bundle, state })` or `testWorkbench(…)` from `src/test/workbench.tsx`. Overrides are typed; do not cast a whole context. For a realistic board use a real bundle (`openBundle` on the offline Glove80).
 - Pure logic gets a plain test next to it.
 
-## Working efficiently
-- `npm run t -- <paths>`: only failures and totals. Run the tests for what you changed; the whole suite only when asked or before a large merge.
-- No Nix here? `npm run wasm:ci` puts the WASM clients from the newest green Checks run with the same build recipe into `src/vendor`, so every test runs locally. Never commit `src/vendor`.
-- `npm run ship` (only when asked): push, wait for Checks, merge to `master` only when green, wait for the deploy (one retry for Pages' own hiccups). `npm run ship -- --check` stops after Checks.
-- Browser checks only when asked or at the end of a feature, once: screenshots (scaled, or a zoomed region) and `find`; never a full page snapshot (the keyboard alone is thousands of lines).
+## Checking work
+- The WASM clients are built by Nix: `npm run wasm` (or `just wasm`) links them into `src/vendor`, which is never committed.
+- Then `npx tsc -b`, `npx oxlint` and the tests. `npm run t -- <paths>` prints only failures and totals; run the tests for what you changed, the whole suite before a large merge. `just check` runs lint, tests and the production build.
 - Search only in `src/` and `docs/`; `.rgignore` hides golden files and fixtures (open one by path when needed). Big files (`session/link-session.ts`, `session/mock/board.ts`): find the line first, then read only that range.
-- One feature per session, with a short brief; this file and the ADRs carry what a new session needs.
 - When a change touches a module that writes to the keyboard, move its writes onto the one path in the same change (ADR 0013); never add a write that bypasses Guard and the draft.
 
-## Checking work
-- The WASM client is built by Nix (`npm run wasm`); without Nix use `npm run wasm:ci`. Then `npx tsc -b`, `npx oxlint` and `npm run t`. The Checks run on GitHub is the gate.
-- Look at a change in a browser before calling it done: open https://moosylog.github.io/rynkbench/ after the deploy, start a new Glove80 layout and try what changed.
-
 ## Docs
-- `docs/ARCHITECTURE.md` — the layers and how a change flows. `docs/todo.md` — what is left, cheapest first: take one item per session and strike it when it ships.
-- `docs/ux-brief.md` — the UX brief (areas, flows, principles). `docs/adr/` — decisions, newest last. `docs/glossary.md` — words. `docs/sync.md` — how writing to the keyboard works. `docs/firmware/` — patches proposed for RMK.
+- `docs/ARCHITECTURE.md` — the layers and how a change flows. `docs/todo.md` — what is left, cheapest first: strike an item when it lands.
+- `docs/ux-brief.md` — the UX brief (areas, flows, principles). `docs/adr/` — decisions, newest last. `docs/glossary.md` — words. `docs/sync.md` — how writing to the keyboard works.

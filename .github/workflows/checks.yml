@@ -2,7 +2,7 @@ name: Checks
 
 # The same checks the Pages deploy runs, without deploying: every push to a
 # branch and every pull request is typechecked, linted, tested and built, so a
-# change is known to pass before it is merged to main.
+# change is known to pass before it is merged to master.
 
 on:
   push:
@@ -39,21 +39,6 @@ jobs:
 
       - name: Build Rynk WASM client
         run: npm run wasm
-
-      # Kept so a checkout without Nix can run every test (scripts/wasm-from-ci.sh):
-      # the built clients and a fingerprint of the files that define them.
-      - name: Keep the WASM build
-        run: |
-          mkdir -p wasm-build
-          cp -rL src/vendor/rynk-wasm src/vendor/moergo-config-wasm wasm-build/
-          sh scripts/wasm-recipe.sh > wasm-build/recipe.sha256
-
-      - name: Upload the WASM build
-        uses: actions/upload-artifact@v4
-        with:
-          name: wasm-build
-          path: wasm-build
-          retention-days: 30
 
       - name: Typecheck
         run: npm exec -- tsc -b
