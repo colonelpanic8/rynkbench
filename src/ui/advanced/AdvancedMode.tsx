@@ -1,5 +1,5 @@
-// The Behaviors area's editors (combos, morse, macros, forks, keymap-wide
-// transforms) and the Insights area's usage report. The area shell
+// The Behaviors area's screens: All your behaviors, the editors (combos,
+// morse, macros, forks) and the keymap-wide transforms. The area shell
 // draws the section tabs and decides which sections the firmware offers
 // (src/ui/areas.ts), so each screen here renders without a nav of its own.
 
@@ -9,7 +9,7 @@ import { MorseTab } from "./MorseTab";
 import { MacrosTab } from "./MacrosTab";
 import { ForksTab } from "./ForksTab";
 import { TransformsTab } from "./TransformsTab";
-import { UsageTab } from "./UsageTab";
+import { AllBehaviors } from "../behaviors/AllBehaviors";
 
 export type AdvancedSectionId = "combos" | "morse" | "macros" | "forks" | "transforms" | "usage";
 
@@ -26,6 +26,6 @@ export function AdvancedSection({ section }: { section: AdvancedSectionId }) {
     case "transforms":
       return <TransformsTab nav={null} />;
     case "usage":
-      return <UsageTab nav={null} />;
+      return <AllBehaviors />;
   }
 }

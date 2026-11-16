@@ -7,33 +7,22 @@
 import { useState } from "react";
 import type { MouseEvent } from "react";
 import { useWorkbench } from "../state";
-import { useTerms, useWording } from "../terms";
+import { useTerms } from "../terms";
 import { Button, TextInput, cx } from "../kit";
 import { ChevronDownIcon, ChevronRightIcon, MoreIcon, PlusIcon } from "../icons";
 import { RowMenu, useRowMenu } from "../RowMenu";
-import { askConfirm, showToast } from "../messages/store";
-import { useUsageReport } from "./useUsage";
-import { setBehaviorFocus, type BehaviorFocus } from "./focus";
+import { useLibraryInput } from "./useLibrary";
+import type { BehaviorFocus } from "./focus";
+import { useBehaviorActions } from "./useBehaviorActions";
 import {
   LIBRARY_KINDS,
   libraryRows,
   searchRows,
-  stillUsedText,
   unusedRows,
   usageBadge,
-  type LibraryInput,
   type LibraryKind,
   type LibraryRow,
 } from "./library";
-import { useLayerNames } from "../layer-names";
-
-function useLibraryInput(): LibraryInput {
-  const { state } = useWorkbench();
-  const usage = useUsageReport();
-  const wording = useWording();
-  const layerNames = useLayerNames();
-  return { usage, macroOps: state.macroOps, morse: state.morse, forks: state.forks, profiles: state.morseProfiles, wording, layerNames };
-}
 
 /** The header row that opens and closes the library. */
 export function LibraryEntry({ open, onToggle }: { open: boolean; onToggle: () => void }) {
@@ -63,10 +52,10 @@ function Row({ row, onOpen, onMenu, menuOpen }: { row: LibraryRow; onOpen: () =>
             <span
               className={cx(
                 "shrink-0 rounded border px-1.5 py-0.5 text-caption font-semibold uppercase tracking-widest",
-                row.uses === 0 ? "border-warn/40 text-warn" : "border-line-strong text-mute",
+                badge.unused ? "border-warn/40 text-warn" : "border-line-strong text-mute",
               )}
             >
-              {badge}
+              {badge.text}
             </span>
           )}
         </span>
@@ -89,7 +78,8 @@ function Row({ row, onOpen, onMenu, menuOpen }: { row: LibraryRow; onOpen: () =>
 
 /** The library once open. `kinds`: the lists this keyboard has, in order. */
 export function BehaviorLibrary({ kinds }: { kinds: LibraryKind[] }) {
-  const { dispatch, io } = useWorkbench();
+  const { dispatch } = useWorkbench();
+  const actions = useBehaviorActions();
   const term = useTerms();
   const input = useLibraryInput();
   const [chosen, setKind] = useState<LibraryKind | null>(null);
@@ -102,28 +92,8 @@ export function BehaviorLibrary({ kinds }: { kinds: LibraryKind[] }) {
   const rows = searchRows(all, search);
   const one = LIBRARY_KINDS[kind].one[input.wording];
   const unused = unusedRows(input).length;
-  const open = (focus: BehaviorFocus) => {
-    setBehaviorFocus(kind, focus);
-    dispatch({ type: "mode", mode: kind });
-  };
-
-  const remove = async (row: LibraryRow) => {
-    if (row.uses) {
-      const { title, body } = stillUsedText(row);
-      const yes = await askConfirm({
-        guard: true,
-        title,
-        body,
-        details: row.places.map((place) => place.label),
-        confirmLabel: "Delete anyway",
-        cancelLabel: "Keep it",
-        danger: true,
-      });
-      if (!yes) return;
-    }
-    const result = await io.apply("delete_behavior", { kind: row.kind, slot: row.index });
-    showToast(result.ok ? `${row.name} deleted` : `${row.name} was not deleted: ${result.message}`, { tone: result.ok ? "ok" : "danger" });
-  };
+  const open = (focus: BehaviorFocus) => actions.open(kind, focus);
+  const remove = actions.remove;
 
   const atRow = menu.at ? all.find((row) => row.index === menu.at?.id) : undefined;
   return (

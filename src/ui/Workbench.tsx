@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import { ledNodesOf, type ConnectedBundle } from "../workbench";
+import { firmwareFactsOf, resolveCapabilities } from "../capabilities";
 import { WorkbenchContext, useWorkbench } from "./state";
 import {
   initialWorkbenchState,
@@ -166,18 +167,17 @@ export function Workbench({
 
   // The areas and their sections come from what the keyboard and the session
   // offer (src/ui/areas.ts).
-  const areas = useMemo(
-    () =>
-      areasFor({
-        connected: bundle.session.kind !== "offline",
-        combos: bundle.caps.max_combos > 0,
-        morse: bundle.caps.max_morse > 0,
-        macros: bundle.caps.macro_space_size > 0,
-        forks: bundle.caps.max_forks > 0,
-        tapProfiles: bundle.morseProfileCapacity > 0,
-      }),
-    [bundle],
-  );
+  const areas = useMemo(() => {
+    const capabilities = resolveCapabilities(firmwareFactsOf(bundle));
+    return areasFor({
+      connected: bundle.session.kind !== "offline",
+      combos: bundle.caps.max_combos > 0,
+      morse: capabilities.has("behaviors.morse"),
+      macros: capabilities.has("behaviors.macros"),
+      forks: capabilities.has("behaviors.forks"),
+      tapProfiles: capabilities.has("behaviors.profiles"),
+    });
+  }, [bundle]);
   // The Behavior Library lists the behavior sections this keyboard has.
   const libraryKinds = useMemo(() => {
     const sections: readonly string[] = areas.find((area) => area.id === "behaviors")?.sections ?? [];

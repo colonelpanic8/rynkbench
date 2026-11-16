@@ -35,11 +35,11 @@ Organize by what the person is trying to do, not by protocol area. Today’s sev
 | Area | Holds today’s | Needs (capabilities) | Appears for |
 | --- | --- | --- | --- |
 | Layout | Keymap, layers, encoders | keymap | every board |
-| Behaviors | Advanced (combos, forks, macros, morse), Profiles | combos, morse, forks, macros | boards that have any of them |
+| Behaviors | All your behaviors (ADR 0020), combos, forks, macros, morse, Profiles | `behaviors.*`, combos | boards that have any of them |
 | (Lighting) | no area since ADR 0016: each key's light in the key editor's RGB Lighting tab and Paint; the lights as a whole, effects, status setups and rules in Layout properties (RGB Lighting, RGB Effects) | `lighting.state` and its surfaces | boards with RGB |
 | Device | Device, connection, firmware update | device, `firmware.update` on desktop | connected boards |
 | Library | Import and export, board transfer, backups | none | always |
-| Insights | Usage, Live, health check | the graph; `live.*` for Live | always; Live when connected |
+| Insights | Live, health check | `live.*` for Live | Live when connected |
 
 A plain-RMK board shows Layout, Behaviors (without lighting), Device, Library and Insights. An RGB board adds the key editor's RGB Lighting tab and Layout properties' RGB tabs. The area list comes from the capability set, never from a hard-coded list.
 
@@ -86,7 +86,7 @@ Build on what exists rather than replace it.
 | RGB Lighting and RGB Effects (key editor, Layout properties) | hidden | shown | shown | shown |
 | Device | connection and info | plus lighting output | Bluetooth only, USB explained | plus firmware update |
 | Library | file import and export | same | same | same |
-| Insights | usage, health check | plus lighting findings | usage | plus Live |
+| Insights | health check | plus lighting findings | none | plus Live |
 
 ## 9. Deliverables and exit for U0
 

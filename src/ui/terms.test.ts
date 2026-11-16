@@ -20,7 +20,7 @@ describe("terms", () => {
       "section.forks": "Forks",
       "section.profiles": "Profiles",
       "section.transforms": "Transforms",
-      "section.usage": "Usage",
+      "section.usage": "All your behaviors",
       "section.live": "Live",
     };
     for (const [id, label] of Object.entries(technical)) expect(termFor(id as TermId, "technical")).toBe(label);

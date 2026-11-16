@@ -32,7 +32,7 @@ export const TERMS = {
   "section.profiles": { technical: "Profiles", friendly: "Tap timing" },
   "section.transforms": { technical: "Transforms", friendly: "Quick changes" },
   "section.device": { technical: "Device", friendly: "Keyboard" },
-  "section.usage": { technical: "Usage", friendly: "What\u2019s used" },
+  "section.usage": { technical: "All your behaviors", friendly: "All your behaviors" },
   "section.live": { technical: "Live", friendly: "Live view" },
 } as const satisfies Record<string, Term>;
 

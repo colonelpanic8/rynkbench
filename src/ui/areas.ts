@@ -16,6 +16,7 @@ export type SectionId = Mode;
 /** Every section, in rail order. */
 export const ALL_SECTIONS: readonly SectionId[] = [
   "keymap",
+  "usage",
   "combos",
   "morse",
   "macros",
@@ -23,7 +24,6 @@ export const ALL_SECTIONS: readonly SectionId[] = [
   "profiles",
   "transforms",
   "device",
-  "usage",
   "live",
 ];
 
@@ -62,6 +62,8 @@ export function areasFor(facts: AreaFacts): Area[] {
       id: "behaviors",
       term: "area.behaviors",
       sections: pick([
+        // All your behaviors (ADR 0020), when there is a kind to list.
+        ["usage", facts.morse || facts.macros || facts.forks || facts.tapProfiles],
         ["combos", facts.combos],
         ["morse", facts.morse],
         ["macros", facts.macros],
@@ -74,10 +76,7 @@ export function areasFor(facts: AreaFacts): Area[] {
     {
       id: "insights",
       term: "area.insights",
-      sections: pick([
-        ["usage", true],
-        ["live", facts.connected],
-      ]),
+      sections: pick([["live", facts.connected]]),
     },
   ];
   return areas.filter((area) => area.sections.length > 0);

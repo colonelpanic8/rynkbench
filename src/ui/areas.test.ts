@@ -28,6 +28,7 @@ describe("areas", () => {
 
   it("offers the Behaviors editors the firmware has, in order", () => {
     expect(areasFor(everything).find((a) => a.id === "behaviors")?.sections).toEqual([
+      "usage",
       "combos",
       "morse",
       "macros",
@@ -37,10 +38,13 @@ describe("areas", () => {
     ]);
   });
 
-  it("drops Device and Live for a file opened without a keyboard", () => {
+  it("drops Device and Insights (Live) for a file opened without a keyboard", () => {
     const offline = { ...everything, connected: false };
-    expect(ids(offline)).toEqual(["layout", "behaviors", "insights"]);
-    expect(areasFor(offline).find((a) => a.id === "insights")?.sections).toEqual(["usage"]);
+    expect(ids(offline)).toEqual(["layout", "behaviors"]);
+  });
+
+  it("lists All your behaviors only when the keyboard stores a kind of behavior", () => {
+    expect(areasFor({ ...plainRmk, forks: true }).find((a) => a.id === "behaviors")?.sections).toEqual(["usage", "forks", "transforms"]);
   });
 
   it("places every section in exactly one area when all are offered", () => {
