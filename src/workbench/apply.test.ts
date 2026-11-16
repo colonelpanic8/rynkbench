@@ -7,9 +7,9 @@ import { emptyMorse } from "../model/slots";
 import { noLabels, withLabel } from "../model/behavior-labels";
 import { openBundle } from "../ui/bundle";
 import { initialWorkbenchState } from "./initial-state";
-import { ioFeaturesFor, makeIo, type IoOptions, type WorkbenchIo } from "./io";
+import { ioFeaturesFor, keepingCurrent, makeIo, type IoOptions, type WorkbenchIo } from "./io";
 import { makeWorkbenchReducer } from "./reducer";
-import type { WorkbenchState } from "../model/workbench-state";
+import type { WorkbenchAction, WorkbenchState } from "../model/workbench-state";
 import { draftOf } from "./draft/want";
 
 const letter = (code: string) => ({ Single: { Key: { Hid: code } } }) as KeyAction;
@@ -146,5 +146,42 @@ describe("behavior operations (ADR 0020)", () => {
       const reducer = makeWorkbenchReducer(2);
       expect(reducer(state(), { type: "labelsLoaded", labels }).labels.morse).toEqual({ [free]: { name: "Kept", description: "" } });
     });
+  });
+
+  it("in Live: Undo takes a new tap pattern off the keyboard again", async () => {
+    await withBoard(false, async (session, io, state) => {
+      const slot = state().morse.findIndex((morse) => morse.actions.length === 0);
+      expect(await io.apply("create_behavior", { kind: "morse", value: tapA, name: "Home" })).toEqual({ ok: true });
+      expect((await session.morse.readAll())[slot].actions).toEqual(tapA.actions);
+      expect(await io.travel("undo")).toEqual({ ok: true });
+      expect(state().morse[slot]).toEqual(emptyMorse());
+      expect((await session.morse.readAll())[slot].actions).toEqual([]);
+    });
+  });
+
+  it("in Live, where the state is kept elsewhere (a screen's), Undo takes a new tap pattern off the keyboard too", async () => {
+    const session = await mockProvider(glove80Board).connect();
+    try {
+      const bundle = await openBundle(session);
+      const reducer = makeWorkbenchReducer(bundle.caps.num_cols);
+      const screen = { current: { ...initialWorkbenchState(bundle), batchMode: false } };
+      // Like React: what is dispatched reaches the screen's state only later.
+      const queued: WorkbenchAction[] = [];
+      const render = () => (screen.current = queued.splice(0).reduce(reducer, screen.current));
+      const kept = { current: screen.current };
+      const io = makeIo(session, () => kept.current, keepingCurrent(kept, reducer, (action) => queued.push(action)), {
+        cols: bundle.caps.num_cols,
+        onDisconnect: () => {},
+        features: ioFeaturesFor(bundle),
+      });
+      const slot = kept.current.morse.findIndex((morse) => morse.actions.length === 0);
+      expect(await io.apply("create_behavior", { kind: "morse", value: tapA })).toEqual({ ok: true });
+      expect((await session.morse.readAll())[slot].actions).toEqual(tapA.actions);
+      expect(await io.travel("undo")).toEqual({ ok: true });
+      expect((await session.morse.readAll())[slot].actions).toEqual([]);
+      expect(render().morse[slot]).toEqual(emptyMorse());
+    } finally {
+      await session.close();
+    }
   });
 });

@@ -38,6 +38,7 @@ export { draftOf, isDrafted, type Draft } from "./draft/want";
 export type { History, HistoryStep } from "./draft/history";
 export {
   makeIo,
+  keepingCurrent,
   ioFeaturesFor,
   NO_IO_FEATURES,
   type IoFeatures,

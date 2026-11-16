@@ -92,6 +92,21 @@ export interface WorkbenchIo {
   resetStorage(): Promise<void>;
 }
 
+/** A dispatch for the io when the workbench's state is kept elsewhere (React's
+ *  useReducer): the io reads the state right after it dispatches (a commit, then
+ *  its send in Live; Undo, then its send), before that state is updated, so
+ *  `current` runs the same pure reducer at once. */
+export function keepingCurrent(
+  current: { current: WorkbenchState },
+  reduce: (state: WorkbenchState, action: WorkbenchAction) => WorkbenchState,
+  dispatch: WorkbenchDispatch,
+): WorkbenchDispatch {
+  return (action) => {
+    current.current = reduce(current.current, action);
+    dispatch(action);
+  };
+}
+
 /** What the connected firmware exposes, as far as the io facade needs to
  *  know: which optional surfaces exist and how much room they have. */
 export interface IoFeatures {

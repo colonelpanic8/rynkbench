@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
-import { ledNodesOf, type ConnectedBundle } from "../workbench";
+import { keepingCurrent, ledNodesOf, type ConnectedBundle } from "../workbench";
 import { firmwareFactsOf, resolveCapabilities } from "../capabilities";
 import { WorkbenchContext, useWorkbench } from "./state";
 import {
@@ -206,6 +206,8 @@ export function Workbench({
 
   const stateRef = useRef(state);
   stateRef.current = state;
+  // The io sees its own changes at once, before React renders them.
+  const ioDispatch = useMemo(() => keepingCurrent(stateRef, reducer, dispatch), [reducer]);
 
   // The bundle is an immutable connect-time snapshot, so it is the whole
   // dependency: every feature flag derives from it. Guard stands in front of
@@ -213,7 +215,7 @@ export function Workbench({
   const io = useMemo(
     () =>
       guardIo(
-        makeIo(bundle.session, () => stateRef.current, dispatch, {
+        makeIo(bundle.session, () => stateRef.current, ioDispatch, {
           cols: bundle.caps.num_cols,
           onDisconnect: onClose,
           features: ioFeaturesFor(bundle),
@@ -223,7 +225,7 @@ export function Workbench({
         bundle,
         () => stateRef.current,
       ),
-    [bundle, onClose],
+    [bundle, onClose, ioDispatch],
   );
 
   // One Undo and Redo, in Draft, Live and a file alike (ADR 0018).
