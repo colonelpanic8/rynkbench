@@ -1,9 +1,11 @@
 // Status setups, in Layout properties' RGB Lighting tab under Advanced: a
 // layer's status lights installed together with the keys that switch what
 // they show. On a Glove80, the Magic status cluster (a battery bar per half,
-// Bluetooth 1–3 and USB) and MoErgo's stock Magic layer. One key's status
-// light is set on the key itself (its RGB Lighting tab). The rules join the
-// draft (sent with Review & send; in Live, once you pause), as every light does.
+// Bluetooth 1–3 and USB) and MoErgo's stock Magic layer; on any keyboard with
+// lit keys, a connection key and a battery bar on keys picked on the board
+// (StatusKeyPicks.tsx). One key's status light is set on the key itself (its
+// RGB Lighting tab). The rules join the draft (sent with Review & send; in
+// Live, once you pause, or at once for the picked setups), as every light does.
 
 import { useState } from "react";
 import type { KeyView } from "../../model/keyboard";
@@ -11,6 +13,7 @@ import { Button, SectionLabel } from "../kit";
 import { useCapability } from "../use-capabilities";
 import { layerName } from "../layer-names";
 import { useWorkbench } from "../state";
+import { StatusKeyPicks } from "./StatusKeyPicks";
 import { StockMagicLayerPanel } from "./StockMagicLayerPanel";
 import { stockMagicIndicatorKeys } from "../../model/lighting/stock-magic-layer";
 import { GLOVE80_BAR_LAYOUTS, glove80ConnectionKeys, installGlove80StatusRules, writeGlove80StatusSetup } from "../../model/lighting/status-presets";
@@ -55,7 +58,8 @@ export function StatusPresetsPanel() {
     glove80Available &&
     bundle.boardProfile?.presets.includes("glove80-stock-magic") &&
     stockMagicIndicatorKeys().every((indicator) => keyAt(bundle.model.keys, indicator.row, indicator.col)?.ledId === indicator.led);
-  if (!glove80Available) return null;
+  const lit = bundle.model.keys.some((key) => key.ledId !== undefined);
+  if (!glove80Available && !lit) return null;
 
   const installGlove80 = async () => {
     const rules = installGlove80StatusRules(state.runtimeConditionalDraft, layer, layout);
@@ -97,7 +101,7 @@ export function StatusPresetsPanel() {
         </select>
       </label>
 
-      {predicatesSupported ? (
+      {!glove80Available ? null : predicatesSupported ? (
         <div className="mt-2 rounded-lg border border-accent-deep/40 bg-accent-dim/15 p-3">
           <div className="text-body font-medium text-ink">Glove80 Magic status cluster</div>
           <p className="mt-1 text-small leading-relaxed text-faint">
@@ -128,6 +132,7 @@ export function StatusPresetsPanel() {
           Update firmware to install the stock Magic layer with layer and lock indicators.
         </p>
       )}
+      {lit && <StatusKeyPicks layer={layer} connections={predicatesSupported} />}
       {message && <p className="mt-2 text-small leading-relaxed text-mute">{message}</p>}
     </div>
   );

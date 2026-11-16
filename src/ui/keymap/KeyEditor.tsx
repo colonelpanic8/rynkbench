@@ -15,6 +15,9 @@ import { isDrafted, keyPendingId } from "../../workbench";
 import { useWorkbench } from "../state";
 import { useCapabilities } from "../use-capabilities";
 import { selectedKeys } from "../../model/key-selection";
+import { pickPrompt } from "../../model/lighting/key-pick";
+import { layerName } from "../layer-names";
+import { useKeyPick } from "../lighting/keyPick";
 
 import { WarningIcon } from "../icons";
 import { showToast } from "../messages/store";
@@ -52,7 +55,12 @@ export function KeyEditor({ size = 310 }: { size?: number }) {
   const uses = useMemo(() => morseUses(state.layers), [state.layers]);
 
   const tabs = useEditorTabs(true);
+  const pick = useKeyPick();
 
+  // A status setup is choosing its keys: a click selects, it does not edit.
+  if (pick) {
+    return <EditorPlaceholder size={size}>↑ {pickPrompt(pick, layerName(state.layerMetadata, pick.layer))}</EditorPlaceholder>;
+  }
   if (!selection) {
     return <EditorPlaceholder size={size}>↑ Click a key on the keyboard to change what it does</EditorPlaceholder>;
   }

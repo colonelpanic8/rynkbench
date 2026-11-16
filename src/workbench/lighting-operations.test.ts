@@ -101,3 +101,21 @@ describe("clearing a layer's lights", () => {
     });
   });
 });
+
+describe("a status setup on keys picked on the board", () => {
+  it("binds the connection key and lights it as one step, which Undo takes back whole", async () => {
+    await inDraft(async (io, state) => {
+      const rules = state().runtimeConditionalDraft;
+      const bound = state().layers[1][0];
+      expect(await io.apply("set_connection_key", { layer: 1, row: 0, col: 0, led: 3, kind: { type: "usb" } })).toEqual({ ok: true });
+      expect(state().layers[1][0]).toEqual({ Single: { KeyboardControl: "OutputUsb" } });
+      expect(statusLightOf(state().runtimeConditionalDraft, 1, 3)).toEqual({ kind: "usb" });
+      expect(draftOf(state()).changes.map((change) => change.item.kind).sort()).toEqual(["key", "rules"]);
+      expect(state().history.past).toHaveLength(1);
+
+      expect(await io.travel("undo")).toEqual({ ok: true });
+      expect(state().layers[1][0]).toEqual(bound);
+      expect(state().runtimeConditionalDraft).toEqual(rules);
+    });
+  });
+});

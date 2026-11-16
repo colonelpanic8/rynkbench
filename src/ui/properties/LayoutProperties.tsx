@@ -3,7 +3,9 @@
 // keyboard, what it holds), Firmware options (keyboard-wide timings), RGB
 // Lighting (the lights as a whole; Advanced: status setups and rules) and RGB
 // Effects (ADR 0016). Each part saves the way it does elsewhere (the draft, or
-// the keyboard); opened from the sliders by the name.
+// the keyboard); opened from the sliders by the name. While a status setup
+// picks its keys on the keymap the window steps aside: it stays as it was,
+// out of sight, and is back when the pick ends or the keymap is left.
 
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
@@ -16,6 +18,7 @@ import { DetailsSection } from "./DetailsSection";
 import { EffectsSection } from "./EffectsSection";
 import { LightingSection } from "./LightingSection";
 import { FirmwareOptions } from "./FirmwareOptions";
+import { keyPick, useKeyPick } from "../lighting/keyPick";
 import { closeProperties, openProperties, usePropertiesTab, type PropertiesTab } from "./store";
 
 const TABS: { id: PropertiesTab; name: string; help: string }[] = [
@@ -35,7 +38,13 @@ const TABS: { id: PropertiesTab; name: string; help: string }[] = [
 
 export function LayoutProperties() {
   const tab = usePropertiesTab();
-  const { bundle, dispatch } = useWorkbench();
+  const { bundle, state, dispatch } = useWorkbench();
+  const picking = useKeyPick() !== null;
+  // The keys are picked on the keymap's canvas; anywhere else there is no pick.
+  const onKeymap = state.mode === "keymap" && state.selection?.type !== "combo";
+  useEffect(() => {
+    if (picking && !onKeymap) keyPick.stop();
+  }, [picking, onKeymap]);
   const capabilities = useCapabilities();
   const { workspaceName } = useSharedDocumentTransfer();
   const offered: Record<PropertiesTab, boolean> = {
@@ -47,20 +56,23 @@ export function LayoutProperties() {
   const tabs = TABS.filter((entry) => offered[entry.id]);
 
   useEffect(() => {
-    if (tab === null) return;
+    if (tab === null || picking) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !event.defaultPrevented) closeProperties();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tab]);
+  }, [tab, picking]);
 
   if (tab === null) return null;
   const current = tabs.find((entry) => entry.id === tab) ?? tabs[0];
   const keyboard = bundle.boardProfile?.name ?? bundle.model.name;
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-well/80 backdrop-blur-md sm:p-4" onClick={closeProperties}>
+    <div
+      className={cx("fixed inset-0 z-[60] items-center justify-center bg-well/80 backdrop-blur-md sm:p-4", picking ? "hidden" : "flex")}
+      onClick={closeProperties}
+    >
       <div
         role="dialog"
         aria-label="Layout properties"
