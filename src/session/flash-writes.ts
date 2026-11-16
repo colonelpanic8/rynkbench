@@ -1,9 +1,9 @@
-// Writing keys the way RMK's flash wants them (ADR 0012, docs/sync.md). Every
-// key sent is one stored item; the firmware takes a page only when its flash
+// Writing keys the way RMK's flash wants them (ADR 0012, docs/sync.md). The
+// keymap is stored as one flash item per row segment, and a write that touches
+// a segment stores it whole; the firmware takes a write only when its flash
 // queue can hold it whole and otherwise answers `Busy`, which means "nothing
 // was applied, send it again".
 
-import type { KeyAction } from "../vendor/rynk-wasm/rynk_wasm";
 import { classifyError } from "./errors";
 
 /** Whether a rejected request was the firmware's `Busy`: its flash queue had
@@ -31,39 +31,15 @@ export async function retryBusy<T>(op: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Cells per keymap write page. Every cell is one flash item and the firmware
- *  only accepts a page it can queue for flash whole, answering `Busy`
- *  otherwise; a longer page streams through the queue and holds the session
- *  for the length of a storage page migration. Matches the native client. */
-export const KEYMAP_WRITE_PAGE_KEYS = 4;
+/** Cells of one row the firmware stores as one flash item (RMK's `KEYMAP_SEGMENT_KEYS`). */
+export const KEYMAP_SEGMENT_KEYS = 16;
 
-/** The two keymap writes the protocol client offers. */
-export interface KeyWriteClient {
-  set_key(layer: number, row: number, col: number, action: KeyAction): Promise<unknown>;
-  set_keymap_bulk(request: { layer: number; start_row: number; start_col: number; actions: KeyAction[] }): Promise<unknown>;
-}
-
-/** Neighbouring cells of one layer from a row-major `start`: bulk pages of
- *  `page` keys where the firmware has them (`page` > 0), else one by one. */
-export async function writeKeyRun(
-  client: KeyWriteClient,
-  { rows, cols, page }: { rows: number; cols: number; page: number },
-  layer: number,
-  start: number,
-  actions: KeyAction[],
-): Promise<void> {
-  if (start < 0 || start + actions.length > rows * cols) {
-    throw new Error(`key run ${start}+${actions.length} leaves layer ${layer}`);
+/** Flash items stored by writing `count` cells from row-major offset `start` of
+ *  a layer `cols` wide: one per row segment the cells fall in. */
+export function keymapSegments(start: number, count: number, cols: number): number {
+  let segments = 0;
+  for (let offset = start; offset < start + count; offset += 1) {
+    if (offset === start || (offset % cols) % KEYMAP_SEGMENT_KEYS === 0) segments += 1;
   }
-  const step = page > 0 ? page : 1;
-  for (let at = 0; at < actions.length; at += step) {
-    const offset = start + at;
-    const row = Math.floor(offset / cols);
-    const col = offset % cols;
-    await retryBusy(() =>
-      page > 0
-        ? client.set_keymap_bulk({ layer, start_row: row, start_col: col, actions: actions.slice(at, at + page) })
-        : client.set_key(layer, row, col, actions[at]),
-    );
-  }
+  return segments;
 }

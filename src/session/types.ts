@@ -149,9 +149,6 @@ export interface KeymapOps {
    *  `startRow` on. The firmware stores a row segment per flash item, so a
    *  changed row costs one write however many of its cells changed. */
   setRows(layer: number, startRow: number, actions: KeyAction[]): Promise<void>;
-  /** Write neighbouring cells of one layer from a row-major `start`, in bulk
-   *  pages where the firmware has them (one request per page, not per key). */
-  writeKeys(layer: number, start: number, actions: KeyAction[]): Promise<void>;
   getEncoder(encoderId: number, layer: number): Promise<EncoderAction>;
   setEncoder(encoderId: number, layer: number, action: EncoderAction): Promise<void>;
   currentLayer(): Promise<number>;

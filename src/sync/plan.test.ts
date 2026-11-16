@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ComboDefinition, KeyAction, Morse } from "../vendor/rynk-wasm/rynk_wasm";
 import type { KeyboardImage } from "./image";
-import { plannedKeys, planSync, storedItems } from "./plan";
+import { planSync as planFor, storedItems } from "./plan";
 import { conflicts } from "./conflicts";
 
 const key = (code: string): KeyAction => ({ Single: { Key: { Hid: code as never } } });
@@ -31,6 +31,9 @@ function image(over: Partial<KeyboardImage> = {}): KeyboardImage {
   };
 }
 
+/** The planner on the test image as two rows of two keys per layer. */
+const planSync = (from: KeyboardImage, to: KeyboardImage) => planFor(from, to, 2);
+
 const withKeys = (base: KeyboardImage, layer: number, cells: KeyAction[]) => ({
   ...base,
   layers: base.layers.map((row, i) => (i === layer ? cells : row)),
@@ -56,18 +59,33 @@ describe("the planner", () => {
     expect(planSync(image(), image())).toEqual([]);
   });
 
-  it("writes only changed keys, as runs of neighbours", () => {
-    const want = withKeys(image(), 0, [key("X"), key("Y"), key("C"), key("Z")]);
-    expect(planSync(image(), want)).toEqual([
-      { kind: "keys", layer: 0, start: 0, actions: [key("X"), key("Y")] },
-      { kind: "keys", layer: 0, start: 3, actions: [key("Z")] },
+  it("writes a changed row whole, as one stored item however many of its cells changed", () => {
+    const want = withKeys(image(), 0, [key("X"), key("B"), key("C"), key("Z")]);
+    const steps = planFor(image(), want, 4);
+    expect(steps).toEqual([{ kind: "keys", layer: 0, row: 0, actions: [key("X"), key("B"), key("C"), key("Z")] }]);
+    expect(storedItems(steps)).toBe(1);
+  });
+
+  it("writes each row that holds a change and never an unchanged one", () => {
+    const one = planSync(image(), withKeys(image(), 0, [key("A"), key("B"), key("C"), key("Z")]));
+    expect(one).toEqual([{ kind: "keys", layer: 0, row: 1, actions: [key("C"), key("Z")] }]);
+    const both = planSync(image(), withKeys(image(), 0, [key("X"), key("B"), key("C"), key("Z")]));
+    expect(both).toEqual([
+      { kind: "keys", layer: 0, row: 0, actions: [key("X"), key("B")] },
+      { kind: "keys", layer: 0, row: 1, actions: [key("C"), key("Z")] },
     ]);
-    expect(storedItems(planSync(image(), want))).toBe(3);
-    expect(plannedKeys(planSync(image(), want), 2)).toEqual([
-      { layer: 0, row: 0, col: 0 },
-      { layer: 0, row: 0, col: 1 },
-      { layer: 0, row: 1, col: 1 },
-    ]);
+    expect(storedItems(both)).toBe(2);
+  });
+
+  it("counts every segment of a row wider than one", () => {
+    const wide = (first: KeyAction) => image({ layers: [[first, ...Array<KeyAction>(17).fill("No")], Array<KeyAction>(18).fill("No")] });
+    const steps = planFor(wide(key("A")), wide(key("X")), 18);
+    expect(steps).toHaveLength(1);
+    expect(storedItems(steps)).toBe(2);
+  });
+
+  it("refuses a column count the layers do not divide into", () => {
+    expect(() => planFor(image(), image(), 3)).toThrow(/rows of 3 keys/);
   });
 
   it("creates what keys will point to first and clears what they no longer use last", () => {

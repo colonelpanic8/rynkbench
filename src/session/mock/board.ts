@@ -86,6 +86,7 @@ import {
   RUNTIME_LAYER_INDICATOR_CONDITIONS,
   RULES,
 } from "../lighting-features";
+import { keymapSegments } from "../flash-writes";
 import { unsupported } from "../unsupported";
 import { emptyCombo, emptyFork, emptyMorse, emptyMorseProfile, noModifiers } from "../../model/slots";
 import { absentSurface } from "./absent";
@@ -484,8 +485,9 @@ class MockSession implements RynkSession {
       }),
   };
 
-  /** Keys stored so far, as RMK counts them: every key sent is stored, changed or not. */
-  storedKeys = 0;
+  /** Keymap flash items stored so far, as RMK stores them: every row segment a
+   *  write touches is stored whole, changed or not. */
+  storedSegments = 0;
 
   readonly keymap: KeymapOps = {
     readAll: () =>
@@ -500,24 +502,21 @@ class MockSession implements RynkSession {
         }
         for (let layer = 0; layer < layers.length; layer += 1) {
           this.layers[layer] = structuredClone(layers[layer].actions);
-          this.storedKeys += layers[layer].actions.length;
+          this.storedSegments += keymapSegments(0, layers[layer].actions.length, this.spec.capabilities.num_cols);
         }
       }),
     setKey: (layer, row, col, action) =>
       latency(() => {
         this.layers[this.checkLayer(layer)][this.keyIndex(row, col)] = action;
-        this.storedKeys += 1;
-      }),
-    writeKeys: (layer, start, actions) =>
-      latency(() => {
-        const cells = this.layers[this.checkLayer(layer)];
-        if (start < 0 || start + actions.length > cells.length) throw new Error(`key run leaves layer ${layer}`);
-        cells.splice(start, actions.length, ...structuredClone(actions));
-        this.storedKeys += actions.length;
+        this.storedSegments += 1;
       }),
     setRows: (layer, startRow, actions) =>
       latency(() => {
-        this.layers[this.checkLayer(layer)].splice(this.keyIndex(startRow, 0), actions.length, ...actions);
+        const cells = this.layers[this.checkLayer(layer)];
+        const start = this.keyIndex(startRow, 0);
+        if (start + actions.length > cells.length) throw new Error(`row write leaves layer ${layer}`);
+        cells.splice(start, actions.length, ...structuredClone(actions));
+        this.storedSegments += keymapSegments(start, actions.length, this.spec.capabilities.num_cols);
       }),
     getEncoder: (encoderId, layer) =>
       latency(() => this.encoders[this.checkLayer(layer)][this.checkEncoder(encoderId)]),
@@ -1466,10 +1465,10 @@ class MockSession implements RynkSession {
   }
 }
 
-/** Keys a simulated board has stored so far (for tests of how much a write costs). */
-export function storedKeysOf(session: RynkSession): number {
-  if (!(session instanceof MockSession)) throw new Error("only a simulated board counts stored keys");
-  return session.storedKeys;
+/** Keymap flash items a simulated board has stored so far (for tests of how much a write costs). */
+export function storedSegmentsOf(session: RynkSession): number {
+  if (!(session instanceof MockSession)) throw new Error("only a simulated board counts stored segments");
+  return session.storedSegments;
 }
 
 export function mockProvider(spec: BoardSpec): SessionProvider {
