@@ -67,7 +67,7 @@ export async function commitImage(context: IoContext, after: KeyboardImage, opti
   dispatch({ type: "commit", image: after, layerOrder: options.layerOrder, labels: options.labels });
   if (getState().batchMode) return { ok: true };
 
-  const send = () => sendStaged(context);
+  const send = () => sendStaged(context, { settingNow: change.map(({ item }) => item) });
   const sent = await send();
   if (sent.ok) return sent;
   // Live is all or nothing: what the change set goes back, joined to the same

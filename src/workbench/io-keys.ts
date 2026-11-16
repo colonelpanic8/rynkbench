@@ -48,9 +48,10 @@ export function keyIo(context: IoContext): KeyIo {
       if (!canTravel(state, direction)) {
         return { ok: false, message: `Nothing to ${direction} now` };
       }
+      const { changes } = (direction === "undo" ? state.history.past : state.history.future).at(-1)!;
       dispatch({ type: "historyTravel", direction });
       // Live: the keyboard follows through the one write path (ADR 0018).
-      return state.batchMode ? { ok: true } : send();
+      return state.batchMode ? { ok: true } : send({ settingNow: changes.map(({ item }) => item) });
     },
     applyBatch(options) {
       return send(options);
