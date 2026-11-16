@@ -12,7 +12,8 @@ import {
 } from "../../firmware/native";
 import { describeBuild, parseBuildLabel } from "../../session/build-identity";
 import { Button, Chip, Panel, Row, SectionLabel } from "../kit";
-import { errorMessage, useWorkbench } from "../state";
+import { errorMessage } from "../../session/errors";
+import { useWorkbench } from "../state";
 
 export function FirmwareUpdateCard() {
   const { bundle, io } = useWorkbench();
@@ -80,15 +81,15 @@ export function FirmwareUpdateCard() {
         <Row label="Latest" mono>{release?.tag ?? (loadError ? "unavailable" : "checking…")}</Row>
       </div>
 
-      {loadError && <div className="mt-2 text-[12px] text-danger">{loadError}</div>}
+      {loadError && <div className="mt-2 text-body text-danger">{loadError}</div>}
       {release && status === "unidentified" && (
-        <div className="mt-2 text-[12px] leading-relaxed text-faint">
+        <div className="mt-2 text-body leading-relaxed text-faint">
           This firmware names no revision that identifies it in this channel, so whether it
           is current cannot be decided here.
         </div>
       )}
       {release && (
-        <div className="mt-3 text-[12px] leading-relaxed text-mute">
+        <div className="mt-3 text-body leading-relaxed text-mute">
           {release.targets.length} verified UF2 {release.targets.length === 1 ? "image" : "images"} from{" "}
           <a className="text-accent hover:underline" href={release.pageUrl} target="_blank" rel="noreferrer">
             {release.name}
@@ -99,7 +100,7 @@ export function FirmwareUpdateCard() {
       )}
 
       {!automatic && release && (
-        <div className="mt-3 text-[12px] text-faint">
+        <div className="mt-3 text-body text-faint">
           One-click flashing requires the Rynkbench desktop app, which can wait for and write the UF2 volume.
         </div>
       )}
@@ -117,8 +118,8 @@ export function FirmwareUpdateCard() {
           <Button variant="ghost" onClick={() => setArmed(false)}>Cancel</Button>
         </div>
       )}
-      {activity && <div className="mt-3 text-[12.5px] text-accent">{activity}</div>}
-      {installError && <div className="mt-2 text-[12px] text-danger">Failed: {installError}</div>}
+      {activity && <div className="mt-3 text-body text-accent">{activity}</div>}
+      {installError && <div className="mt-2 text-body text-danger">Failed: {installError}</div>}
     </Panel>
   );
 }

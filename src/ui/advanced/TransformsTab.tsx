@@ -1,9 +1,11 @@
-// Transforms: keymap-wide rewrites applied live through the ordinary write
-// path — the dual-OS Ctrl↔GUI swap and QWERTY→alternate alpha layouts.
+// Transforms: keymap-wide rewrites — the dual-OS Ctrl↔GUI swap and switching
+// alpha layouts. Each is the apply_transform operation (ADR 0019): one change,
+// one Undo step; in Draft it waits for Send, in Live it is sent at once.
 
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { stagedEditCount, useWorkbench } from "../state";
+import type { TransformChoice } from "../../operations";
+import { useWorkbench } from "../state";
 import { Button, Chip, Panel, SectionLabel } from "../kit";
 import { CenterScroll } from "./bits";
 import { layerName as nameOfLayer } from "../layer-names";
@@ -12,11 +14,10 @@ import {
   planOsSwap,
   planKeyCount,
   planSize,
-  transformBlockedReason,
   type AlphaLayout,
   type LayerMigration,
   type TransformPlan,
-} from "./transforms";
+} from "../../model/transforms";
 
 const LAYOUTS: Array<{ id: AlphaLayout; label: string }> = [
   { id: "qwerty", label: "QWERTY" },
@@ -33,12 +34,12 @@ const MIGRATIONS: Array<{ id: LayerMigration; label: string; hint: string }> = [
 
 type RunState =
   | { phase: "idle" }
-  | { phase: "running"; done: number; total: number }
-  | { phase: "done"; written: number; failed: number }
+  | { phase: "running" }
+  | { phase: "done"; changes: number; drafted: boolean }
   | { phase: "error"; message: string };
 
 export function TransformsTab({ nav }: { nav: ReactNode }) {
-  const { bundle, state, dispatch, io, history } = useWorkbench();
+  const { bundle, state, io } = useWorkbench();
   const [run, setRun] = useState<RunState>({ phase: "idle" });
   const [from, setFrom] = useState<AlphaLayout>("qwerty");
   const [to, setTo] = useState<AlphaLayout>("colemak");
@@ -81,44 +82,14 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
   );
 
   const busy = run.phase === "running";
-  const blocked = transformBlockedReason(state.batchMode, stagedEditCount(state));
 
-  const execute = async (plan: TransformPlan) => {
-    const total = planSize(plan);
-    if (total === 0 || busy) return;
-    if (blocked !== null) {
-      setRun({ phase: "error", message: blocked });
-      return;
-    }
-    dispatch({ type: "keyHistorySuspend", suspended: true });
-    history.clear();
-    let done = 0;
-    let failed = 0;
-    setRun({ phase: "running", done, total });
-    const step = (result: { ok: boolean }) => {
-      if (!result.ok) failed += 1;
-      done += 1;
-      setRun({ phase: "running", done, total });
-    };
-    try {
-      for (const edit of plan.keys) {
-        step(
-          await io.setKey(edit.layer, edit.row, edit.col, edit.after, {
-            history: "invalidate",
-          }),
-        );
-      }
-      for (const edit of plan.combos) step(await io.setSlot("combos", edit.index, edit.after));
-      for (const edit of plan.morse) step(await io.setSlot("morse", edit.index, edit.after));
-      for (const edit of plan.forks) step(await io.setSlot("forks", edit.index, edit.after));
-      if (plan.macroOps) step(await io.writeMacros(plan.macroOps));
-      setRun({ phase: "done", written: total - failed, failed });
-    } catch (err) {
-      setRun({ phase: "error", message: err instanceof Error ? err.message : String(err) });
-    } finally {
-      history.clear();
-      dispatch({ type: "keyHistorySuspend", suspended: false });
-    }
+  const execute = async (choice: TransformChoice, plan: TransformPlan) => {
+    const changes = planSize(plan);
+    if (changes === 0 || busy) return;
+    setRun({ phase: "running" });
+    const result = await io.apply("apply_transform", choice);
+    if (result.ok) setRun({ phase: "done", changes, drafted: state.batchMode });
+    else setRun(result.guarded ? { phase: "idle" } : { phase: "error", message: result.message });
   };
 
   /** The chip aggregates key cells with slot-table and macro-region writes;
@@ -137,17 +108,16 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
       <CenterScroll>
         <Panel className="p-5">
           <SectionLabel>Swap Ctrl ↔ GUI</SectionLabel>
-          <p className="mt-1.5 text-[12px] leading-relaxed text-faint">
+          <p className="mt-1.5 text-body leading-relaxed text-faint">
             Converts a PC-style keymap to its macOS counterpart (and back — the swap is
             its own inverse). Rewrites every binding that names Ctrl or GUI: keys on all
-            layers, combos, morse slots, forks, and macro steps. Changes are written to
-            the keyboard immediately; export a file first if you want both variants.
+            layers, combos, morse slots, forks, and macro steps. One step to undo.
           </p>
           <div className="mt-4 flex items-center gap-2 border-t border-line-soft pt-4">
             <Button
               variant="primary"
-              disabled={busy || blocked !== null || planSize(osPlan) === 0}
-              onClick={() => execute(osPlan)}
+              disabled={busy || planSize(osPlan) === 0}
+              onClick={() => execute({ transform: "ctrl-gui-swap" }, osPlan)}
             >
               Swap everywhere
             </Button>
@@ -161,7 +131,7 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
 
         <Panel className="p-5">
           <SectionLabel>Switch alpha layout</SectionLabel>
-          <p className="mt-1.5 text-[12px] leading-relaxed text-faint">
+          <p className="mt-1.5 text-body leading-relaxed text-faint">
             Converts between alpha layouts in either direction — tell it what the keymap
             is now and what it should become. Each layer migrates its own way:{" "}
             <span className="text-mute">alphas</span> substitutes the letter keycodes in
@@ -174,7 +144,7 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
           </p>
           {(["from", "to"] as const).map((which) => (
             <div key={which} className="mt-3 flex items-center gap-1.5">
-              <span className="w-10 text-[11.5px] uppercase tracking-wide text-faint">
+              <span className="w-10 text-small uppercase tracking-wide text-faint">
                 {which}
               </span>
               {LAYOUTS.map((entry) => (
@@ -194,7 +164,7 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
           <div className="mt-4 flex flex-col gap-1.5">
             {state.layers.map((_, layer) => (
               <div key={layer} className="flex items-center gap-2">
-                <span className="w-40 truncate text-[12.5px] text-mute">
+                <span className="w-40 truncate text-body text-mute">
                   {layerName(layer)}
                   {layer === state.defaultLayer && (
                     <span className="text-faint"> · default</span>
@@ -215,8 +185,8 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
                       }
                       className={
                         migrations[layer] === entry.id
-                          ? "cursor-pointer rounded-md bg-accent/15 px-2 py-0.5 text-[11.5px] font-medium text-accent"
-                          : "cursor-pointer rounded-md px-2 py-0.5 text-[11.5px] text-faint hover:text-mute"
+                          ? "cursor-pointer rounded-md bg-accent/15 px-2 py-0.5 text-small font-medium text-accent"
+                          : "cursor-pointer rounded-md px-2 py-0.5 text-small text-faint hover:text-mute"
                       }
                     >
                       {entry.label}
@@ -229,8 +199,8 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
           <div className="mt-4 flex items-center gap-2 border-t border-line-soft pt-4">
             <Button
               variant="primary"
-              disabled={busy || blocked !== null || from === to || planSize(layoutPlan) === 0}
-              onClick={() => execute(layoutPlan)}
+              disabled={busy || from === to || planSize(layoutPlan) === 0}
+              onClick={() => execute({ transform: "alpha-layout", from, to, migrations }, layoutPlan)}
             >
               Switch {LAYOUTS.find((entry) => entry.id === from)?.label} →{" "}
               {LAYOUTS.find((entry) => entry.id === to)?.label}
@@ -243,23 +213,16 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
           </div>
         </Panel>
 
-        {blocked !== null && (
-          <div className="text-center text-[12.5px] text-warn">{blocked}</div>
-        )}
-        {run.phase === "running" && (
-          <div className="text-center text-[12.5px] text-accent">
-            Writing {run.done}/{run.total}…
-          </div>
-        )}
+        {run.phase === "running" && <div className="text-center text-body text-accent">Writing…</div>}
         {run.phase === "done" && (
-          <div className={run.failed ? "text-center text-[12.5px] text-warn" : "text-center text-[12.5px] text-ok"}>
-            {run.failed
-              ? `Wrote ${run.written} changes; ${run.failed} failed — see the key inspector.`
-              : `Wrote ${run.written} ${run.written === 1 ? "change" : "changes"} to the keyboard.`}
+          <div className="text-center text-body text-ok">
+            {run.drafted
+              ? `${run.changes} ${run.changes === 1 ? "change" : "changes"} in the draft.`
+              : `Wrote ${run.changes} ${run.changes === 1 ? "change" : "changes"} to the keyboard.`}
           </div>
         )}
         {run.phase === "error" && (
-          <div className="text-center text-[12.5px] text-danger">Transform failed: {run.message}</div>
+          <div className="text-center text-body text-danger">Transform failed: {run.message}</div>
         )}
       </CenterScroll>
     </div>

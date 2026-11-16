@@ -2,8 +2,8 @@
 
 import { useCallback, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import type { Hsv } from "../color";
-import { hsvToRgb, rgbToHex, rgbToHsv, hexToRgb, cssRgb } from "../color";
+import type { Hsv } from "../../model/lighting/color";
+import { hsvToRgb, rgbToHex, rgbToHsv, hexToRgb, cssRgb } from "../../model/lighting/color";
 import { TextInput } from "../kit";
 
 function useDragSurface(onPoint: (fx: number, fy: number) => void) {

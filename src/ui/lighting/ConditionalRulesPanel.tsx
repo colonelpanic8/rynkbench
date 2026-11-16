@@ -22,27 +22,22 @@ import type {
   LightingSplitForce,
   LightingSplitLink,
 } from "../../vendor/rynk-wasm/rynk_wasm";
-import { conditionalTablesEqual, useWorkbench } from "../state";
+import { useWorkbench } from "../state";
+import { conditionalTablesEqual } from "../../model/lighting/compare";
 import { ApplyBar, Button, SectionLabel, Segmented, TextInput, cx } from "../kit";
+import { useCapability } from "../use-capabilities";
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, TrashIcon } from "../icons";
-import { cssEmissiveRgb } from "../color";
-import { describeRuleConditions, runtimeConditionalSupported } from "./firmwareRules";
-import { describeEffect, effectRgb } from "./effect";
+import { cssEmissiveRgb } from "../../model/lighting/color";
+import { describeRuleConditions, runtimeConditionalSupported } from "../../model/lighting/firmware-rules";
+import { describeEffect, effectRgb } from "../../model/lighting/effect";
 import { EffectEditor } from "./EffectEditor";
 import { keyAddressWithLegend } from "../key-address";
 import { layerName } from "../layer-names";
-import {
-  appendRule,
-  moveRule,
-  newRule,
-  removeRule,
-  replaceRule,
-  retargetLayer,
-  rulesOnLayer,
-} from "./rules";
-import type { Rule, Rules } from "./rules";
+import { appendRule, moveRule, newRule, removeRule, replaceRule, retargetLayer, rulesOnLayer } from "../../model/lighting/rules";
+import type { Rule, Rules } from "../../model/lighting/rules";
 import { RULES, hasLayerIndicatorConditions, hasLightingFeature } from "../../session/lighting-features";
-import { maskHasLayer, setLayerInMask } from "./wakeLayers";
+import { maskHasLayer, setLayerInMask } from "../../model/lighting/wake-layers";
+import { useLayerNames } from "../layer-names";
 
 const CHARGE_STATES: LightingChargeCondition[] = ["Any", "Charging", "Discharging", "Unknown"];
 const OUTPUT_MODES: LightingOutputMode[] = ["AlwaysOn", "AlwaysOff", "PoweredOnly"];
@@ -84,7 +79,7 @@ function LevelField({
   onChange: (value: number | undefined) => void;
 }) {
   return (
-    <label className="flex items-center justify-between gap-2 text-[12px] text-mute">
+    <label className="flex items-center justify-between gap-2 text-body text-mute">
       {label}
       <span className="flex items-center gap-1">
         <TextInput
@@ -98,7 +93,7 @@ function LevelField({
           }
           className="w-[74px] py-1 text-right"
         />
-        <span className="min-w-5 shrink-0 text-[11px] text-faint">%</span>
+        <span className="min-w-5 shrink-0 text-small text-faint">%</span>
       </span>
     </label>
   );
@@ -106,7 +101,8 @@ function LevelField({
 
 export function ConditionalRulesPanel() {
   const { bundle, state, dispatch, io } = useWorkbench();
-  const status = bundle.runtimeConditionalStatus;
+  const layerNames = useLayerNames();
+  const ruleTable = useCapability("lighting.rules");
   const [selectedRule, setSelectedRule] = useState<Rule | null>(null);
   const [moveFrom, setMoveFrom] = useState<number | null>(null);
   const [moveTo, setMoveTo] = useState(0);
@@ -115,15 +111,12 @@ export function ConditionalRulesPanel() {
     const labels = new Map<number, string>();
     for (const key of bundle.model.keys) {
       if (key.ledId !== undefined) {
-        const label = lightingKeyLegend(
-          key, state.layers, bundle.caps.num_cols,
-          state.lightingTarget, state.activeLayers, state.defaultLayer,
-        );
+        const label = lightingKeyLegend(layerNames, key, state.layers, bundle.caps.num_cols, state.lightingTarget, state.activeLayers, state.defaultLayer);
         labels.set(key.ledId, keyAddressWithLegend({ ...key, label }));
       }
     }
     return labels;
-  }, [bundle.model, bundle.caps.num_cols, state.layers, state.lightingTarget, state.activeLayers, state.defaultLayer]);
+  }, [bundle.model, bundle.caps.num_cols, state.layers, state.lightingTarget, state.activeLayers, state.defaultLayer, layerNames]);
 
   const ledOptions = useMemo(
     () => [...ledLabels.keys()].sort((a, b) => a - b),
@@ -139,13 +132,13 @@ export function ConditionalRulesPanel() {
     [bundle.caps.num_split_peripherals],
   );
 
-  if (!runtimeConditionalSupported(status) || status === null) return null;
+  if (!runtimeConditionalSupported(ruleTable) || ruleTable === undefined) return null;
 
   const rules = state.runtimeConditionalDraft;
   const selectedIndex = selectedRule === null ? -1 : rules.indexOf(selectedRule);
   const selected = selectedIndex === -1 ? null : selectedIndex;
   const dirty = !conditionalTablesEqual(rules, state.runtimeConditionalScenes);
-  const full = rules.length >= status.capacity;
+  const full = rules.length >= ruleTable.slots;
   const ledName = (id: number) => ledLabels.get(id) ?? `LED ${id}`;
 
   const setRules = (cells: Rules) => dispatch({ type: "conditionalDraft", cells });
@@ -226,10 +219,10 @@ export function ConditionalRulesPanel() {
     <div>
       <div className="flex items-center justify-between">
         <SectionLabel>Conditional rules</SectionLabel>
-        {dirty && <span className="text-[10.5px] text-warn">unapplied</span>}
+        {dirty && <span className="text-caption text-warn">unapplied</span>}
       </div>
-      <p className="mt-1 text-[11.5px] leading-relaxed text-faint">
-        Stored on the keyboard · {rules.length}/{status.capacity} rules · applied top to bottom,
+      <p className="mt-1 text-small leading-relaxed text-faint">
+        Stored on the keyboard · {rules.length}/{ruleTable.slots} rules · applied top to bottom,
         later rules win shared keys and override the compiled rules above.
       </p>
 
@@ -249,7 +242,7 @@ export function ConditionalRulesPanel() {
                 onPointerLeave={() => dispatch({ type: "hoverLeds", leds: null })}
               >
                 <div className="flex items-center gap-1.5 px-1.5 py-1">
-                  <span className="tnum w-4 shrink-0 text-center text-[10.5px] text-faint">
+                  <span className="tnum w-4 shrink-0 text-center text-caption text-faint">
                     {index + 1}
                   </span>
                   <button
@@ -263,10 +256,10 @@ export function ConditionalRulesPanel() {
                       style={{ background: cssEmissiveRgb(effectRgb(cell.effect)) }}
                     />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[12px] text-ink">
+                      <span className="block truncate text-body text-ink">
                         {ledName(cell.led_id)}
                       </span>
-                      <span className="block truncate text-[10.5px] text-faint">
+                      <span className="block truncate text-caption text-faint">
                         {describeRuleConditions(entry, nameOf)} · {describeEffect(cell.effect)}
                       </span>
                     </span>
@@ -310,7 +303,7 @@ export function ConditionalRulesPanel() {
         disabled={full || ledOptions.length === 0}
         title={
           full
-            ? `The table is full at ${status.capacity} rules`
+            ? `The table is full at ${ruleTable.slots} rules`
             : "Append an unconditional rule, then narrow it below"
         }
         onClick={add}
@@ -321,18 +314,18 @@ export function ConditionalRulesPanel() {
 
       {moveSource !== undefined && (
         <div className="mt-2 rounded-lg border border-line-soft bg-well p-2.5">
-          <div className="text-[12px] font-medium text-ink">Move rules between layers</div>
-          <p className="mt-1 text-[10.5px] leading-relaxed text-faint">
+          <div className="text-body font-medium text-ink">Move rules between layers</div>
+          <p className="mt-1 text-caption leading-relaxed text-faint">
             Re-points every rule conditioned on one layer at another, keeping order and the
             active/inactive sense. Key bindings stay where they are.
           </p>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <label className="text-[11px] text-faint">
+            <label className="text-small text-faint">
               From
               <select
                 value={moveSource}
                 onChange={(e) => setMoveFrom(Number(e.target.value))}
-                className="mt-1 w-full rounded-md border border-line bg-raised px-2 py-1.5 text-[12px] text-ink"
+                className="mt-1 w-full rounded-md border border-line bg-raised px-2 py-1.5 text-body text-ink"
               >
                 {sourceLayers.map((layer) => (
                   <option key={layer} value={layer}>
@@ -341,12 +334,12 @@ export function ConditionalRulesPanel() {
                 ))}
               </select>
             </label>
-            <label className="text-[11px] text-faint">
+            <label className="text-small text-faint">
               To
               <select
                 value={moveTo}
                 onChange={(e) => setMoveTo(Number(e.target.value))}
-                className="mt-1 w-full rounded-md border border-line bg-raised px-2 py-1.5 text-[12px] text-ink"
+                className="mt-1 w-full rounded-md border border-line bg-raised px-2 py-1.5 text-body text-ink"
               >
                 {Array.from({ length: bundle.caps.num_layers }, (_, n) => (
                   <option key={n} value={n}>
@@ -374,18 +367,18 @@ export function ConditionalRulesPanel() {
             <button
               type="button"
               onClick={() => setSelectedRule(null)}
-              className="cursor-pointer text-[10.5px] text-faint hover:text-mute"
+              className="cursor-pointer text-caption text-faint hover:text-mute"
             >
               close
             </button>
           </div>
 
-          <label className="flex items-center justify-between gap-3 text-[12px] text-mute">
+          <label className="flex items-center justify-between gap-3 text-body text-mute">
             Key
             <select
               value={rule.cell.led_id}
               onChange={(e) => editCell(selected, rule, { ...rule.cell, led_id: Number(e.target.value) })}
-              className="min-w-0 max-w-[62%] rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+              className="min-w-0 max-w-[62%] rounded-lg border border-line bg-well px-2 py-1 text-body text-ink"
             >
               {ledOptions.map((id) => (
                 <option key={id} value={id}>
@@ -397,7 +390,7 @@ export function ConditionalRulesPanel() {
 
           {/* Layer condition */}
           <div className="flex flex-col gap-1.5 border-t border-line-soft pt-2">
-            <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+            <label className="flex cursor-pointer items-center justify-between text-body text-mute">
               <span>Layer condition</span>
               <input
                 type="checkbox"
@@ -427,7 +420,7 @@ export function ConditionalRulesPanel() {
                       },
                     })
                   }
-                  className="rounded-lg border border-line bg-well px-2 py-1 font-mono text-[12px] text-ink"
+                  className="rounded-lg border border-line bg-well px-2 py-1 font-mono text-body text-ink"
                 >
                   {Array.from({ length: bundle.caps.num_layers }, (_, n) => (
                     <option key={n} value={n}>
@@ -459,7 +452,7 @@ export function ConditionalRulesPanel() {
 
           {/* Output-mode condition */}
           <div className="flex flex-col gap-1.5 border-t border-line-soft pt-2">
-            <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+            <label className="flex cursor-pointer items-center justify-between text-body text-mute">
               <span>Output-mode condition</span>
               <input
                 type="checkbox"
@@ -488,7 +481,7 @@ export function ConditionalRulesPanel() {
                     },
                   })
                 }
-                className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                className="rounded-lg border border-line bg-well px-2 py-1 text-body text-ink"
               >
                 {OUTPUT_MODES.map((mode) => (
                   <option key={mode} value={mode}>
@@ -505,7 +498,7 @@ export function ConditionalRulesPanel() {
 
           {/* Battery condition */}
           <div className="flex flex-col gap-1.5 border-t border-line-soft pt-2">
-            <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+            <label className="flex cursor-pointer items-center justify-between text-body text-mute">
               <span>Battery condition</span>
               <input
                 type="checkbox"
@@ -531,7 +524,7 @@ export function ConditionalRulesPanel() {
             </label>
             {conditions.battery !== undefined && (
               <div className="flex flex-col gap-1.5">
-                <label className="flex items-center justify-between gap-3 text-[12px] text-mute">
+                <label className="flex items-center justify-between gap-3 text-body text-mute">
                   Node
                   <select
                     value={conditions.battery.node}
@@ -544,7 +537,7 @@ export function ConditionalRulesPanel() {
                         },
                       })
                     }
-                    className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                    className="rounded-lg border border-line bg-well px-2 py-1 text-body text-ink"
                   >
                     {nodes.map((node) => (
                       <option key={node} value={node}>
@@ -579,7 +572,7 @@ export function ConditionalRulesPanel() {
                     })
                   }
                 />
-                <label className="flex items-center justify-between gap-3 text-[12px] text-mute">
+                <label className="flex items-center justify-between gap-3 text-body text-mute">
                   Charge
                   <select
                     value={conditions.battery.charge}
@@ -595,7 +588,7 @@ export function ConditionalRulesPanel() {
                         },
                       })
                     }
-                    className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                    className="rounded-lg border border-line bg-well px-2 py-1 text-body text-ink"
                   >
                     {CHARGE_STATES.map((charge) => (
                       <option key={charge} value={charge}>
@@ -613,7 +606,7 @@ export function ConditionalRulesPanel() {
               {/* Effects-state condition — gates on whether the extension band
                   is rendering, which is what RGB_TOG flips. */}
               <div className="flex flex-col gap-1.5 border-t border-line-soft pt-2">
-                <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+                <label className="flex cursor-pointer items-center justify-between text-body text-mute">
                   Effects state
                   <input
                     type="checkbox"
@@ -633,7 +626,7 @@ export function ConditionalRulesPanel() {
                     onChange={(e) =>
                       edit(selected, { ...rule, effects: { enabled: e.target.value === "on" } })
                     }
-                    className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                    className="rounded-lg border border-line bg-well px-2 py-1 text-body text-ink"
                   >
                     <option value="on">effects on</option>
                     <option value="off">effects off</option>
@@ -644,7 +637,7 @@ export function ConditionalRulesPanel() {
               {/* Layer-set condition: every layer marked active must be held
                   and none marked inactive, on top of the single layer above. */}
               <div className="flex flex-col gap-1.5 border-t border-line-soft pt-2">
-                <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+                <label className="flex cursor-pointer items-center justify-between text-body text-mute">
                   Other layers
                   <input
                     type="checkbox"
@@ -669,7 +662,7 @@ export function ConditionalRulesPanel() {
                       return (
                         <label
                           key={n}
-                          className="flex items-center justify-between gap-2 text-[12px] text-mute"
+                          className="flex items-center justify-between gap-2 text-body text-mute"
                         >
                           <span className="truncate">{nameOf(n)}</span>
                           <select
@@ -680,7 +673,7 @@ export function ConditionalRulesPanel() {
                                 inactive: setLayerInMask(layerSet.inactive, n, e.target.value === "inactive"),
                               })
                             }
-                            className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                            className="rounded-lg border border-line bg-well px-2 py-1 text-body text-ink"
                           >
                             <option value="any">any</option>
                             <option value="active">active</option>
@@ -696,7 +689,7 @@ export function ConditionalRulesPanel() {
               {/* Lock-indicator condition: each named lock must match the
                   state the host reports. */}
               <div className="flex flex-col gap-1.5 border-t border-line-soft pt-2">
-                <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+                <label className="flex cursor-pointer items-center justify-between text-body text-mute">
                   Lock indicators
                   <input
                     type="checkbox"
@@ -723,7 +716,7 @@ export function ConditionalRulesPanel() {
                     ).map(([lock, label]) => (
                       <label
                         key={lock}
-                        className="flex items-center justify-between gap-3 text-[12px] text-mute"
+                        className="flex items-center justify-between gap-3 text-body text-mute"
                       >
                         {label}
                         <select
@@ -734,7 +727,7 @@ export function ConditionalRulesPanel() {
                               [lock]: e.target.value === "any" ? undefined : e.target.value === "on",
                             })
                           }
-                          className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                          className="rounded-lg border border-line bg-well px-2 py-1 text-body text-ink"
                         >
                           <option value="any">any</option>
                           <option value="on">on</option>
@@ -748,7 +741,7 @@ export function ConditionalRulesPanel() {
 
               {rulesSupported && (
                 <div className="flex flex-col gap-1.5 border-t border-line-soft pt-2">
-                  <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+                  <label className="flex cursor-pointer items-center justify-between text-body text-mute">
                     Maintenance state
                     <input
                       type="checkbox"
@@ -771,7 +764,7 @@ export function ConditionalRulesPanel() {
                           maintenance: { unlocked: e.target.value === "unlocked" },
                         })
                       }
-                      className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                      className="rounded-lg border border-line bg-well px-2 py-1 text-body text-ink"
                     >
                       <option value="unlocked">unlocked</option>
                       <option value="locked">locked</option>
@@ -782,7 +775,7 @@ export function ConditionalRulesPanel() {
 
               {rulesSupported && (
                 <div className="flex flex-col gap-1.5 border-t border-line-soft pt-2">
-                  <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+                  <label className="flex cursor-pointer items-center justify-between text-body text-mute">
                     Split transport
                     <input
                       type="checkbox"
@@ -800,7 +793,7 @@ export function ConditionalRulesPanel() {
                   </label>
                   {rule.split_transport !== undefined && (
                     <div className="grid grid-cols-2 gap-2">
-                      <label className="text-[11px] text-faint">
+                      <label className="text-small text-faint">
                         Active link
                         <select
                           value={rule.split_transport.link ?? "any"}
@@ -816,14 +809,14 @@ export function ConditionalRulesPanel() {
                               },
                             })
                           }
-                          className="mt-1 w-full rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                          className="mt-1 w-full rounded-lg border border-line bg-well px-2 py-1 text-body text-ink"
                         >
                           <option value="any">any</option>
                           <option value="Wired">wired</option>
                           <option value="Ble">Bluetooth</option>
                         </select>
                       </label>
-                      <label className="text-[11px] text-faint">
+                      <label className="text-small text-faint">
                         Force
                         <select
                           value={rule.split_transport.force ?? "any"}
@@ -839,7 +832,7 @@ export function ConditionalRulesPanel() {
                               },
                             })
                           }
-                          className="mt-1 w-full rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                          className="mt-1 w-full rounded-lg border border-line bg-well px-2 py-1 text-body text-ink"
                         >
                           <option value="any">any</option>
                           <option value="Auto">automatic</option>
@@ -855,7 +848,7 @@ export function ConditionalRulesPanel() {
               {/* Connection condition. Every named field must hold, so the
                   sub-toggles compose as a conjunction. */}
               <div className="flex flex-col gap-1.5 border-t border-line-soft pt-2">
-                <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+                <label className="flex cursor-pointer items-center justify-between text-body text-mute">
                   Connection
                   <input
                     type="checkbox"
@@ -892,7 +885,7 @@ export function ConditionalRulesPanel() {
                       value={connection.profile}
                       onChange={(profile) => setConnection(rule, { ...connection, profile })}
                     />
-                    <label className="flex items-center justify-between gap-3 text-[12px] text-mute">
+                    <label className="flex items-center justify-between gap-3 text-body text-mute">
                       USB
                       <select
                         value={
@@ -909,7 +902,7 @@ export function ConditionalRulesPanel() {
                               e.target.value === "any" ? undefined : e.target.value === "connected",
                           })
                         }
-                        className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                        className="rounded-lg border border-line bg-well px-2 py-1 text-body text-ink"
                       >
                         <option value="any">any</option>
                         <option value="connected">connected</option>
@@ -917,7 +910,7 @@ export function ConditionalRulesPanel() {
                       </select>
                     </label>
                     <div className="flex flex-col gap-1.5">
-                      <label className="flex cursor-pointer items-center justify-between text-[12px] text-mute">
+                      <label className="flex cursor-pointer items-center justify-between text-body text-mute">
                         Bonded slot
                         <input
                           type="checkbox"
@@ -954,7 +947,7 @@ export function ConditionalRulesPanel() {
                                 },
                               })
                             }
-                            className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                            className="rounded-lg border border-line bg-well px-2 py-1 text-body text-ink"
                           >
                             <option value="bonded">bonded</option>
                             <option value="unbonded">unbonded</option>
@@ -962,7 +955,7 @@ export function ConditionalRulesPanel() {
                         </div>
                       )}
                     </div>
-                    <p className="text-[10.5px] leading-relaxed text-faint">
+                    <p className="text-caption leading-relaxed text-faint">
                       The keyboard does not report which slots hold a bond, so a bonded rule
                       previews as unlit here even when it lights on the board.
                     </p>
@@ -1021,12 +1014,12 @@ function OptionalSelect<T extends string>({
   onChange: (value: T | undefined) => void;
 }) {
   return (
-    <label className="flex items-center justify-between gap-3 text-[12px] text-mute">
+    <label className="flex items-center justify-between gap-3 text-body text-mute">
       {label}
       <select
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value === "" ? undefined : (e.target.value as T))}
-        className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+        className="rounded-lg border border-line bg-well px-2 py-1 text-body text-ink"
       >
         <option value="">any</option>
         {options.map((option) => (
@@ -1050,7 +1043,7 @@ function SlotField({
   onChange: (value: number | undefined) => void;
 }) {
   return (
-    <label className="flex items-center justify-between gap-3 text-[12px] text-mute">
+    <label className="flex items-center justify-between gap-3 text-body text-mute">
       {label}
       <TextInput
         type="number"

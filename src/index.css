@@ -1,53 +1,91 @@
 @import "tailwindcss";
 
+/* Inter for text, JetBrains Mono for code and key names. Both ship with the app
+   (src/assets/fonts, SIL Open Font License), so every computer shows the same. */
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 100 900; font-display: swap; src: url(./assets/fonts/inter-latin-ext-wght-normal.woff2) format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 100 900; font-display: swap; src: url(./assets/fonts/inter-latin-wght-normal.woff2) format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 100 800; font-display: swap; src: url(./assets/fonts/jetbrains-mono-latin-ext-wght-normal.woff2) format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 100 800; font-display: swap; src: url(./assets/fonts/jetbrains-mono-latin-wght-normal.woff2) format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+
 /* ------------------------------------------------------------------ */
-/* Rynkbench design tokens — dark-first, near-black cool neutrals with */
-/* a single electric-cyan accent. Tailwind v4 CSS-first configuration. */
+/* Rynkbench design tokens. These declare the names (Tailwind makes the  */
+/* utilities from them) with Default Dark's values as the fallback; every */
+/* theme's values come from src/ui/theme/themes.ts (ADR 0014).            */
 /* ------------------------------------------------------------------ */
 
 @theme {
   /* Surfaces, darkest → lightest */
-  --color-bg: oklch(15% 0.01 240);
-  --color-well: oklch(13.2% 0.009 240);
-  --color-panel: oklch(18% 0.011 240);
-  --color-raised: oklch(21.5% 0.012 240);
-  --color-hover: oklch(25% 0.013 240);
+  /* GLIDE Default Dark. accent: text and highlights; accent-fill and
+     on-accent: primary buttons; select: the selected key. */
+  --color-bg: oklch(17.8% 0 0);
+  --color-well: oklch(17.8% 0 0);
+  --color-panel: oklch(21.8% 0 0);
+  --color-raised: oklch(26.9% 0 0);
+  --color-hover: oklch(32.1% 0 0);
+  --color-line: oklch(32.1% 0 0);
+  --color-line-soft: oklch(26.9% 0 0);
+  --color-line-strong: oklch(45.0% 0 0);
+  --color-ink: oklch(100.0% 0 0);
+  --color-mute: oklch(71.4% 0.019 261);
+  --color-faint: oklch(65.5% 0.018 263);
+  --color-accent: oklch(69.5% 0.166 42);
+  --color-accent-fill: oklch(58.3% 0.167 41);
+  --color-on-accent: oklch(100.0% 0 0);
+  --color-accent-deep: oklch(52.8% 0.153 42);
+  --color-accent-dim: oklch(28.3% 0.043 40);
+  --color-select: oklch(64.9% 0.178 39);
+  --color-danger: oklch(71.1% 0.166 22);
+  --color-danger-dim: oklch(27.0% 0.049 21);
+  --color-ok: oklch(77.3% 0.153 163);
+  --color-warn: oklch(83.7% 0.164 84);
+  --color-cap: oklch(32.1% 0 0);
+  --color-cap-side: oklch(25.2% 0 0);
+  --color-cap-edge: oklch(36.4% 0 0);
+  --color-cap-ink: oklch(100.0% 0 0);
+  --color-cap-ink-dim: oklch(71.4% 0.019 261);
+  --color-plate: oklch(17.8% 0 0);
+  /* Keys as GLIDE draws them: a gradient from cap to cap-low, a soft drop
+     shadow, and a dot grid behind the board. */
+  --color-cap-low: oklch(26.0% 0 0);
+  --color-cap-shadow: oklch(0% 0 0 / 0.5);
+  --color-canvas-dot: oklch(100% 0 0 / 0.08);
+  /* The thin highlight on a key's top edge, and the dark halo that keeps a
+     legend readable on a lit (coloured) key. */
+  --color-cap-sheen: oklch(100% 0 0 / 0.08);
+  --color-legend-halo: oklch(0% 0 0 / 0.72);
+  /* The real board under its lights (GLIDE's lit view): MoErgo's POM keycaps,
+     grey in a dim room, with their grey legends. */
+  --color-pom: oklch(81% 0.008 110);
+  --color-pom-edge: oklch(66% 0.008 110);
+  --color-pom-ink: oklch(42% 0.006 110);
+  /* "Highlight special keys": custom, Bluetooth, and layer and other actions. */
+  --color-special-custom: oklch(82.4% 0.087 63);
+  --color-special-bluetooth: oklch(52.1% 0 0);
+  --color-special-action: oklch(76.5% 0.148 155);
+  /* Text on those caps: the theme's legend colour when it reads, else black or white. */
+  --color-special-custom-ink: oklch(0% 0 0);
+  --color-special-bluetooth-ink: oklch(100% 0 0);
+  --color-special-action-ink: oklch(0% 0 0);
 
-  /* Hairlines */
-  --color-line: oklch(28% 0.014 240);
-  --color-line-soft: oklch(23% 0.012 240);
-  --color-line-strong: oklch(36% 0.016 240);
+  --font-sans: "Inter", system-ui, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
 
-  /* Ink. Secondary tiers are tuned to keep ≥4.5:1 against every surface
-     they sit on (bg/panel/raised), so "subdued" never means "illegible". */
-  --color-ink: oklch(93% 0.006 240);
-  --color-mute: oklch(72% 0.012 240);
-  --color-faint: oklch(62% 0.012 240);
-
-  /* The one accent: electric cyan */
-  --color-accent: oklch(84% 0.126 195);
-  --color-accent-deep: oklch(62% 0.104 200);
-  --color-accent-dim: oklch(35% 0.055 200);
-
-  /* Semantics */
-  --color-danger: oklch(66% 0.185 25);
-  --color-danger-dim: oklch(30% 0.075 25);
-  --color-ok: oklch(76% 0.14 152);
-  --color-warn: oklch(82% 0.135 85);
-
-  /* Keycaps */
-  --color-cap: oklch(25.5% 0.012 240);
-  --color-cap-side: oklch(18.5% 0.011 240);
-  --color-cap-edge: oklch(33% 0.014 240);
-  --color-cap-ink: oklch(88% 0.008 240);
-  /* Dimmed-but-legible legend ink (Transparent ▽, enrichment fallbacks). */
-  --color-cap-ink-dim: oklch(67% 0.01 240);
-  /* Soft backplate grouping connected key clusters (split halves). */
-  --color-plate: oklch(17.2% 0.011 240);
-
-  --font-sans: "Inter", "Inter Variable", system-ui, "Segoe UI", sans-serif;
-  --font-mono:
-    ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+  /* Type scale: the only text sizes (src/ui/theme/typography.test.ts). Keycap
+     legends are drawn in key units by the canvas and keep their own sizes. */
+  --text-caption: 10px;
+  --text-caption--line-height: 1.5;
+  --text-small: 11px;
+  --text-small--line-height: 1.5;
+  --text-body: 12px;
+  --text-body--line-height: 1.5;
+  --text-ui: 13px;
+  --text-ui--line-height: 1.5;
+  --text-title: 15px;
+  --text-title--line-height: 1.4;
+  --text-heading: 20px;
+  --text-heading--line-height: 1.25;
+  --text-display: 30px;
+  --text-display--line-height: 1;
 
   --ease-out-soft: cubic-bezier(0.25, 0.8, 0.35, 1);
 
@@ -151,9 +189,16 @@ body {
   cursor: default;
 }
 
-/* Hover affordance: CSS wins over the SVG fill attribute. */
+/* Hover, as in GLIDE: the key lifts a little, brightens, and its edge takes
+   the text colour. */
+.key-group:not(.key-static):hover .key-lift {
+  transform: translateY(-0.03px) scale(1.05);
+}
 .key-group:not(.key-static):hover .key-cap {
-  fill: var(--color-hover);
+  filter: brightness(1.1);
+}
+.key-group:not(.key-static):hover .key-edge {
+  stroke: var(--color-ink);
 }
 
 .key-group:not(.key-static):focus-visible {
@@ -165,24 +210,24 @@ body {
   stroke-width: 0.05px;
 }
 
-/* The recessed board well behind every canvas. */
+/* The canvas behind every keyboard, as GLIDE draws it: the page colour with a
+   faint dot grid (none in the light theme). */
 .canvas-well {
-  background:
-    radial-gradient(
-      ellipse 60% 55% at 50% 48%,
-      oklch(17% 0.012 240 / 60%),
-      transparent 75%
-    ),
-    var(--color-well);
-  box-shadow: inset 0 1px 8px rgb(0 0 0 / 0.25);
+  background-color: var(--color-well);
+  background-image: radial-gradient(var(--color-canvas-dot) 1px, transparent 1px);
+  background-size: 22px 22px;
 }
 
 .key-lift {
-  transition: transform 140ms var(--ease-out-soft);
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .key-cap {
-  transition: fill 140ms var(--ease-out-soft);
+  transition:
+    fill 140ms var(--ease-out-soft),
+    filter 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .key-paint-pop {
@@ -194,6 +239,9 @@ body {
 /* Focus rings for interactive chrome */
 button:focus-visible,
 input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible,
 [tabindex]:focus-visible {
   outline: 1.5px solid var(--color-accent);
   outline-offset: 1.5px;
@@ -209,4 +257,15 @@ input:focus-visible,
 .key-group:focus-visible .key-cap {
   stroke: var(--color-accent);
   stroke-width: 0.045;
+}
+
+/* Motion is short and purposeful, and off when the system asks for less. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
 }

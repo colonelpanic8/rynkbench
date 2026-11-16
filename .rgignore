@@ -1,0 +1,7 @@
+# Hidden from searches (ripgrep, and Claude's Grep): big generated or fixture
+# files a search would only drown in. Open one by its path when it is needed.
+*.golden.json
+src/test/fixtures/
+docs/firmware/**/*.patch
+src-tauri/target/
+public/

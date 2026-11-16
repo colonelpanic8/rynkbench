@@ -3,6 +3,7 @@ import {
   keyAddressLabel,
   keyAddressWithLegend,
   keyAtPosition,
+  keyPlaceName,
   keyHoverTitle,
   matrixKeyLabel,
 } from "./key-address";
@@ -33,5 +34,16 @@ describe("physical key labels", () => {
       row: 9,
       col: 9,
     });
+  });
+});
+
+describe("keyPlaceName", () => {
+  it("says a MoErgo key's hand, row and column, or its thumb key", () => {
+    expect(keyPlaceName({ row: 2, col: 2, address: "LH-C4R3" })).toBe("Left hand · row 3, column 4");
+    expect(keyPlaceName({ row: 1, col: 7, address: "RH-T2" })).toBe("Right thumb · key 2");
+  });
+
+  it("falls back to the matrix place on other keyboards", () => {
+    expect(keyPlaceName({ row: 1, col: 5 })).toBe("Row 1, column 5");
   });
 });

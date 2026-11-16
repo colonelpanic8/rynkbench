@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { same } from "./deep-equal";
+import { same } from "../model/deep-equal";
 
 export interface DeviceDraft<T> {
   draft: T;

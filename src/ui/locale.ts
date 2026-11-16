@@ -4,6 +4,7 @@
 // reverse index resolves a character back to the keystroke that produces it.
 // A tiny subscribable store holds the active locale (persisted per browser).
 
+import { SETTING_KEYS, createSetting } from "./settings";
 import type { HidKeyCode, ModifierCombination } from "../vendor/rynk-wasm/rynk_wasm";
 
 /** [base, shift?, altgr?, shiftAltgr?]. A single-letter base with no explicit
@@ -290,41 +291,22 @@ export function keystrokeModifiers(stroke: Keystroke): ModifierCombination {
 
 // --- Active-locale store -----------------------------------------------------
 
-const STORAGE_KEY = "rynk:locale";
-
-function storedLocaleId(): string {
-  try {
-    const stored = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
-    if (stored !== null && LOCALES.some((locale) => locale.id === stored)) return stored;
-  } catch {
-    // Storage access can throw in privacy modes; fall through to the default.
-  }
-  return DEFAULT_LOCALE_ID;
-}
-
-let activeId = storedLocaleId();
-const listeners = new Set<() => void>();
+const localeSetting = createSetting(SETTING_KEYS.locale, (raw) =>
+  raw !== null && LOCALES.some((locale) => locale.id === raw) ? raw : DEFAULT_LOCALE_ID,
+);
 
 export function getLocaleId(): string {
-  return activeId;
+  return localeSetting.get();
 }
 
 export function activeLocale(): KeyboardLocale {
-  return LOCALES.find((locale) => locale.id === activeId) ?? LOCALES[0];
+  return LOCALES.find((locale) => locale.id === localeSetting.get()) ?? LOCALES[0];
 }
 
 export function setLocaleId(id: string): void {
-  if (id === activeId || !LOCALES.some((locale) => locale.id === id)) return;
-  activeId = id;
-  try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(STORAGE_KEY, id);
-  } catch {
-    // Best-effort persistence only.
-  }
-  for (const listener of listeners) listener();
+  if (LOCALES.some((locale) => locale.id === id)) localeSetting.set(id);
 }
 
 export function subscribeLocale(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+  return localeSetting.subscribe(listener);
 }

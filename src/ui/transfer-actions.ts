@@ -1,13 +1,15 @@
-// Document import/export orchestration for the top bar: the staged-edit guard,
+// Document import/export orchestration (the top bar's Open, Save and name): the staged-edit guard,
 // the history suspension around a bulk write, the retained source text an
 // export reuses as its template, and the phrasing of the result report.
 
-import { useRef, useState } from "react";
+import { createContext, useContext, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { FORMAT_EXTENSION, FORMAT_LABEL } from "../config/document";
 import type { ConfigFormat, ExtensionCatalog } from "../config/document";
 import { documentAdapterFor } from "../config/adapters";
-import { pointingDraftDirty, stagedEditCount, useWorkbench } from "./state";
+import { draftEditCount, pointingDraftDirty } from "../workbench";
+import { useWorkbench } from "./state";
+import { labelsFromToml } from "../config/behavior-labels";
 import { errorReport } from "./TransferReport";
 import type { TransferReport } from "./TransferReport";
 import { profileById } from "../model/boards/profiles";
@@ -25,6 +27,8 @@ export interface DocumentTransfer {
   dismissReport: () => void;
   /** Display name of the workspace; follows the file an offline import opened. */
   workspaceName: string;
+  /** Renames it (Layout properties); a file saved later takes this name. */
+  renameWorkspace: (name: string) => void;
   importFile: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
   exportFile: (format: ConfigFormat) => Promise<void>;
 }
@@ -71,7 +75,7 @@ export function useDocumentTransfer(): DocumentTransfer {
       setReport(errorReport("Could not import configuration", error));
       return;
     }
-    if (stagedEditCount(state) > 0 || pointingDraftDirty(state)) {
+    if (draftEditCount(state) > 0 || pointingDraftDirty(state)) {
       // An import writes device differences directly; staged edits would go
       // stale underneath it.
       setReport({
@@ -81,7 +85,7 @@ export function useDocumentTransfer(): DocumentTransfer {
       return;
     }
     // Imports are bulk, cross-feature writes outside direct-key history.
-    dispatch({ type: "keyHistorySuspend", suspended: true });
+    dispatch({ type: "historySuspend", suspended: true });
     history.clear();
     setPhase("importing");
     setReport(null);
@@ -102,6 +106,8 @@ export function useDocumentTransfer(): DocumentTransfer {
       // later export template: its matrix and layer grids have a different
       // shape. Same-board imports still retain labels and editor-owned JSON.
       imported.current = result.converted ? null : text;
+      // The file's names for its behaviors come with them (ADR 0020).
+      if (!result.converted && codec.detectFormat(text) === "toml") dispatch({ type: "labelsLoaded", labels: labelsFromToml(text) });
       if (offline && !result.converted) setWorkspaceName(file.name);
       const parts = [
         result.changedKeys > 0
@@ -136,7 +142,7 @@ export function useDocumentTransfer(): DocumentTransfer {
       setReport(errorReport(`Could not import ${file.name}`, error));
     } finally {
       history.clear();
-      dispatch({ type: "keyHistorySuspend", suspended: false });
+      dispatch({ type: "historySuspend", suspended: false });
       setPhase(null);
     }
   };
@@ -149,7 +155,7 @@ export function useDocumentTransfer(): DocumentTransfer {
       setReport({ outcome: "error", headline: "No configuration migration is registered for this board." });
       return;
     }
-    if (stagedEditCount(state) > 0 || pointingDraftDirty(state)) {
+    if (draftEditCount(state) > 0 || pointingDraftDirty(state)) {
       setReport({ outcome: "error", headline: "Apply or discard staged edits before migrating." });
       return;
     }
@@ -192,8 +198,9 @@ export function useDocumentTransfer(): DocumentTransfer {
       const link = document.createElement("a");
       link.href = url;
       const stem =
-        (offline ? workspaceName.replace(/\.(toml|json)$/i, "") : bundle.model.name)
-          ?.replace(/[^a-z0-9]+/gi, "-")
+        workspaceName
+          .replace(/\.(toml|json)$/i, "")
+          .replace(/[^a-z0-9]+/gi, "-")
           .replace(/^-|-$/g, "")
           .toLowerCase() || "keyboard";
       link.download = `${stem}-rynkbench.${FORMAT_EXTENSION[format]}`;
@@ -218,7 +225,18 @@ export function useDocumentTransfer(): DocumentTransfer {
     previewMigration,
     dismissReport: () => setReport(null),
     workspaceName,
+    renameWorkspace: setWorkspaceName,
     importFile,
     exportFile,
   };
+}
+
+/** One transfer per workbench, shared by the top bar (the workspace name) and
+ *  its Open and Save (the actions and their report). Provided by the workbench. */
+export const DocumentTransferContext = createContext<DocumentTransfer | null>(null);
+
+export function useSharedDocumentTransfer(): DocumentTransfer {
+  const transfer = useContext(DocumentTransferContext);
+  if (!transfer) throw new Error("useSharedDocumentTransfer outside the workbench");
+  return transfer;
 }

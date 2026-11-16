@@ -2,17 +2,19 @@ import { useRef, useState } from "react";
 import type { KeyView } from "../../model/keyboard";
 import type { KeyAction } from "../../vendor/rynk-wasm/rynk_wasm";
 import { SectionLabel, cx } from "../kit";
+import { useCapabilities } from "../use-capabilities";
 import { keyAddressLabel } from "../key-address";
 import { layerName } from "../layer-names";
-import { hasPendingConfigurationWrite, useWorkbench } from "../state";
+import { hasPendingConfigurationWrite } from "../../workbench";
+import { useWorkbench } from "../state";
 import { hasLayerIndicatorConditions } from "../../session/lighting-features";
 import {
   installedLightingKeyKind,
   lightingKeyAction,
   writeLightingKeyPreset,
   type LightingKeyKind,
-} from "./lightingKeyPresets";
-import { maskHasLayer } from "./wakeLayers";
+} from "../../model/lighting/key-presets";
+import { maskHasLayer } from "../../model/lighting/wake-layers";
 
 const PRESETS: Array<{ kind: LightingKeyKind; label: string; hint: string }> = [
   {
@@ -43,19 +45,20 @@ export function LightingKeyPresetPanel({
   const { bundle, state, io, dispatch } = useWorkbench();
   const [message, setMessage] = useState<string | null>(null);
   const installing = useRef(false);
-  const status = bundle.runtimeConditionalStatus;
+  const capabilities = useCapabilities();
+  const ruleTable = capabilities.get("lighting.rules");
   const busy = hasPendingConfigurationWrite(state);
   const wakes = maskHasLayer(
     state.lightingOutputMode?.wake_layers ?? state.lightingControls.wake_layers,
     layer,
   );
   const led = target.ledId;
-  if (!status || led === undefined) return null;
+  if (!ruleTable || led === undefined) return null;
 
   const supported = (kind: LightingKeyKind) =>
     kind === "output-mode"
-      ? state.lightingOutputMode !== null
-      : state.lightingExtension !== null && hasLayerIndicatorConditions(bundle.lightingCaps);
+      ? capabilities.has("lighting.output")
+      : capabilities.has("lighting.extension") && hasLayerIndicatorConditions(bundle.lightingCaps);
 
   const install = async (kind: LightingKeyKind) => {
     if (installing.current || busy || state.batchMode || !supported(kind)) return;
@@ -66,12 +69,12 @@ export function LightingKeyPresetPanel({
       const result = await writeLightingKeyPreset(
         {
           setKey: (preset, action) =>
-            io.setKey(preset.layer, preset.row, preset.col, action, { history: "invalidate" }),
+            io.setKey(preset.layer, preset.row, preset.col, action),
           applyRules: (rules) => io.applyConditionalScenes(rules),
         },
         state.runtimeConditionalDraft,
         { kind, layer, row: target.row, col: target.col, led },
-        status.capacity,
+        ruleTable.slots,
       );
       setMessage(
         result.ok
@@ -84,7 +87,7 @@ export function LightingKeyPresetPanel({
     }
   };
 
-  const blocked = state.batchMode || busy || status.capacity === 0;
+  const blocked = state.batchMode || busy || ruleTable.slots === 0;
   const rulesKind = installedLightingKeyKind(state.runtimeConditionalDraft, led, layer);
   const installed = (kind: LightingKeyKind) =>
     rulesKind === kind && JSON.stringify(current) === JSON.stringify(lightingKeyAction(kind));
@@ -92,7 +95,7 @@ export function LightingKeyPresetPanel({
   return (
     <div>
       <SectionLabel>Key presets</SectionLabel>
-      <p className="mt-1 text-[11.5px] leading-relaxed text-faint">
+      <p className="mt-1 text-small leading-relaxed text-faint">
         One click binds the action and installs its status colors on this key for{" "}
         {layerName(state.layerMetadata, layer)}. Repeating a preset reinstalls its rules.
       </p>
@@ -119,32 +122,32 @@ export function LightingKeyPresetPanel({
                   : "cursor-not-allowed border-line opacity-50",
               )}
             >
-              <div className="flex items-center gap-2 text-[13px] font-medium text-accent">
+              <div className="flex items-center gap-2 text-ui font-medium text-accent">
                 {preset.label}
                 {installed(preset.kind) && (
-                  <span className="rounded-full border border-ok/40 px-1.5 py-px text-[10px] font-medium text-ok">
+                  <span className="rounded-full border border-ok/40 px-1.5 py-px text-caption font-medium text-ok">
                     installed
                   </span>
                 )}
               </div>
-              <div className="text-[11.5px] text-faint">{preset.hint}</div>
+              <div className="text-small text-faint">{preset.hint}</div>
             </button>
           );
         })}
       </div>
       {state.batchMode && (
-        <p className="mt-2 text-[11px] leading-relaxed text-warn">
+        <p className="mt-2 text-small leading-relaxed text-warn">
           Turn batch mode off first: presets write the action and its lighting immediately.
         </p>
       )}
       {!wakes && (
-        <p className="mt-2 text-[11px] leading-relaxed text-faint">
+        <p className="mt-2 text-small leading-relaxed text-faint">
           The indicator lights while {layerName(state.layerMetadata, layer)} is active. To see it
-          while lighting is off, enable that layer’s wake setting in Lighting mode.
+          while the lights are off, let that layer wake them: RGB settings, Advanced.
         </p>
       )}
       {message && (
-        <p role="status" className="mt-2 text-[11px] leading-relaxed text-mute">
+        <p role="status" className="mt-2 text-small leading-relaxed text-mute">
           {message}
         </p>
       )}

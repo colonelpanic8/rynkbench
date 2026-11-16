@@ -1,75 +1,24 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { WorkbenchContext, type WorkbenchContextValue } from "../state";
+import { testWorkbench } from "../../test/workbench";
+import { WorkbenchContext } from "../state";
 import { StatusPresetsPanel } from "./StatusPresetsPanel";
 import { resolveBoardProfile } from "../../model/boards/profiles";
 import type { DeviceInfo } from "../../vendor/rynk-wasm/rynk_wasm";
-import { CONNECTION_KEY_PICK } from "./keyPick";
 import { GLOVE80_BOARD_KEYS, GLOVE80_COLS, GLOVE80_GRID } from "../../model/boards/glove80";
 
-const keys = [4, 5, 6].map((ledId, index) => ({
-  row: index,
-  col: 0,
-  address: `LH${index + 1}`,
-  label: "Esc",
-  ledId,
-  shape: { rect: { x: 0, y: index * 20 } },
-}));
-
-function render(selection: number[], pick = null as typeof CONNECTION_KEY_PICK | null) {
-  const value = {
-    bundle: {
-      caps: { num_cols: 1, num_layers: 3, num_split_peripherals: 1, num_ble_profiles: 3 },
-      model: { name: "test", keys, zones: [] },
-      runtimeConditionalStatus: { capacity: 32 },
-      lightingCaps: null,
-    },
-    state: {
-      layers: [[], [], []],
-      currentLayer: 0,
-      lightingSelection: selection,
-      lightingOutputMode: null,
-      lightingControls: { wake_layers: 0 },
-      layerMetadata: null,
-      runtimeConditionalDraft: [],
-      lightingBusy: false,
-      lightingExtension: null,
-      batchMode: false,
-      pending: {},
-      keyEditHistorySuspended: false,
-      pointingBusy: false,
-      batchBusy: false,
-    },
-    dispatch: () => {},
-  } as unknown as WorkbenchContextValue;
-  return renderToStaticMarkup(
-    <WorkbenchContext value={value}>
-      <StatusPresetsPanel pick={pick} onPick={() => {}} />
-    </WorkbenchContext>,
-  );
-}
-
-describe("status preset key choice", () => {
-  it("offers to choose on the board when nothing is selected", () => {
-    const html = render([]);
-    expect(html).toContain("None chosen yet");
-    expect(html).toContain("Choose on board");
-    expect(html).toContain("Choose a key first");
-    expect(html).not.toContain("MoErgo");
-    expect(html).not.toContain("Glove80");
-  });
-
-  it("prompts for a board click while a pick is active", () => {
-    const html = render([], CONNECTION_KEY_PICK);
-    expect(html).toContain("Click a key on the board…");
-    expect(html).toContain("Done");
-  });
-
-  it("names the chosen key and explains oversized choices", () => {
-    expect(render([4])).toContain("Configure LH1");
-    const html = render([4, 5]);
-    expect(html).toContain("2 keys are chosen; a connection key needs exactly one.");
-    expect(html).toContain("2 chosen; a bar needs 3–8 keys.");
+describe("status setups", () => {
+  it("offer nothing on a board without a preset", () => {
+    const value = testWorkbench({
+      bundle: {
+        caps: { num_cols: 1, num_layers: 3, num_split_peripherals: 1, num_ble_profiles: 3 },
+        model: { name: "test", keys: [], zones: [] },
+        runtimeConditionalStatus: { capacity: 32 },
+        lightingCaps: null,
+      },
+      state: { layers: [[], [], []], currentLayer: 0, lightingOutputMode: null, lightingControls: { wake_layers: 0 }, layerMetadata: null },
+    });
+    expect(renderToStaticMarkup(<WorkbenchContext value={value}><StatusPresetsPanel /></WorkbenchContext>)).toBe("");
   });
 });
 
@@ -87,7 +36,7 @@ describe("Glove80 presets", () => {
   });
 
   function renderGlove80(name: string, features = (1 << 15) | (1 << 16)) {
-    const value = {
+    const value = testWorkbench({
       bundle: {
         boardProfile: resolveBoardProfile(
           { product_name: name, vendor_id: 0x16c0, product_id: 0x27db } as DeviceInfo,
@@ -102,7 +51,6 @@ describe("Glove80 presets", () => {
       state: {
         layers: Array.from({ length: 6 }, () => []),
         currentLayer: 0,
-        lightingSelection: [],
         lightingOutputMode: null,
         lightingControls: { wake_layers: 0 },
         layerMetadata: null,
@@ -111,20 +59,19 @@ describe("Glove80 presets", () => {
         lightingExtension: null,
         batchMode: false,
         pending: {},
-        keyEditHistorySuspended: false,
         pointingBusy: false,
         batchBusy: false,
       },
       dispatch: () => {},
-    } as unknown as WorkbenchContextValue;
+    });
     return renderToStaticMarkup(
       <WorkbenchContext value={value}>
-        <StatusPresetsPanel pick={null} onPick={() => {}} />
+        <StatusPresetsPanel />
       </WorkbenchContext>,
     );
   }
 
-  it("keeps connection presets on older firmware while requiring an update for stock Magic", () => {
+  it("keeps the cluster on older firmware while requiring an update for stock Magic", () => {
     const html = renderGlove80("Glove80", 1 << 15);
     expect(html).toContain("Install complete Glove80 setup");
     expect(html).not.toContain("Install stock Magic layer");
@@ -137,7 +84,7 @@ describe("Glove80 presets", () => {
   // alone must not be told to update firmware before installing status keys.
   it("installs connection status keys on firmware advertising only the rule table", () => {
     const html = renderGlove80("Glove80", 1 << 17);
-    expect(html).not.toContain("but not connection predicates");
+    expect(html).not.toContain("Update firmware to install Bluetooth");
   });
 
   it("offers the stock Magic layer on firmware advertising only the rule table", () => {

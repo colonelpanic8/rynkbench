@@ -1,11 +1,10 @@
-import { macroTableSize } from "../../ui/macros";
-import type { MacroOp } from "../../vendor/rynk-wasm/rynk_wasm";
 // The mock backend's engine: a BoardSpec is one simulated device (static
 // identity, geometry, topology, defaults); MockSession drives its mutable
 // in-memory state behind the RynkSession seam. Every op resolves through a
 // small random latency so the UI's loading states are exercised honestly,
 // and topic pushes arrive on timers like a real device's.
 
+import { macroTableSize } from "../../model/macros";
 import type {
   Action,
   AutoMouseLayerConfig,
@@ -36,18 +35,14 @@ import type {
   LightingExtensionParam,
   LightingExtensionState,
   LightingLayerPolicy,
-  LightingLed,
   LightingLedId,
   LightingOverlayCell,
   LightingOutputModeState,
-  LightingPhysicalKey,
-  LightingRoute,
   LightingRuntimeConditionalSceneStatus,
   LightingSceneCell,
   LightingSceneStatus,
   LightingState,
-  LightingZone,
-  LightingZoneId,
+  MacroOp,
   Morse,
   MorseHoldTriggerPosition,
   MorseHoldTriggerPositionState,
@@ -92,13 +87,8 @@ import {
   RULES,
 } from "../lighting-features";
 import { unsupported } from "../unsupported";
-import {
-  emptyCombo,
-  emptyFork,
-  emptyMorse,
-  emptyMorseProfile,
-  noModifiers,
-} from "../../model/slots";
+import { emptyCombo, emptyFork, emptyMorse, emptyMorseProfile, noModifiers } from "../../model/slots";
+import { absentSurface } from "./absent";
 
 export interface BoardSpec {
   title: string;
@@ -274,49 +264,6 @@ function splitLatencyDefaults(spec: BoardSpec): SplitCentralLatencyState | null 
   };
 }
 
-/** One simulated light: identity, matrix key, geometry, wiring, zones. */
-export interface SimLed {
-  id: LightingLedId;
-  row: number;
-  col: number;
-  x: number;
-  y: number;
-  node: number;
-  physicalIndex: number;
-  zoneIds: LightingZoneId[];
-}
-
-export function buildTopology(
-  revision: number,
-  zones: LightingZone[],
-  simLeds: SimLed[],
-): LightingTopology {
-  const zoneMemberships: LightingZoneId[] = [];
-  const leds: LightingLed[] = [];
-  const physicalKeys: LightingPhysicalKey[] = [];
-  const routes: LightingRoute[] = [];
-  for (const led of simLeds) {
-    const zone_start = zoneMemberships.length;
-    zoneMemberships.push(...led.zoneIds);
-    leds.push({
-      id: led.id,
-      key: { row: led.row, col: led.col },
-      position: { x: led.x, y: led.y, z: 0 },
-      zone_start,
-      zone_len: led.zoneIds.length,
-    });
-    physicalKeys.push({
-      matrix: { row: led.row, col: led.col },
-      center: { x: led.x, y: led.y, z: 0 },
-      size: { width: 1, height: 1 },
-      rotation: 0,
-    });
-    routes.push({ led_id: led.id, node: led.node, output: 0, physical_index: led.physicalIndex });
-  }
-  const keys = simLeds.map((led) => ({ row: led.row, col: led.col }));
-  return { revision, keys, physicalKeys, leds, routes, zones, zoneMemberships };
-}
-
 const SCENE_CHUNK_CAPACITY = 16;
 // Conditional cells are much wider on the wire than scene cells, so the
 // firmware pages them far more coarsely (LIGHTING_CONDITIONAL_SCENE_CHUNK_SIZE).
@@ -409,6 +356,8 @@ class MockSession implements RynkSession {
     this.kind = kind;
     this.spec = spec;
     this.label = spec.info.product_name;
+    // Firmware built without lighting answers every lighting call "unsupported".
+    if (!spec.capabilities.lighting_enabled) this.lighting = absentSurface(this.lighting, "lighting");
     this.layers = structuredClone(spec.defaultLayers);
     this.layerMetadata = layerMetadataDefaults(spec);
     this.base = this.checkLayer(spec.initialDefaultLayer ?? 0);
@@ -535,6 +484,9 @@ class MockSession implements RynkSession {
       }),
   };
 
+  /** Keys stored so far, as RMK counts them: every key sent is stored, changed or not. */
+  storedKeys = 0;
+
   readonly keymap: KeymapOps = {
     readAll: () =>
       latency(() => this.layers.map((actions, layer) => ({ layer, actions: [...actions] }))),
@@ -548,11 +500,20 @@ class MockSession implements RynkSession {
         }
         for (let layer = 0; layer < layers.length; layer += 1) {
           this.layers[layer] = structuredClone(layers[layer].actions);
+          this.storedKeys += layers[layer].actions.length;
         }
       }),
     setKey: (layer, row, col, action) =>
       latency(() => {
         this.layers[this.checkLayer(layer)][this.keyIndex(row, col)] = action;
+        this.storedKeys += 1;
+      }),
+    writeKeys: (layer, start, actions) =>
+      latency(() => {
+        const cells = this.layers[this.checkLayer(layer)];
+        if (start < 0 || start + actions.length > cells.length) throw new Error(`key run leaves layer ${layer}`);
+        cells.splice(start, actions.length, ...structuredClone(actions));
+        this.storedKeys += actions.length;
       }),
     setRows: (layer, startRow, actions) =>
       latency(() => {
@@ -1503,6 +1464,12 @@ class MockSession implements RynkSession {
     }
     this.emit({ BatteryStatusChange: this.battery });
   }
+}
+
+/** Keys a simulated board has stored so far (for tests of how much a write costs). */
+export function storedKeysOf(session: RynkSession): number {
+  if (!(session instanceof MockSession)) throw new Error("only a simulated board counts stored keys");
+  return session.storedKeys;
 }
 
 export function mockProvider(spec: BoardSpec): SessionProvider {

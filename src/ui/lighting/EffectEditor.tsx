@@ -4,10 +4,10 @@
 
 import type { LightingEffect } from "../../vendor/rynk-wasm/rynk_wasm";
 import { Segmented, TextInput } from "../kit";
-import { rgbToHsv, hsvToRgb } from "../color";
+import { rgbToHsv, hsvToRgb } from "../../model/lighting/color";
 import { ColorPicker } from "./ColorPicker";
-import type { EffectKind, EffectTiming } from "./effect";
-import { buildEffect, effectKind, effectRgb, effectTiming } from "./effect";
+import type { EffectKind, EffectTiming } from "../../model/lighting/effect";
+import { buildEffect, effectKind, effectRgb, effectTiming } from "../../model/lighting/effect";
 
 export function NumberField({
   label,
@@ -25,7 +25,7 @@ export function NumberField({
   max?: number;
 }) {
   return (
-    <label className="flex items-center justify-between gap-2 text-[12px] text-mute">
+    <label className="flex items-center justify-between gap-2 text-body text-mute">
       {label}
       <span className="flex items-center gap-1">
         <TextInput
@@ -37,7 +37,7 @@ export function NumberField({
           className="w-[74px] py-1 text-right"
         />
         {unit && (
-          <span className="min-w-5 shrink-0 whitespace-nowrap text-[11px] text-faint">{unit}</span>
+          <span className="min-w-5 shrink-0 whitespace-nowrap text-small text-faint">{unit}</span>
         )}
       </span>
     </label>

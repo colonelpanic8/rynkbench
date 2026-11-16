@@ -11,8 +11,9 @@ import type { ConnectAttempt } from "./ui/ConnectScreen";
 import { ConnectScreen } from "./ui/ConnectScreen";
 import { SpinnerIcon } from "./ui/icons";
 import { Workbench } from "./ui/Workbench";
-import type { ConnectedBundle } from "./ui/state";
-import { errorMessage } from "./ui/state";
+import { setLink } from "./ui/draft/link";
+import type { ConnectedBundle } from "./workbench";
+import { errorMessage } from "./session/errors";
 
 const MOCKS_ENABLED = import.meta.env.VITE_ENABLE_MOCKS === "1";
 
@@ -61,6 +62,7 @@ export default function App() {
     bundleRef.current = loaded;
     providerIndexRef.current = providerIndex;
     setBundle(loaded);
+    setLink({ lost: false });
     setConnectionId((id) => id + 1);
     reconnectingSessionRef.current = null;
     setReconnectAttempt(null);
@@ -100,6 +102,7 @@ export default function App() {
     bundleRef.current = null;
     providerIndexRef.current = null;
     setBundle(null);
+    setLink({ lost: false });
     setReconnectAttempt(null);
     setAttempt(null);
   }, []);
@@ -190,9 +193,9 @@ export default function App() {
           adopt(loaded, providerIndex);
         } catch (error) {
           if (reconnectingSessionRef.current !== droppedSession) return;
-          bundleRef.current = null;
-          setBundle(null);
-          setNotice(`Connection to ${current.model.name} was lost and could not be restored.`);
+          // Keep working without the keyboard: the workbench stays in Draft and
+          // offers Reconnect (ADR 0012).
+          setLink({ lost: true, reconnect: () => unexpectedDisconnectRef.current(droppedSession) });
           setAttempt({ providerIndex, status: "error", message: errorMessage(error) });
         } finally {
           if (reconnectingSessionRef.current === droppedSession) {
@@ -204,6 +207,8 @@ export default function App() {
     },
     [adopt, providers],
   );
+  const unexpectedDisconnectRef = useRef(unexpectedDisconnect);
+  unexpectedDisconnectRef.current = unexpectedDisconnect;
 
   if (bundle) {
     return (
@@ -222,8 +227,8 @@ export default function App() {
           >
             <div className="flex min-w-72 flex-col items-center rounded-2xl border border-line bg-panel px-8 py-7 shadow-2xl">
               <SpinnerIcon size={24} className="text-accent" />
-              <div className="mt-4 text-[15px] font-semibold text-ink">Reconnecting to keyboard…</div>
-              <div className="mt-1 text-[12.5px] text-mute">
+              <div className="mt-4 text-title font-semibold text-ink">Reconnecting to keyboard…</div>
+              <div className="mt-1 text-body text-mute">
                 {reconnectAttempt.attempt > 0
                   ? `Attempt ${reconnectAttempt.attempt} of ${reconnectAttempt.total}`
                   : "Preparing connection recovery"}

@@ -52,7 +52,7 @@ function Notes({ notes }: { notes: ImportNote[] }) {
         <SectionLabel>{label}</SectionLabel>
         <ul className="mt-1 flex flex-col gap-1">
           {items.map((note, index) => (
-            <li key={index} className="text-[11.5px] leading-relaxed">
+            <li key={index} className="text-small leading-relaxed">
               {note.location && (
                 <span className="font-mono text-faint">{note.location} · </span>
               )}
@@ -92,7 +92,7 @@ export function TransferReportPanel({
         {report.outcome !== "ok" && (
           <WarningIcon size={14} className={cx("mt-0.5 shrink-0", tone.text)} />
         )}
-        <div className={cx("flex-1 text-[12.5px] leading-relaxed", tone.text)}>
+        <div className={cx("flex-1 text-body leading-relaxed", tone.text)}>
           {report.headline}
         </div>
         <Button variant="ghost" onClick={onDismiss} title="Dismiss">
@@ -103,7 +103,7 @@ export function TransferReportPanel({
       {report.detail && (
         // `whitespace-pre-wrap` rather than `truncate`: the message is the
         // diagnostic, and its line breaks separate one bad binding from the next.
-        <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-[11.5px] leading-relaxed text-mute">
+        <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-small leading-relaxed text-mute">
           {report.detail}
         </pre>
       )}

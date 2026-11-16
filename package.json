@@ -13,8 +13,11 @@
     "preview": "vite preview",
     "pretest": "npm run wasm",
     "test": "vitest run",
+    "t": "node scripts/test-quiet.mjs",
     "wasm:rynk": "nix build .#rynk-wasm --out-link src/vendor/rynk-wasm",
-    "wasm:config": "nix build .#moergo-config-wasm --out-link src/vendor/moergo-config-wasm"
+    "wasm:config": "nix build .#moergo-config-wasm --out-link src/vendor/moergo-config-wasm",
+    "wasm:ci": "sh scripts/wasm-from-ci.sh",
+    "ship": "sh scripts/ship.sh"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

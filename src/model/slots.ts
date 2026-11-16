@@ -84,3 +84,13 @@ export function emptyFork(): Fork {
     layers: 0xffffffff,
   };
 }
+
+/** A morse slot with no actions is unprogrammed. */
+export function morseIsEmpty(morse: Morse): boolean {
+  return morse.actions.length === 0;
+}
+
+/** A fork with no trigger is unprogrammed. */
+export function forkIsEmpty(fork: Fork): boolean {
+  return fork.trigger === "No";
+}

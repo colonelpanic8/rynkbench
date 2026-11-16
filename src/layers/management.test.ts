@@ -188,7 +188,7 @@ describe("layer rewrite planning", () => {
     input.pointing = null;
 
     expect(() => planLayerRewrite(input, { type: "delete", layer: 1 })).toThrow(
-      /layer 1 still has painted lighting/,
+      /Nav still has painted lighting/,
     );
   });
 

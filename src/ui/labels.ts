@@ -7,9 +7,12 @@ import type {
   KeyAction,
   KeyCode,
   ModifierCombination,
-} from "../vendor/rynk-wasm/rynk_wasm";
+  Morse,
+} from "../model/action-types";
 import { activeLocale, characterFor, keycapCharacter } from "./locale";
-import { DEFAULT_TAP_HOLD_PROFILE } from "./morse";
+import { DEFAULT_TAP_HOLD_PROFILE } from "../model/morse";
+import { slotsOf } from "../model/key-slots";
+import type { FacePart } from "./keyface/keyFace";
 
 /** Compact keycap symbols for HID codes that deserve better than their name. */
 const HID_SYMBOLS: Partial<Record<HidKeyCode, string>> = {
@@ -216,9 +219,33 @@ const CONTROL_LABELS: Record<string, string> = {
   ComboOff: "CmbOff",
   ComboToggle: "Combo",
   CapsWordToggle: "CapsWd",
+  MaintenanceModeToggle: "Maint",
 };
 
-export function actionLabel(action: Action): string {
+/** The layout's layer names, by layer; an empty name means unnamed. */
+export type LayerNames = readonly (string | undefined)[];
+
+/** The layer an action switches to, for the layer actions. */
+export function layerOf(action: Action): number | undefined {
+  if (typeof action !== "object") return undefined;
+  if ("LayerOn" in action) return action.LayerOn;
+  if ("LayerOnWithModifier" in action) return action.LayerOnWithModifier[0];
+  if ("LayerOff" in action) return action.LayerOff;
+  if ("LayerToggle" in action) return action.LayerToggle;
+  if ("DefaultLayer" in action) return action.DefaultLayer;
+  if ("LayerToggleOnly" in action) return action.LayerToggleOnly;
+  if ("OneShotLayer" in action) return action.OneShotLayer;
+  if ("PersistentDefaultLayer" in action) return action.PersistentDefaultLayer;
+  return undefined;
+}
+
+/** A layer as text: its name when it has one, else `fallback` (its number by default). */
+export function layerRef(names: LayerNames | undefined, layer: number, fallback = String(layer)): string {
+  return names?.[layer] || fallback;
+}
+
+/** A key's text. With `names`, a layer key reads as its layer's name, as in GLIDE. */
+export function actionLabel(action: Action, names?: LayerNames): string {
   if (action === "No") return "";
   if (action === "TriLayerLower") return "TriL";
   if (action === "TriLayerUpper") return "TriU";
@@ -229,17 +256,17 @@ export function actionLabel(action: Action): string {
     const [key, mods] = action.KeyWithModifier;
     return characterWithModifiers(key, mods) ?? modifierSymbols(mods) + hidLabel(key);
   }
-  if ("LayerOn" in action) return `L${action.LayerOn}`;
+  if ("LayerOn" in action) return layerRef(names, action.LayerOn, `L${action.LayerOn}`);
   if ("LayerOnWithModifier" in action) {
     const [layer, mods] = action.LayerOnWithModifier;
-    return `L${layer}${modifierSymbols(mods)}`;
+    return `${layerRef(names, layer, `L${layer}`)}${modifierSymbols(mods)}`;
   }
-  if ("LayerOff" in action) return `L${action.LayerOff}·off`;
-  if ("LayerToggle" in action) return `TG${action.LayerToggle}`;
-  if ("DefaultLayer" in action) return `DF${action.DefaultLayer}`;
-  if ("LayerToggleOnly" in action) return `TO${action.LayerToggleOnly}`;
+  if ("LayerOff" in action) return `${layerRef(names, action.LayerOff, `L${action.LayerOff}`)}·off`;
+  if ("LayerToggle" in action) return layerRef(names, action.LayerToggle, `TG${action.LayerToggle}`);
+  if ("DefaultLayer" in action) return layerRef(names, action.DefaultLayer, `DF${action.DefaultLayer}`);
+  if ("LayerToggleOnly" in action) return layerRef(names, action.LayerToggleOnly, `TO${action.LayerToggleOnly}`);
   if ("TriggerMacro" in action) return `M${action.TriggerMacro}`;
-  if ("OneShotLayer" in action) return `OSL${action.OneShotLayer}`;
+  if ("OneShotLayer" in action) return layerRef(names, action.OneShotLayer, `OSL${action.OneShotLayer}`);
   if ("OneShotModifier" in action) return `OS${modifierSymbols(action.OneShotModifier)}`;
   if ("OneShotKey" in action) return `OS·${hidLabel(action.OneShotKey)}`;
   if ("Light" in action) return LIGHT_LABELS[action.Light] ?? action.Light;
@@ -247,7 +274,8 @@ export function actionLabel(action: Action): string {
     return CONTROL_LABELS[action.KeyboardControl] ?? action.KeyboardControl;
   if ("Special" in action) return action.Special === "GraveEscape" ? "`Esc" : "Rpt";
   if ("User" in action) return `U${action.User}`;
-  if ("PersistentDefaultLayer" in action) return `PDF${action.PersistentDefaultLayer}`;
+  if ("PersistentDefaultLayer" in action)
+    return layerRef(names, action.PersistentDefaultLayer, `PDF${action.PersistentDefaultLayer}`);
   if ("Steno" in action) return `St${action.Steno}`;
   return "?";
 }
@@ -257,40 +285,80 @@ export interface KeyGlyph {
   text: string;
   /** Secondary line (hold action for tap-holds). */
   sub?: string;
+  /** The character Shift gives, drawn small on top (the "@" over "2"). */
+  top?: string;
   /** Render dimmed (Transparent). */
   dim?: boolean;
+  /** Pictures drawn instead of `text` (keyface/keyFace.ts). */
+  face?: FacePart[];
+  /** Pictures drawn instead of `sub`. */
+  subFace?: FacePart[];
+  /** A chord's modifiers, drawn small above the key (⌘ over Z). */
+  chord?: FacePart[];
+  /** A key that does nothing: GLIDE's faint slash. */
+  none?: boolean;
+  /** `text` is a layer's name: drawn in the accent colour under the layers mark (GLIDE). */
+  layer?: boolean;
+  /** `sub` is a layer's name (a hold that switches layer): drawn with the layers mark. */
+  subLayer?: boolean;
 }
 
-export function keyActionGlyph(action: KeyAction): KeyGlyph {
+/** The character a plain key types with Shift, when it is not just its own
+ *  capital: what GLIDE prints small at the top of the keycap. */
+function shiftedOnTop(action: Action): string | undefined {
+  if (typeof action !== "object" || !("Key" in action)) return undefined;
+  const key = action.Key;
+  if (typeof key !== "object" || !("Hid" in key)) return undefined;
+  const shifted = characterFor(activeLocale(), key.Hid, true);
+  return shifted !== null && shifted !== hidLabel(key.Hid) ? shifted : undefined;
+}
+
+/** On a keycap a modifier shows its symbol alone, as in GLIDE: "⇧", not "L⇧". */
+const capText = (label: string) => label.replace(/^[LR](?=[⌃⇧⌥⌘]+$)/, "");
+
+/** `morse` is the keyboard's morse table: a key whose entry is tap, hold and
+ *  double tap shows its tap, and its hold or double tap below it. */
+export function keyActionGlyph(action: KeyAction, morse: readonly Morse[] = [], names?: LayerNames): KeyGlyph {
   if (action === "No") return { text: "" };
   if (action === "Transparent") return { text: "▽", dim: true };
-  if ("Single" in action) return { text: actionLabel(action.Single) };
-  if ("Tap" in action) return { text: actionLabel(action.Tap) };
+  const label = (a: Action) => actionLabel(a, names);
+  // A layer key, as in GLIDE: the layer's name with the layers mark (`layer`, `subLayer`).
+  const tapGlyph = (a: Action): KeyGlyph =>
+    layerOf(a) !== undefined ? { text: label(a), layer: true } : { text: capText(label(a)), top: shiftedOnTop(a) };
+  const withHold = (glyph: KeyGlyph, hold: Action): KeyGlyph =>
+    layerOf(hold) !== undefined ? { ...glyph, sub: label(hold), subLayer: true } : { ...glyph, sub: capText(label(hold)) };
+  if ("Single" in action) return tapGlyph(action.Single);
+  if ("Tap" in action) return tapGlyph(action.Tap);
   if ("TapHold" in action) {
     const [tap, hold] = action.TapHold;
-    return { text: actionLabel(tap), sub: actionLabel(hold) };
+    return withHold({ text: capText(label(tap)) }, hold);
   }
-  if ("Morse" in action) return { text: `Mo${action.Morse}` };
+  if ("Morse" in action) {
+    const slots = slotsOf(action, morse);
+    if (slots.kind !== "slots") return { text: `Mo${action.Morse}` };
+    const glyph = { text: label(slots.tap) };
+    return slots.hold !== null ? withHold(glyph, slots.hold) : { ...glyph, sub: `2×${label(slots.doubleTap ?? "No")}` };
+  }
   return { text: "?" };
 }
 
 /** One-line description for the inspector header. */
-export function keyActionDescription(action: KeyAction): string {
+export function keyActionDescription(action: KeyAction, names?: LayerNames): string {
   if (action === "No") return "No action";
   if (action === "Transparent") return "Transparent — falls through to lower layer";
-  if ("Single" in action) return actionDescription(action.Single);
-  if ("Tap" in action) return `Tap: ${actionDescription(action.Tap)}`;
+  if ("Single" in action) return actionDescription(action.Single, names);
+  if ("Tap" in action) return `Tap: ${actionDescription(action.Tap, names)}`;
   if ("TapHold" in action) {
     const [tap, hold, profile] = action.TapHold;
     const timing =
       profile === DEFAULT_TAP_HOLD_PROFILE ? "default timing" : `timing profile ${profile}`;
-    return `Tap ${actionLabel(tap) || "·"} / hold ${actionLabel(hold) || "·"} · ${timing}`;
+    return `Tap ${actionLabel(tap, names) || "·"} / hold ${actionLabel(hold, names) || "·"} · ${timing}`;
   }
   if ("Morse" in action) return `Morse pattern slot ${action.Morse}`;
   return "Unknown action";
 }
 
-export function actionDescription(action: Action): string {
+export function actionDescription(action: Action, names?: LayerNames): string {
   if (action === "No") return "No action";
   if (typeof action === "string") return action;
   if ("Key" in action) return `Key · ${keyCodeLabel(action.Key)}`;
@@ -302,13 +370,14 @@ export function actionDescription(action: Action): string {
       character !== null ? ` — types ${character}` : ""
     }`;
   }
-  if ("LayerOn" in action) return `Momentary layer ${action.LayerOn}`;
-  if ("LayerToggle" in action) return `Toggle layer ${action.LayerToggle}`;
-  if ("DefaultLayer" in action) return `Default layer ${action.DefaultLayer}`;
-  if ("OneShotLayer" in action) return `One-shot layer ${action.OneShotLayer}`;
+  if ("LayerOn" in action) return `Momentary layer ${layerRef(names, action.LayerOn)}`;
+  if ("LayerToggle" in action) return `Toggle layer ${layerRef(names, action.LayerToggle)}`;
+  if ("DefaultLayer" in action) return `Default layer ${layerRef(names, action.DefaultLayer)}`;
+  if ("OneShotLayer" in action) return `One-shot layer ${layerRef(names, action.OneShotLayer)}`;
+  if ("LayerToggleOnly" in action) return `Switch to layer ${layerRef(names, action.LayerToggleOnly)}`;
   if ("OneShotModifier" in action) return `One-shot ${modifierSymbols(action.OneShotModifier)}`;
   if ("TriggerMacro" in action) return `Trigger macro ${action.TriggerMacro}`;
   if ("Light" in action) return `Lighting · ${action.Light}`;
   if ("KeyboardControl" in action) return `Control · ${action.KeyboardControl}`;
-  return actionLabel(action);
+  return actionLabel(action, names);
 }

@@ -1,13 +1,14 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { testWorkbench } from "../../test/workbench";
 import { WorkbenchContext } from "../state";
-import type { WorkbenchContextValue, WorkbenchState } from "../state";
-import { KeymapInspector } from "./KeymapMode";
+import type { WorkbenchState } from "../../workbench";
+import { KeymapInspector } from "./SideInspector";
 
 const UNSUPPORTED = "does not expose runtime pointing configuration";
 
 function markup(state: Partial<WorkbenchState>): string {
-  const value = {
+  const value = testWorkbench({
     bundle: {
       model: { pointingDevices: [{ id: 0, label: "Left trackpad" }] },
     },
@@ -23,7 +24,7 @@ function markup(state: Partial<WorkbenchState>): string {
     },
     dispatch: () => {},
     io: { reloadPointingConfig: async () => ({ ok: true as const }) },
-  } as unknown as WorkbenchContextValue;
+  });
 
   return renderToStaticMarkup(
     <WorkbenchContext value={value}>

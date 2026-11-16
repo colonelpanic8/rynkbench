@@ -3,8 +3,8 @@
 
 import type { LightingEffect } from "../../vendor/rynk-wasm/rynk_wasm";
 import type { KeyDecor } from "../KeyboardCanvas";
-import { cssEmissiveRgb } from "../color";
-import { effectRgb } from "./effect";
+import { cssEmissiveRgb } from "../../model/lighting/color";
+import { effectRgb } from "../../model/lighting/effect";
 
 export function effectColor(effect: LightingEffect): string {
   return cssEmissiveRgb(effectRgb(effect));

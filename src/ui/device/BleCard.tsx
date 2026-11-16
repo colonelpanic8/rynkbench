@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { BleStatus, PeripheralStatus } from "../../vendor/rynk-wasm/rynk_wasm";
-import { errorMessage, useWorkbench } from "../state";
+import { errorMessage } from "../../session/errors";
+import { useWorkbench } from "../state";
 import { Button, Chip, Panel, SectionLabel, cx } from "../kit";
 import { BatteryGlyph, BleIcon } from "../icons";
 import { readBleStatus } from "./ble-status";
@@ -125,14 +126,14 @@ export function BleCard() {
 
       <div className="mt-3">
         <div className="flex items-center justify-between">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-faint">
+          <div className="text-small font-medium uppercase tracking-wider text-faint">
             Profiles
           </div>
           {armingAll ? (
             <span className="flex items-center gap-1.5">
               <Button
                 variant="danger"
-                className="px-2 py-0.5 text-[11.5px]"
+                className="px-2 py-0.5 text-small"
                 disabled={busy}
                 onClick={clearAll}
               >
@@ -140,7 +141,7 @@ export function BleCard() {
               </Button>
               <Button
                 variant="ghost"
-                className="px-2 py-0.5 text-[11.5px]"
+                className="px-2 py-0.5 text-small"
                 disabled={busy}
                 onClick={() => setArmingAll(false)}
               >
@@ -152,7 +153,7 @@ export function BleCard() {
               type="button"
               title="Forget every Bluetooth host pairing"
               disabled={busy}
-              className="cursor-pointer text-[11.5px] text-faint underline underline-offset-2 transition-colors duration-120 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
+              className="cursor-pointer text-small text-faint underline underline-offset-2 transition-colors duration-120 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
               onClick={() => {
                 setArming(null);
                 setArmingAll(true);
@@ -175,7 +176,7 @@ export function BleCard() {
               >
                 <span
                   className={cx(
-                    "tnum font-mono text-[12.5px]",
+                    "tnum font-mono text-body",
                     active ? "text-accent" : "text-mute",
                   )}
                 >
@@ -188,7 +189,7 @@ export function BleCard() {
                     type="button"
                     title={`Make profile ${slot} the active BLE connection`}
                     disabled={busy}
-                    className="cursor-pointer text-[11.5px] text-faint underline underline-offset-2 transition-colors duration-120 hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+                    className="cursor-pointer text-small text-faint underline underline-offset-2 transition-colors duration-120 hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
                     onClick={() => switchSlot(slot)}
                   >
                     {switching === slot ? "Switching…" : "Switch"}
@@ -198,7 +199,7 @@ export function BleCard() {
                   <span className="flex items-center gap-1.5">
                     <Button
                       variant="danger"
-                      className="px-2 py-0.5 text-[11.5px]"
+                      className="px-2 py-0.5 text-small"
                       disabled={busy}
                       onClick={() => clearSlot(slot)}
                     >
@@ -206,7 +207,7 @@ export function BleCard() {
                     </Button>
                     <Button
                       variant="ghost"
-                      className="px-2 py-0.5 text-[11.5px]"
+                      className="px-2 py-0.5 text-small"
                       disabled={busy}
                       onClick={() => setArming(null)}
                     >
@@ -218,7 +219,7 @@ export function BleCard() {
                     type="button"
                     title={`Forget the pairing stored in profile ${slot}`}
                     disabled={busy}
-                    className="cursor-pointer text-[11.5px] text-faint underline underline-offset-2 transition-colors duration-120 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
+                    className="cursor-pointer text-small text-faint underline underline-offset-2 transition-colors duration-120 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
                     onClick={() => {
                       setArmingAll(false);
                       setArming(slot);
@@ -235,7 +236,7 @@ export function BleCard() {
 
       {caps.is_split && peripherals.length > 0 && (
         <div className="mt-3">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-faint">
+          <div className="text-small font-medium uppercase tracking-wider text-faint">
             Peripherals
           </div>
           <div className="mt-1.5 flex flex-col divide-y divide-line-soft">
@@ -246,10 +247,10 @@ export function BleCard() {
                   : null;
               return (
                 <div key={slot} className="flex items-center gap-3 py-1.5">
-                  <span className="text-[12.5px] text-mute">Half {slot + 1}</span>
+                  <span className="text-body text-mute">Half {slot + 1}</span>
                   <div className="flex-1" />
                   {peripheral === null ? (
-                    <span className="text-[11.5px] text-faint">…</span>
+                    <span className="text-small text-faint">…</span>
                   ) : (
                     <>
                       <Chip tone={peripheral.connected ? "ok" : "danger"}>
@@ -262,7 +263,7 @@ export function BleCard() {
                             charging={battery.charge_state === "Charging"}
                             size={20}
                           />
-                          <span className="tnum text-[12px] text-mute">
+                          <span className="tnum text-body text-mute">
                             {battery.level != null ? `${battery.level}%` : "—"}
                           </span>
                         </span>
@@ -276,7 +277,7 @@ export function BleCard() {
         </div>
       )}
 
-      {error && <div className="mt-2 text-[12px] text-danger">Failed: {error}</div>}
+      {error && <div className="mt-2 text-body text-danger">Failed: {error}</div>}
     </Panel>
   );
 }

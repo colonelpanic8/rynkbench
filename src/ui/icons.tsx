@@ -79,12 +79,119 @@ export function FileConfigIcon(props: IconProps) {
   );
 }
 
-/** Effects mode: an animated sparkle from the firmware's effect pack. */
-export function SparkleIcon(props: IconProps) {
+/** Insights: what is used and how the keyboard is doing. */
+export function InsightsIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
-      <path d="M6.4 1.8l1.1 2.9 2.9 1.1-2.9 1.1-1.1 2.9-1.1-2.9L2.4 5.8l2.9-1.1z" />
-      <path d="M11.6 8.6l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7z" />
+      <path d="M2 13.8h12" />
+      <path d="M4 11.2V8.6M7 11.2V4.6M10 11.2V6.8M13 11.2V2.6" />
+    </svg>
+  );
+}
+
+/** Settings: a slider pair. */
+/** GLIDE's sliders: Layout properties (and the key editor's Every action). */
+export function SlidersIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M2.2 4.8h6.2M11.6 4.8h2.2M2.2 11.2h2.2M7.6 11.2h6.2" />
+      <circle cx="10" cy="4.8" r="1.6" />
+      <circle cx="6" cy="11.2" r="1.6" />
+    </svg>
+  );
+}
+
+/** GLIDE's cog (its top bar's Settings button). */
+export function GearIcon(props: IconProps) {
+  return (
+    <svg {...base(props)} viewBox="0 0 24 24" strokeWidth={2}>
+      <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+      <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  );
+}
+
+/** Row actions: three dots, stacked. */
+export function MoreIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="8" cy="3.4" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="8" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="12.6" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** A small downward chevron, for split buttons and menus. */
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 6.2l4 4 4-4" />
+    </svg>
+  );
+}
+
+/** Open: a folder. */
+export function FolderIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M1.8 4.6a1.2 1.2 0 011.2-1.2h3l1.3 1.4h5.7a1.2 1.2 0 011.2 1.2v6.4a1.2 1.2 0 01-1.2 1.2H3a1.2 1.2 0 01-1.2-1.2z" />
+    </svg>
+  );
+}
+
+/** Save: down into a tray. */
+export function DownloadIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8 2.4v8M4.8 7.4L8 10.6l3.2-3.2M2.6 13.4h10.8" />
+    </svg>
+  );
+}
+
+/** The phone drawer: three lines. */
+export function MenuIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M2.6 4h10.8M2.6 8h10.8M2.6 12h10.8" />
+    </svg>
+  );
+}
+
+/** A pencil: change this. */
+export function PencilIcon(props: IconProps) {
+  return (
+    <svg {...base(props)} strokeWidth={1.8}>
+      <path d="M10.8 2.8 13.2 5.2 5.6 12.8 2.6 13.4 3.2 10.4Z" />
+    </svg>
+  );
+}
+
+/** A paint brush: Paint gives keys a look by clicking or dragging over them. */
+export function BrushIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M13.2 2.8 7.4 8.6" />
+      <path d="M7.9 8.1 6.4 6.6" />
+      <path d="M6.2 8.3c-1.4-.4-2.6.5-2.8 1.9-.2 1.2-.6 2-1.6 2.6 2.4.6 4.9.3 5.6-1.6.4-1.1-.2-2.3-1.2-2.9Z" />
+    </svg>
+  );
+}
+
+export function SearchIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="7" cy="7" r="4.3" />
+      <path d="M10.2 10.2 13.5 13.5" />
+    </svg>
+  );
+}
+
+/** Six dots: a handle to drag a row by. */
+export function GripIcon(props: IconProps) {
+  return (
+    <svg {...base(props)} fill="currentColor" stroke="none">
+      {[5.5, 10.5].map((x) => [4, 8, 12].map((y) => <circle key={`${x},${y}`} cx={x} cy={y} r={1.1} />))}
     </svg>
   );
 }
@@ -184,6 +291,16 @@ export function WarningIcon(props: IconProps) {
     <svg {...base(props)}>
       <path d="M8 2.2L14.5 13.4H1.5z" />
       <path d="M8 6.4v3.2M8 11.7v.01" />
+    </svg>
+  );
+}
+
+/** Rynkbench Guard's mark: a shield. */
+export function ShieldIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8 1.6l5.4 2v4.1c0 3.2-2.3 5.6-5.4 6.7-3.1-1.1-5.4-3.5-5.4-6.7V3.6z" />
+      <path d="M5.6 8.1l1.7 1.7 3.2-3.3" />
     </svg>
   );
 }
@@ -330,6 +447,16 @@ export function Wordmark({ size = 28 }: { size?: number }) {
       />
       <rect x="6" y="9" width="16" height="11" rx="2.6" fill="var(--color-cap)" />
       <circle cx="14" cy="14.5" r="2.6" fill="var(--color-accent)" />
+    </svg>
+  );
+}
+
+/** An (i): a setting with a word that needs explaining. */
+export function InfoIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 7.2v3.6M8 5.2v.01" />
     </svg>
   );
 }

@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { SplitCentralLatencyState } from "../../vendor/rynk-wasm/rynk_wasm";
-import { errorMessage, useWorkbench } from "../state";
+import { errorMessage } from "../../session/errors";
+import { useWorkbench } from "../state";
 import { useDeviceDraft } from "../device-draft";
 import { SaveBar } from "../write-status";
 import { Button, Chip, Panel, SectionLabel } from "../kit";
@@ -82,11 +83,11 @@ export function SplitLatencyCard() {
   };
 
   const inputClass =
-    "w-24 rounded-md border border-line bg-cap px-2 py-1 text-right font-mono text-[12px] text-cap-ink outline-none focus:border-accent";
+    "w-24 rounded-md border border-line bg-cap px-2 py-1 text-right font-mono text-body text-cap-ink outline-none focus:border-accent";
 
   const field = (key: keyof LatencyDraft, id: string, label: string, placeholder?: string) => (
     <>
-      <label htmlFor={id} className="text-[12.5px] text-mute">
+      <label htmlFor={id} className="text-body text-mute">
         {label}
       </label>
       <input
@@ -110,7 +111,7 @@ export function SplitLatencyCard() {
           {deviceState.powered ? "USB powered" : "battery"} · effective {deviceState.effective}
         </Chip>
       </div>
-      <p className="mt-2 text-[12px] leading-relaxed text-mute">
+      <p className="mt-2 text-body leading-relaxed text-mute">
         Maximum BLE connection events the central may skip while active. The runtime override is
         volatile; leave it blank to follow the current power source.
       </p>
@@ -120,7 +121,7 @@ export function SplitLatencyCard() {
         {field("override", "latency-override", "Runtime override", "auto")}
       </div>
       {!valid && (
-        <p className="mt-2 text-[11.5px] text-danger">Use whole numbers from 0 through 499.</p>
+        <p className="mt-2 text-small text-danger">Use whole numbers from 0 through 499.</p>
       )}
       <SaveBar
         className="mt-3 flex items-center gap-2"
@@ -142,7 +143,7 @@ export function SplitLatencyCard() {
           </Button>
         )}
       </SaveBar>
-      {error && <div className="mt-2 text-[12px] text-danger">Failed: {error}</div>}
+      {error && <div className="mt-2 text-body text-danger">Failed: {error}</div>}
     </Panel>
   );
 }

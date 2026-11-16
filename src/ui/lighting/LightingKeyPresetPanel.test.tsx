@@ -1,14 +1,23 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { WorkbenchContext, type WorkbenchContextValue } from "../state";
+import { testWorkbench } from "../../test/workbench";
+import { WorkbenchContext } from "../state";
 import { LightingKeyPresetPanel } from "./LightingKeyPresetPanel";
-import { replaceLightingKeyRules } from "./lightingKeyPresets";
+import { replaceLightingKeyRules } from "../../model/lighting/key-presets";
 
 function render(batchMode: boolean, current: unknown = "No") {
-  const value = {
+  const value = testWorkbench({
+    // Capabilities resolve from the connect bundle: extension effects present,
+    // output-mode policy absent.
     bundle: {
       runtimeConditionalStatus: { capacity: 32 },
       lightingCaps: { features: 1 << 15 },
+      lightingState: {},
+      lightingExtension: { state: { value: 1 } },
+      lightingOutputMode: null,
+      sceneStatus: null,
+      compiledSceneStatus: null,
+      pointingConfig: null,
     },
     state: {
       batchMode,
@@ -20,13 +29,12 @@ function render(batchMode: boolean, current: unknown = "No") {
         kind: "effects", layer: 1, row: 0, col: 0, led: 4,
       }),
       lightingBusy: false,
-      keyEditHistorySuspended: false,
       pointingBusy: false,
       batchBusy: false,
       pending: {},
     },
     dispatch: () => {},
-  } as unknown as WorkbenchContextValue;
+  });
   return renderToStaticMarkup(
     <WorkbenchContext value={value}>
       <LightingKeyPresetPanel
@@ -43,7 +51,7 @@ describe("lighting key presets", () => {
     const html = render(false);
     expect(html).toMatch(/<button[^>]*>[^<]*<div[^>]*>Toggle RGB effects/);
     expect(html).toMatch(/<button[^>]*disabled[^>]*>[^<]*<div[^>]*>Cycle lighting policy/);
-    expect(html).toContain("wake setting");
+    expect(html).toContain("let that layer wake them");
     expect(html).not.toContain("MoErgo");
   });
 

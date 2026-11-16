@@ -77,6 +77,9 @@ import {
   hasLightingFeature,
 } from "./lighting-features";
 import { unsupported } from "./unsupported";
+import { SessionError } from "./errors";
+import { KEYMAP_WRITE_PAGE_KEYS, retryBusy, writeKeyRun } from "./flash-writes";
+export { isBusyError } from "./flash-writes";
 import {
   encodeRuleChunks,
   ruleFromAdvanced,
@@ -128,37 +131,12 @@ export function waitsForFlash(op: string): boolean {
   );
 }
 
-/** Whether a rejected request was the firmware's `Busy`: its flash queue had
- *  no room for the write, nothing was applied, and the same request is welcome
- *  again once the queue drains. */
-export function isBusyError(error: unknown): boolean {
-  return error instanceof Error && error.name === "Rejected" && /\bBusy\b/.test(error.message);
-}
-
-const BUSY_RETRY_DELAY_MS = 100;
-const BUSY_RETRY_LIMIT_MS = 300_000;
-
-/** Run a keymap write, sending it again while the firmware answers `Busy`.
- *  The firmware waits about half a second for flash-queue room before saying
- *  so, which paces the retries; the limit spans a page migration of minutes. */
-async function retryBusy<T>(op: () => Promise<T>): Promise<T> {
-  const started = performance.now();
-  for (;;) {
-    try {
-      return await op();
-    } catch (error) {
-      if (!isBusyError(error) || performance.now() - started >= BUSY_RETRY_LIMIT_MS) throw error;
-      await new Promise((resolve) => setTimeout(resolve, BUSY_RETRY_DELAY_MS));
-    }
-  }
-}
-
-export class RequestTimeout extends Error {
+export class RequestTimeout extends SessionError {
   readonly op: string;
   readonly timeoutMs: number;
 
   constructor(op: string, timeoutMs: number) {
-    super(`the keyboard did not answer ${op} within ${timeoutMs}ms — the link was closed`);
+    super("timeout", `the keyboard did not answer ${op} within ${timeoutMs}ms — the link was closed`);
     this.op = op;
     this.timeoutMs = timeoutMs;
     this.name = "RequestTimeout";
@@ -809,6 +787,7 @@ export class LinkSession implements RynkSession {
         this.run(() => retryBusy(() => client.set_key(layer, row, col, action))),
       setRows: (layer, startRow, actions) =>
         this.run(() => this.writeRows(layer, startRow, actions)),
+      writeKeys: (layer, start, actions) => this.run(() => this.writeKeyRun(layer, start, actions)),
       getEncoder: (encoderId, layer) => this.run(() => client.get_encoder(encoderId, layer)),
       setEncoder: (encoderId, layer, action) =>
         this.run(() => client.set_encoder(encoderId, layer, action)),
@@ -1100,6 +1079,26 @@ export class LinkSession implements RynkSession {
         this.client.set_key(layer, Math.floor(key / caps.num_cols), key % caps.num_cols, action),
       );
     }
+  }
+
+  /** Cells per bulk page, or 0 when the firmware has no bulk write: the
+   *  smaller of the firmware's page and what its flash queue takes whole. */
+  private bulkPageKeys: Promise<number> | null = null;
+
+  private pageKeys(): Promise<number> {
+    this.bulkPageKeys ??= (async () => {
+      const caps = await this.capabilities();
+      if (!caps.bulk_transfer_supported || caps.num_rows * caps.num_cols === 0) return 0;
+      const bulkCapacity = (await this.client.get_keymap_bulk(0, 0, 0)).actions.length;
+      if (bulkCapacity < 1) throw new Error("keymap bulk endpoint returned an empty page");
+      return Math.min(bulkCapacity, KEYMAP_WRITE_PAGE_KEYS);
+    })();
+    return this.bulkPageKeys;
+  }
+
+  private async writeKeyRun(layer: number, start: number, actions: KeyAction[]): Promise<void> {
+    const caps = await this.capabilities();
+    await writeKeyRun(this.client, { rows: caps.num_rows, cols: caps.num_cols, page: await this.pageKeys() }, layer, start, actions);
   }
 
   private async readLayerState(): Promise<LayerSnapshot> {

@@ -21,12 +21,14 @@ const bleUserActions = [
     label: "Bluetooth · clear active / selected",
     hint: "Tap alone for the active profile; hold with a profile key to clear and activate that slot · U10",
     danger: true,
+    icon: "bt-clr",
   },
   {
     id: 11,
     label: "Bluetooth · clear all profiles",
     hint: "Forget every host pairing while preserving split-half and dongle bonds · U11",
     danger: true,
+    icon: "bt-clr-all",
   },
 ] as const;
 

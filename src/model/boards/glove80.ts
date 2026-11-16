@@ -4,6 +4,7 @@
 
 import type { BoardEnrichment } from "../keyboard";
 import { buildMoergoAddresses, type MatrixPosition } from "./moergo";
+import { GLOVE80_GLIDE_CENTERS } from "./glove80-geometry";
 
 export const GLOVE80_ROWS = 6;
 export const GLOVE80_COLS = 14;
@@ -54,11 +55,8 @@ function buildLabels(): Record<string, string> {
 
 // --- physical geometry -----------------------------------------------------
 //
-// Main-grid columns span cells 0-5 (left) and 12-17 (right); the two outermost
-// columns of each half sit 0.5u lower than the finger columns; the thumb
-// clusters are 2x3 fans angled inward. This copy exists only to build the
-// simulated Glove80 device; real keyboards supply their geometry through
-// GetLayout.
+// The simulated Glove80 reports GLIDE's drawing as its geometry, and the
+// Glove80 profile draws a real one the same way (glove80Enrichment.geometry).
 
 /** Per-logical-key placement plus its LED-chain index and thumb membership. */
 export interface Glove80Key {
@@ -91,55 +89,28 @@ const LOGICAL_ROWS = [
   { left: [64, 65, 66, 67, 68], right: [75, 76, 77, 78, 79] },
 ] as const;
 
-const MIRROR_WIDTH = 17; // x' = MIRROR_WIDTH - x reflects left half onto right
-const STAGGERED_LEFT_CELLS = new Set([0, 1]);
-
-// Left thumb fan: visual center (x, y) and clockwise degrees, outer-to-inner,
-// top row then bottom row. The right fan is its exact mirror image.
-const THUMB_FAN: Array<[number, number, number]> = [
-  [6.07, 4.95, 20],
-  [7.0, 5.37, 30],
-  [7.85, 6.01, 45],
-  [5.12, 5.84, 15],
-  [6.12, 6.25, 25],
-  [7.07, 6.93, 45],
-];
+// Positions are GLIDE's drawing of the Glove80 (glove80-geometry.ts); the
+// LED chain is the firmware's.
+function placed(logical: number, led: number, thumb: boolean): Glove80Key {
+  const [x, y, rot] = GLOVE80_GLIDE_CENTERS[logical];
+  return { x, y, rot, led, thumb };
+}
 
 function buildBoardKeys(): Map<number, Glove80Key> {
   const keys = new Map<number, Glove80Key>();
   MAIN_LED_ROWS_LEFT.forEach((leftLeds, row) => {
     const rightLeds = [...leftLeds].reverse().map((index) => index + 40);
     const { left, right } = LOGICAL_ROWS[row];
-    // 5-key rows lack the innermost finger column, so the right half's cells
-    // shift by one to stay flush against the board's outer edge.
-    const rightStart = 12 + (6 - leftLeds.length);
-    leftLeds.forEach((led, column) => {
-      const y = row + (STAGGERED_LEFT_CELLS.has(column) ? 0.5 : 0);
-      keys.set(left[column], { x: column, y, rot: 0, led, thumb: false });
-    });
-    rightLeds.forEach((led, column) => {
-      const x = rightStart + column;
-      const y = row + (STAGGERED_LEFT_CELLS.has(MIRROR_WIDTH - x) ? 0.5 : 0);
-      keys.set(right[column], { x, y, rot: 0, led, thumb: false });
-    });
+    leftLeds.forEach((led, column) => keys.set(left[column], placed(left[column], led, false)));
+    rightLeds.forEach((led, column) => keys.set(right[column], placed(right[column], led, false)));
   });
   const leftThumbLogical = [52, 53, 54, 69, 70, 71];
   const rightThumbLogical = [55, 56, 57, 72, 73, 74];
   const leftThumbLeds = [0, 1, 2, 3, 4, 5];
   const rightThumbLeds = [42, 41, 40, 45, 44, 43];
   for (let index = 0; index < 6; index++) {
-    const [x, y, rot] = THUMB_FAN[index];
-    keys.set(leftThumbLogical[index], { x, y, rot, led: leftThumbLeds[index], thumb: true });
-    // Right thumb logicals run inner-to-outer, so mirror the reversed fan row.
-    const row = Math.floor(index / 3);
-    const [mx, my, mrot] = THUMB_FAN[row * 3 + (2 - (index % 3))];
-    keys.set(rightThumbLogical[index], {
-      x: MIRROR_WIDTH - mx,
-      y: my,
-      rot: -mrot,
-      led: rightThumbLeds[index],
-      thumb: true,
-    });
+    keys.set(leftThumbLogical[index], placed(leftThumbLogical[index], leftThumbLeds[index], true));
+    keys.set(rightThumbLogical[index], placed(rightThumbLogical[index], rightThumbLeds[index], true));
   }
   return keys;
 }
@@ -147,8 +118,20 @@ function buildBoardKeys(): Map<number, Glove80Key> {
 /** Logical key index → real placement + LED chain for the mock device. */
 export const GLOVE80_BOARD_KEYS: Map<number, Glove80Key> = buildBoardKeys();
 
+/** GLIDE's drawing of the Glove80, keyed by matrix "row,col". */
+function buildGeometry(): NonNullable<BoardEnrichment["geometry"]> {
+  const geometry: NonNullable<BoardEnrichment["geometry"]> = {};
+  GLOVE80_GRID.forEach((logical, grid) => {
+    if (logical === null) return;
+    const [x, y, r] = GLOVE80_GLIDE_CENTERS[logical];
+    geometry[`${Math.floor(grid / GLOVE80_COLS)},${grid % GLOVE80_COLS}`] = { x, y, r };
+  });
+  return geometry;
+}
+
 export const glove80Enrichment: BoardEnrichment = {
   displayName: "Glove80",
   labels: buildLabels(),
   addresses: GLOVE80_ADDRESSES,
+  geometry: buildGeometry(),
 };

@@ -10,7 +10,7 @@ import type {
 import type { KeyView } from "../../model/keyboard";
 import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
-import { keyActionGlyph } from "../labels";
+
 import {
   keyAddressLabel,
   keyAtPosition,
@@ -18,7 +18,7 @@ import {
 } from "../key-address";
 import { ActionEditor, SlotPicker } from "../keymap/ActionEditor";
 import { useWorkbench } from "../state";
-import { same } from "../deep-equal";
+import { same } from "../../model/deep-equal";
 import { emptyCombo } from "../../model/slots";
 import { Button, Chip, InspectorShell, SectionLabel, cx } from "../kit";
 import { CloseIcon, PlusIcon, TrashIcon } from "../icons";
@@ -32,12 +32,14 @@ import {
   comboWithLayer,
   comboWithOutput,
   samePosition,
-} from "../combos";
+} from "../../model/combos";
+import { useKeyText } from "../useKeyText";
 
 function TriggerChip({ action, onRemove }: { action: KeyAction; onRemove: () => void }) {
-  const glyph = keyActionGlyph(action);
+  const keyText = useKeyText();
+  const glyph = keyText.glyph(action);
   return (
-    <span className="inline-flex items-center gap-1 rounded-md border border-cap-edge bg-cap px-2 py-1 font-mono text-[12.5px] text-cap-ink">
+    <span className="inline-flex items-center gap-1 rounded-md border border-cap-edge bg-cap px-2 py-1 font-mono text-body text-cap-ink">
       {glyph.text || "·"}
       <button
         type="button"
@@ -64,7 +66,7 @@ function PositionChip({
   return (
     <span
       title={keyHoverTitle(key)}
-      className="inline-flex items-center gap-1 rounded-md border border-cap-edge bg-cap px-2 py-1 font-mono text-[12.5px] text-cap-ink"
+      className="inline-flex items-center gap-1 rounded-md border border-cap-edge bg-cap px-2 py-1 font-mono text-body text-cap-ink"
     >
       {keyAddressLabel(key)}
       <button
@@ -86,6 +88,7 @@ export function CombosTab({
   nav: ReactNode;
   goBehavior: () => void;
 }) {
+  const keyText = useKeyText();
   const { bundle, state, io } = useWorkbench();
   const caps = bundle.caps;
   const cols = caps.num_cols;
@@ -126,7 +129,7 @@ export function CombosTab({
 
   const decorFor = (key: KeyView): KeyDecor => {
     const action = layerActions?.[key.row * cols + key.col];
-    const glyph = action !== undefined ? keyActionGlyph(action) : { text: "" };
+    const glyph = action !== undefined ? keyText.glyph(action) : { text: "" };
     if (!glyph.text && key.label) {
       glyph.text = key.label;
       glyph.dim = true;
@@ -153,18 +156,18 @@ export function CombosTab({
         <div className="flex items-center gap-3 px-1">
           {editing ? (
             <>
-              <span className="text-[12.5px] text-mute">
+              <span className="text-body text-mute">
                 Click keys to add them to the chord
               </span>
               <Chip tone={full ? "accent" : "neutral"} className="tnum">
                 {triggerCount} / {caps.max_combo_keys} keys
               </Chip>
-              <span className="tnum text-[11.5px] text-faint">
+              <span className="tnum text-small text-faint">
                 capturing from layer {captureLayer}
               </span>
             </>
           ) : (
-            <span className="text-[12.5px] text-faint">
+            <span className="text-body text-faint">
               Select a combo — or add one — to capture its trigger keys on the board.
             </span>
           )}
@@ -190,14 +193,14 @@ export function CombosTab({
       <InspectorShell>
         <div className="flex items-center justify-between">
           <SectionLabel>Combos</SectionLabel>
-          <span className="tnum text-[11px] text-faint">
+          <span className="tnum text-small text-faint">
             {state.combos.filter((c) => !comboIsEmpty(c)).length} / {caps.max_combos} slots
           </span>
         </div>
 
         <div className="mt-2 flex flex-col gap-1.5">
           {entries.length === 0 && (
-            <div className="rounded-lg border border-line-soft bg-well/50 px-3 py-4 text-center text-[12px] text-faint">
+            <div className="rounded-lg border border-line-soft bg-well/50 px-3 py-4 text-center text-body text-faint">
               No combos yet. A combo fires an action when several keys are pressed together.
             </div>
           )}
@@ -213,11 +216,11 @@ export function CombosTab({
                   : "border-line bg-raised hover:border-line-strong",
               )}
             >
-              <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ink">
+              <span className="min-w-0 flex-1 truncate font-mono text-body text-ink">
                 {(() => {
                   const displayed = index === sel && draft ? draft : combo;
                   return comboIsActions(displayed)
-                    ? displayed.Actions.actions.map((a) => keyActionGlyph(a).text || "·").join(" + ") || "—"
+                    ? displayed.Actions.actions.map((a) => keyText.glyph(a).text || "·").join(" + ") || "—"
                     : displayed.Positions.positions
                         .map((position) =>
                           keyAddressLabel(keyAtPosition(bundle.model.keys, position)),
@@ -225,7 +228,7 @@ export function CombosTab({
                         .join(" + ") || "—";
                 })()}
                 <span className="mx-1.5 text-faint">→</span>
-                {keyActionGlyph(comboOutput(index === sel && draft ? draft : combo)).text || "·"}
+                {keyText.glyph(comboOutput(index === sel && draft ? draft : combo)).text || "·"}
               </span>
               {comboLayer(index === sel && draft ? draft : combo) !== undefined && (
                 <Chip className="tnum shrink-0">
@@ -255,7 +258,7 @@ export function CombosTab({
                       : { Positions: { positions: [], output, layer } });
                     setPickerOpen(false);
                   }}
-                  className="rounded-lg border border-line bg-well px-2 py-1 text-[12px] text-ink"
+                  className="rounded-lg border border-line bg-well px-2 py-1 text-body text-ink"
                 >
                   <option value="actions">Match actions</option>
                   <option value="positions">Match positions</option>
@@ -263,7 +266,7 @@ export function CombosTab({
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                 {triggerCount === 0 && (
-                  <span className="text-[12px] text-faint">Click keys on the board…</span>
+                  <span className="text-body text-faint">Click keys on the board…</span>
                 )}
                 {comboIsActions(draft)
                   ? draft.Actions.actions.map((action, i) => (
@@ -296,7 +299,7 @@ export function CombosTab({
                 <>
                   <button
                     type="button"
-                    className="mt-1.5 cursor-pointer text-[11.5px] text-faint underline underline-offset-2 transition-colors duration-120 hover:text-mute"
+                    className="mt-1.5 cursor-pointer text-small text-faint underline underline-offset-2 transition-colors duration-120 hover:text-mute"
                     onClick={() => setPickerOpen((v) => !v)}
                   >
                     {pickerOpen ? "Hide picker" : "Add a trigger without a physical key…"}
@@ -316,7 +319,7 @@ export function CombosTab({
               )}
             </div>
 
-            <label className="flex items-center justify-between gap-3 text-[12.5px] text-mute">
+            <label className="flex items-center justify-between gap-3 text-body text-mute">
               Only on layer
               <select
                 value={comboLayer(draft) ?? "any"}
@@ -324,7 +327,7 @@ export function CombosTab({
                   draft,
                   e.target.value === "any" ? undefined : Number(e.target.value),
                 ))}
-                className="rounded-lg border border-line bg-well px-2 py-1 text-[12.5px] text-ink"
+                className="rounded-lg border border-line bg-well px-2 py-1 text-body text-ink"
               >
                 <option value="any">Any layer</option>
                 {Array.from({ length: caps.num_layers }, (_, n) => (
@@ -335,22 +338,22 @@ export function CombosTab({
               </select>
             </label>
 
-            <div className="text-[11.5px] text-faint">
+            <div className="text-small text-faint">
               Chord window: {state.behavior ? `${state.behavior.combo_timeout_ms} ms` : "—"} ·{" "}
               <button
                 type="button"
                 className="cursor-pointer underline underline-offset-2 transition-colors duration-120 hover:text-mute"
                 onClick={goBehavior}
               >
-                set in Behavior
+                set in Layout properties
               </button>
             </div>
 
             <div>
               <SectionLabel>Output</SectionLabel>
               <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-line bg-raised px-3 py-2">
-                <span className="font-mono text-[13px] text-ink">
-                  {keyActionGlyph(comboOutput(draft)).text || "unset"}
+                <span className="font-mono text-ui text-ink">
+                  {keyText.glyph(comboOutput(draft)).text || "unset"}
                 </span>
               </div>
               {/* fixed-height frame: keeps the editor's internal scrolling from
@@ -392,7 +395,7 @@ export function CombosTab({
               </Button>
             </div>
             {editing && triggerCount === 1 && (
-              <div className="text-[11.5px] text-warn">A combo needs at least two trigger keys.</div>
+              <div className="text-small text-warn">A combo needs at least two trigger keys.</div>
             )}
           </div>
         )}

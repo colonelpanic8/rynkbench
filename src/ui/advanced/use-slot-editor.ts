@@ -1,12 +1,13 @@
-// The state machine behind the combo, morse, and fork editors: one selected
-// slot, a local draft of it, and a list that shows the occupied slots plus the
-// one being edited. All three tables are fixed-length with empty slots in them,
-// so "add" means claiming the first free index rather than appending.
+// The state machine behind the combo editor: one selected slot, a local draft
+// of it, and a list that shows the occupied slots plus the one being edited.
+// The table is fixed-length with empty slots in it, so "add" means claiming the
+// first free index rather than appending.
 
 import { useState } from "react";
-import type { SlotKind, SlotValueOf } from "../state";
-import { slotPendingId, useWorkbench } from "../state";
-import { same } from "../deep-equal";
+import type { SlotKind, SlotValueOf } from "../../workbench";
+import { slotPendingId } from "../../workbench";
+import { useWorkbench } from "../state";
+import { same } from "../../model/deep-equal";
 
 export interface SlotEntry<T> {
   value: T;

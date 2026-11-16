@@ -1,7 +1,7 @@
 import type { KeyAction } from "../../vendor/rynk-wasm/rynk_wasm";
-import type { PendingInfo, Selection } from "../state";
-import { keyPendingId } from "../state";
-import { same } from "../deep-equal";
+import type { PendingInfo, Selection } from "../../workbench";
+import { keyPendingId } from "../../workbench";
+import { same } from "../../model/deep-equal";
 
 const CLIPBOARD_KIND = "rynkbench/key-action";
 const CLIPBOARD_VERSION = 1;

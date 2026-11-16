@@ -1,7 +1,8 @@
 // The persisted policy that lets the USB cable pick the output transport.
 
 import { useEffect, useState } from "react";
-import { errorMessage, useWorkbench } from "../state";
+import { errorMessage } from "../../session/errors";
+import { useWorkbench } from "../state";
 
 export function AutoSwitchToggle() {
   const { bundle } = useWorkbench();
@@ -41,7 +42,7 @@ export function AutoSwitchToggle() {
 
   return (
     <div className="py-1">
-      <label className="flex cursor-pointer items-baseline justify-between gap-4 text-[12.5px] text-mute">
+      <label className="flex cursor-pointer items-baseline justify-between gap-4 text-body text-mute">
         <span>Follow the cable</span>
         <input
           type="checkbox"
@@ -51,11 +52,11 @@ export function AutoSwitchToggle() {
           className="accent-(--color-accent)"
         />
       </label>
-      <p className="mt-1 text-[11.5px] leading-relaxed text-faint">
+      <p className="mt-1 text-small leading-relaxed text-faint">
         Plugging USB in switches typing to USB and unplugging hands it back to Bluetooth. Output
         keys still override it until the cable next moves.
       </p>
-      {error && <div className="mt-1 text-[11.5px] text-danger">Failed: {error}</div>}
+      {error && <div className="mt-1 text-small text-danger">Failed: {error}</div>}
     </div>
   );
 }

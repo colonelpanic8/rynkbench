@@ -6,6 +6,9 @@
 // layered on top when known, but never replaces device-reported geometry.
 
 import type { Key, LayoutInfo, Variant } from "../vendor/rynk-wasm/rynk_wasm";
+
+/** A key's, an encoder's and a rectangle's geometry, for screens that draw the board. */
+export type { Encoder, Key, Rect } from "../vendor/rynk-wasm/rynk_wasm";
 import type { LightingLedId } from "../vendor/rynk-wasm/rynk_wasm";
 import type { LightingTopology } from "../session/types";
 
@@ -55,6 +58,10 @@ export interface BoardEnrichment {
   /** Support-friendly physical addresses, keyed by matrix "row,col". */
   addresses?: Record<string, string>;
   pointingDevices?: PointingDeviceView[];
+  /** Key geometry to draw instead of the firmware's, keyed by matrix
+   *  "row,col": each key's centre in key units and its clockwise rotation.
+   *  A board profile supplies it where a better drawing exists (GLIDE's). */
+  geometry?: Record<string, { x: number; y: number; r: number }>;
 }
 
 // Wire semantics (rmk-config layout.rs walk()): rect.x/y is the key's final
@@ -107,8 +114,15 @@ export function buildKeyboardModel(
 
   const labels = options?.enrichment?.labels ?? {};
   const addresses = options?.enrichment?.addresses ?? {};
-  const keys: KeyView[] = variant.keys.map((shape) => {
-    const at = `${shape.row},${shape.col}`;
+  const geometry = options?.enrichment?.geometry ?? {};
+  const keys: KeyView[] = variant.keys.map((wire) => {
+    const at = `${wire.row},${wire.col}`;
+    const placed = geometry[at];
+    // A 1u key moves to the profile's position; anything else keeps its own.
+    const shape: Key =
+      placed && !wire.rect2 && wire.rect.w === 1 && wire.rect.h === 1
+        ? { ...wire, rect: { ...wire.rect, x: placed.x, y: placed.y }, r: placed.r }
+        : wire;
     const led = ledByMatrix.get(at);
     return {
       row: shape.row,

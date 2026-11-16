@@ -13,7 +13,7 @@ import type {
   LightingOutputModeState,
   LightingSceneCell,
 } from "../../vendor/rynk-wasm/rynk_wasm";
-import { conditionalRuleMatches } from "../lighting/firmwareRules";
+import { conditionalRuleMatches } from "../../model/lighting/firmware-rules";
 
 export type LitSource =
   | "overlay"

@@ -7,13 +7,15 @@ import { layerName } from "../layer-names";
 import { useWorkbench } from "../state";
 import { SectionLabel } from "../kit";
 import { effectColor } from "./decor";
-import { firmwareRuleGroups } from "./firmwareRules";
-import { previewActiveLayers } from "./preview";
-import { layersInMask } from "./wakeLayers";
+import { firmwareRuleGroups } from "../../model/lighting/firmware-rules";
+import { previewActiveLayers } from "../../model/lighting/preview";
+import { layersInMask } from "../../model/lighting/wake-layers";
 import { lightingKeyLegend } from "./keyLegend";
+import { useLayerNames } from "../layer-names";
 
 export function FirmwareRulesPanel() {
   const { bundle, state } = useWorkbench();
+  const layerNames = useLayerNames();
   const total = state.compiledScenes.length + state.conditionalScenes.length;
   const activeLayers = useMemo(
     () => previewActiveLayers(state.lightingTarget, state.activeLayers, state.defaultLayer),
@@ -28,14 +30,14 @@ export function FirmwareRulesPanel() {
     for (const key of bundle.model.keys) {
       if (key.ledId !== undefined) {
         const label = lightingKeyLegend(
-          key, state.layers, bundle.caps.num_cols,
+          layerNames, key, state.layers, bundle.caps.num_cols,
           state.lightingTarget, state.activeLayers, state.defaultLayer,
         );
         result.set(key.ledId, keyAddressWithLegend({ ...key, label }));
       }
     }
     return result;
-  }, [bundle.model, bundle.caps.num_cols, state.layers, state.lightingTarget, state.activeLayers, state.defaultLayer]);
+  }, [bundle.model, bundle.caps.num_cols, state.layers, state.lightingTarget, state.activeLayers, state.defaultLayer, layerNames]);
   const nameOf = useCallback(
     (layer: number) => layerName(state.layerMetadata, layer),
     [state.layerMetadata],
@@ -71,11 +73,11 @@ export function FirmwareRulesPanel() {
   return (
     <div>
       <SectionLabel>Configured firmware rules</SectionLabel>
-      <p className="mt-1 text-[11.5px] leading-relaxed text-faint">
+      <p className="mt-1 text-small leading-relaxed text-faint">
         Read-only from keyboard.toml · {total} cells · {activeCount} active in this preview
       </p>
       {(toggleAction !== undefined || wakeLayerList.length > 0) && (
-        <p className="mt-1 text-[11.5px] leading-relaxed text-mute">
+        <p className="mt-1 text-small leading-relaxed text-mute">
           {toggleAction !== undefined && `User${toggleAction} toggles all lighting`}
           {toggleAction !== undefined && wakeLayerList.length > 0 && " · "}
           {wakeLayerList.length > 0 &&
@@ -85,7 +87,7 @@ export function FirmwareRulesPanel() {
         </p>
       )}
       {outputMode !== null && (
-        <p className="mt-1 text-[11.5px] leading-relaxed text-mute">
+        <p className="mt-1 text-small leading-relaxed text-mute">
           {outputMode.cycle_user_action !== undefined &&
             `User${outputMode.cycle_user_action} cycles always on → always off → plugged-in only · `}
           Current: {outputMode.mode === "AlwaysOn"
@@ -100,14 +102,14 @@ export function FirmwareRulesPanel() {
       )}
       {groups.length > 0 && (
         <details className="mt-2 rounded-lg border border-line-soft bg-well px-3 py-2">
-          <summary className="cursor-pointer text-[12px] font-medium text-mute">
+          <summary className="cursor-pointer text-body font-medium text-mute">
             Show {groups.length} rule groups
           </summary>
           <div className="mt-2 flex flex-col gap-2">
             {groups.map((group) => {
               const names = group.leds.map((id) => labels.get(id) ?? `LED ${id}`).join(", ");
               return (
-                <div key={group.id} className="flex items-start gap-2 text-[11.5px]">
+                <div key={group.id} className="flex items-start gap-2 text-small">
                   <span
                     className="mt-1 size-2 shrink-0 rounded-full"
                     style={{ background: effectColor(group.effect) }}

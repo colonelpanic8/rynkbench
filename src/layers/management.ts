@@ -12,6 +12,8 @@ import type {
   PointingConfig,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import type { LayerMetadata, RuntimeLightingRule } from "../session/types";
+import { mapActionLayers, mapKeyActionLayers } from "../domain";
+import { layerName } from "../model/layer-names";
 
 export interface LayerRewriteSnapshot {
   metadata: LayerMetadata[];
@@ -61,31 +63,8 @@ function mapLayer(layer: number, mapping: Map<number, number>, path: string): nu
 }
 
 function remapAction(action: Action, mapping: Map<number, number>, path: string): Action {
-  if (typeof action === "string") return action;
-  if ("LayerOn" in action) return { LayerOn: mapLayer(action.LayerOn, mapping, path) };
-  if ("LayerOnWithModifier" in action) {
-    return {
-      LayerOnWithModifier: [
-        mapLayer(action.LayerOnWithModifier[0], mapping, path),
-        action.LayerOnWithModifier[1],
-      ],
-    };
-  }
-  if ("LayerOff" in action) return { LayerOff: mapLayer(action.LayerOff, mapping, path) };
-  if ("LayerToggle" in action)
-    return { LayerToggle: mapLayer(action.LayerToggle, mapping, path) };
-  if ("DefaultLayer" in action)
-    return { DefaultLayer: mapLayer(action.DefaultLayer, mapping, path) };
-  if ("LayerToggleOnly" in action)
-    return { LayerToggleOnly: mapLayer(action.LayerToggleOnly, mapping, path) };
-  if ("OneShotLayer" in action)
-    return { OneShotLayer: mapLayer(action.OneShotLayer, mapping, path) };
-  if ("PersistentDefaultLayer" in action) {
-    return {
-      PersistentDefaultLayer: mapLayer(action.PersistentDefaultLayer, mapping, path),
-    };
-  }
-  return structuredClone(action);
+  // The domain knows which actions carry a layer; this only says what to do with it.
+  return structuredClone(mapActionLayers(action, (layer) => mapLayer(layer, mapping, path)));
 }
 
 export function remapKeyAction(
@@ -93,38 +72,20 @@ export function remapKeyAction(
   mapping: Map<number, number>,
   path: string,
 ): KeyAction {
-  if (typeof action === "string") return action;
-  if ("Single" in action) return { Single: remapAction(action.Single, mapping, path) };
-  if ("Tap" in action) return { Tap: remapAction(action.Tap, mapping, path) };
-  if ("TapHold" in action) {
-    return {
-      TapHold: [
-        remapAction(action.TapHold[0], mapping, `${path} tap`),
-        remapAction(action.TapHold[1], mapping, `${path} hold`),
-        action.TapHold[2],
-      ],
-    };
-  }
-  if ("LayerModTap" in action) {
-    return {
-      LayerModTap: [
-        mapLayer(action.LayerModTap[0], mapping, path),
-        action.LayerModTap[1],
-        action.LayerModTap[2],
-      ],
-    };
-  }
-  return structuredClone(action);
+  return structuredClone(
+    mapKeyActionLayers(action, (layer, part) => mapLayer(layer, mapping, part ? `${path} ${part}` : path)),
+  );
 }
 
 function assertImmutableLayerRefsStayPut(
   snapshot: LayerRewriteSnapshot,
   mapping: Map<number, number>,
 ): void {
+  const named = (layer: number) => layerName(snapshot.metadata, layer);
   for (const cell of snapshot.compiledScenes) {
     if (mapLayer(cell.layer, mapping, "compiled lighting scene") !== cell.layer) {
       throw new Error(
-        `layer ${cell.layer} is fixed by a compiled lighting scene; this firmware cannot move it losslessly`,
+        `${named(cell.layer)} is fixed by a compiled lighting scene; this firmware cannot move it losslessly`,
       );
     }
   }
@@ -135,7 +96,7 @@ function assertImmutableLayerRefsStayPut(
       mapLayer(condition.layer, mapping, "compiled lighting condition") !== condition.layer
     ) {
       throw new Error(
-        `layer ${condition.layer} is fixed by a compiled lighting condition; this firmware cannot move it losslessly`,
+        `${named(condition.layer)} is fixed by a compiled lighting condition; this firmware cannot move it losslessly`,
       );
     }
   }
@@ -197,7 +158,7 @@ export function planLayerRewrite(
   const occupied = occupiedPrefix(snapshot.metadata);
   if (occupied < 1) throw new Error("the keyboard must retain a base layer");
   if (operation.layer < 0 || operation.layer >= occupied) {
-    throw new Error(`layer ${operation.layer} is not occupied`);
+    throw new Error(`${layerName(snapshot.metadata, operation.layer)} is not occupied`);
   }
   const activeNonDefault = snapshot.activeLayers.filter(
     (layer) => layer !== snapshot.defaultLayer,
@@ -310,7 +271,7 @@ export function planLayerRewrite(
       // Every other surface refuses rather than dropping; painted cells are no
       // different, and losing them is not part of deleting a layer.
       if (layer === undefined) {
-        throw new Error(`layer ${cell.layer} still has painted lighting; clear it first`);
+        throw new Error(`${layerName(snapshot.metadata, cell.layer)} still has painted lighting; clear it first`);
       }
       return { ...structuredClone(cell), layer };
     }),
@@ -350,7 +311,7 @@ export function planLayerDuplicate(
   conditionalSceneCapacity: number | null = null,
 ): LayerRewrite {
   const occupied = occupiedPrefix(snapshot.metadata);
-  if (source < 0 || source >= occupied) throw new Error(`layer ${source} is not occupied`);
+  if (source < 0 || source >= occupied) throw new Error(`${layerName(snapshot.metadata, source)} is not occupied`);
   if (occupied >= snapshot.metadata.length) {
     throw new Error(`firmware layer capacity (${snapshot.metadata.length}) is full`);
   }
@@ -364,7 +325,7 @@ export function planLayerDuplicate(
   }
   if (snapshot.compiledScenes.some((cell) => cell.layer === source)) {
     throw new Error(
-      `layer ${source} has a compiled lighting scene; this firmware cannot duplicate it losslessly`,
+      `${layerName(snapshot.metadata, source)} has a compiled lighting scene; this firmware cannot duplicate it losslessly`,
     );
   }
   if (
@@ -373,7 +334,7 @@ export function planLayerDuplicate(
     )
   ) {
     throw new Error(
-      `layer ${source} has a compiled lighting condition; this firmware cannot duplicate it losslessly`,
+      `${layerName(snapshot.metadata, source)} has a compiled lighting condition; this firmware cannot duplicate it losslessly`,
     );
   }
 

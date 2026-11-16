@@ -1,4 +1,4 @@
-import { macroTableSize } from "../ui/macros";
+import { macroTableSize } from "../model/macros";
 // Moving a configuration document between a file and the keyboard.
 //
 // Every document is parsed and fully validated before a single write goes out,
@@ -19,17 +19,18 @@ import {
 } from "../session/lighting-features";
 import { ruleFromWire } from "../session/lighting-rules";
 import { isUnsupportedError } from "../session/unsupported";
-import type { ConnectedBundle, WorkbenchAction, WorkbenchState } from "../ui/state";
-import { errorMessage } from "../ui/state";
-import { same } from "../ui/deep-equal";
+import type { ConnectedBundle, WorkbenchAction, WorkbenchState } from "../model/workbench-state";
+import { errorMessage } from "../session/errors";
+import { same } from "../model/deep-equal";
 import type { ComboDefinition, Fork, Morse } from "../vendor/rynk-wasm/rynk_wasm";
-import { normalizePointingConfig, pointingConfigsEqual } from "../ui/pointing";
+import { normalizePointingConfig, pointingConfigsEqual } from "../model/pointing";
 import {
   parseDocument,
   renderDocument,
   snapshotFromState,
 } from "./document";
 import type { ConfigFormat, ExtensionCatalog, ImportNote, RuntimeSnapshot } from "./document";
+import { withTomlLabels } from "./behavior-labels";
 
 export interface ImportResult {
   format: ConfigFormat;
@@ -658,12 +659,9 @@ export function exportDocument(
       `Cannot export an incomplete device snapshot. Reconnect and try again.\n\nFailed reads:\n- ${incompleteReads.join("\n- ")}`,
     );
   }
-  return renderDocument(
-    snapshotFromState(state, bluetoothNameOf(previous, catalog, topology)),
-    catalog,
-    format,
-    previous,
-  );
+  const text = renderDocument(snapshotFromState(state, bluetoothNameOf(previous, catalog, topology)), catalog, format, previous);
+  // The behaviors' names and descriptions, which the keyboard does not store (ADR 0020).
+  return format === "toml" ? withTomlLabels(text, state.labels) : text;
 }
 
 /** The BLE advertising name the document being replaced carries. The keyboard

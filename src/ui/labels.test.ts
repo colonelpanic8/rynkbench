@@ -4,10 +4,14 @@ import {
   actionLabel,
   hidLabel,
   keyActionDescription,
+  keyActionGlyph,
   modifierSymbols,
 } from "./labels";
+import type { KeyAction, Morse } from "../model/action-types";
+import { DOUBLE_TAP_PATTERN, HOLD_PATTERN, TAP_PATTERN } from "../model/key-slots";
+import { emptyMorse } from "../model/slots";
 import { DEFAULT_LOCALE_ID, setLocaleId } from "./locale";
-import { DEFAULT_TAP_HOLD_PROFILE } from "./morse";
+import { DEFAULT_TAP_HOLD_PROFILE } from "../model/morse";
 import { noModifiers } from "../model/slots";
 
 function mods(fields: Partial<ModifierCombination>): ModifierCombination {
@@ -77,5 +81,21 @@ describe("lighting action labels", () => {
   it("labels the output-policy and named extension actions", () => {
     expect(actionLabel({ Light: "OutputModeCycle" })).toBe("OutMode");
     expect(actionLabel({ Light: "RgbModeTwinkle" })).toBe("Twinkle");
+  });
+});
+
+describe("keyActionGlyph", () => {
+  const W = { Key: { Hid: "W" } };
+  const Q = { Key: { Hid: "Q" } };
+  const morse = (...actions: Array<[number, unknown]>) => [{ ...emptyMorse(), actions } as Morse];
+
+  it("draws a key with a double tap by its tap, and the double tap below", () => {
+    const key = { Morse: 0 } as KeyAction;
+    expect(keyActionGlyph(key, morse([TAP_PATTERN, W], [DOUBLE_TAP_PATTERN, Q]))).toEqual({ text: "W", sub: "2×Q" });
+    expect(keyActionGlyph(key, morse([TAP_PATTERN, W], [HOLD_PATTERN, Q]))).toEqual({ text: "W", sub: "Q" });
+  });
+
+  it("keeps the slot number for any other morse entry", () => {
+    expect(keyActionGlyph({ Morse: 0 } as KeyAction)).toEqual({ text: "Mo0" });
   });
 });

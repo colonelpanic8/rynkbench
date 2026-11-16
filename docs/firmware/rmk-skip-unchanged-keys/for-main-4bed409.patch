@@ -1,0 +1,163 @@
+From 0719633f0cf9eebb70472283d7e776f328bc6041 Mon Sep 17 00:00:00 2001
+From: moosylog <noreply@users.noreply.github.com>
+Date: Sat, 14 Nov 2026 09:12:00 +0100
+Subject: [PATCH] storage: do not store a key or encoder action flash already
+ holds
+
+Hosts resend unchanged keys (a whole-layer write, a retry, an import). Every
+store appends an item to sequential-storage and brings the next page
+migration, and erase, closer. The lighting tables already compare before
+storing; keys and encoder actions now do the same, for one flash read.
+
+Adds a test that counts flash writes: an unchanged key or encoder action
+is not written, a changed one is and reads back.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01QpAvhdLg1SQXb32XiJhdax
+---
+ rmk/src/storage/mod.rs | 101 ++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 95 insertions(+), 6 deletions(-)
+
+diff --git a/rmk/src/storage/mod.rs b/rmk/src/storage/mod.rs
+index 55df982..a0614dd 100644
+--- a/rmk/src/storage/mod.rs
++++ b/rmk/src/storage/mod.rs
+@@ -458,6 +458,42 @@ impl<F: AsyncNorFlash, const ROW: usize, const COL: usize, const NUM_LAYER: usiz
+         self.flash.store_item(&mut self.buffer, &key, data).await
+     }
+ 
++    /// Stores a key's action unless flash already holds that same action.
++    ///
++    /// Hosts resend unchanged keys (a whole-layer write, a retry, an import).
++    /// Every store appends an item to sequential-storage and brings the next
++    /// page migration, and erase, closer; one flash read avoids it. The lighting
++    /// tables below already compare before storing.
++    #[cfg(feature = "host")]
++    async fn store_key_action(
++        &mut self,
++        layer: u8,
++        row: u8,
++        col: u8,
++        action: KeyAction,
++    ) -> Result<(), SSError<F::Error>> {
++        let key = StorageKey::keymap(layer, row, col);
++        match self.fetch_data(key).await {
++            Some(StorageData::KeyAction(saved)) if saved == action => Ok(()),
++            _ => self.store_data(key, &StorageData::KeyAction(action)).await,
++        }
++    }
++
++    /// Stores an encoder's action unless flash already holds that same action.
++    #[cfg(feature = "host")]
++    async fn store_encoder_action(
++        &mut self,
++        layer: u8,
++        idx: u8,
++        action: EncoderAction,
++    ) -> Result<(), SSError<F::Error>> {
++        let key = StorageKey::encoder(idx, layer);
++        match self.fetch_data(key).await {
++            Some(StorageData::EncoderAction(saved)) if saved == action => Ok(()),
++            _ => self.store_data(key, &StorageData::EncoderAction(action)).await,
++        }
++    }
++
+     pub async fn new(
+         flash: F,
+         #[cfg(feature = "host")] keymap: &[[[KeyAction; COL]; ROW]; NUM_LAYER],
+@@ -857,14 +893,10 @@ impl<F: AsyncNorFlash, const ROW: usize, const COL: usize, const NUM_LAYER: usiz
+                     row,
+                     col,
+                     action,
+-                } => {
+-                    self.store_data(StorageKey::keymap(layer, row, col), &StorageData::KeyAction(action))
+-                        .await
+-                }
++                } => self.store_key_action(layer, row, col, action).await,
+                 #[cfg(feature = "host")]
+                 FlashOperationMessage::Encoder { layer, idx, action } => {
+-                    self.store_data(StorageKey::encoder(idx, layer), &StorageData::EncoderAction(action))
+-                        .await
++                    self.store_encoder_action(layer, idx, action).await
+                 }
+                 #[cfg(feature = "host")]
+                 FlashOperationMessage::Combo { idx, config } => {
+@@ -1065,6 +1097,9 @@ mod tests {
+         }
+     }
+ 
++    /// Flash writes made by any `TestFlash` (nextest runs each test in its own process).
++    static FLASH_WRITES: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
++
+     struct TestFlash<const SIZE: usize, const ERASE_SIZE: usize, const WRITE_SIZE: usize> {
+         bytes: [u8; SIZE],
+     }
+@@ -1110,6 +1145,7 @@ mod tests {
+         }
+ 
+         fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
++            FLASH_WRITES.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+             let start = offset as usize;
+             let end = start + bytes.len();
+             for (dst, src) in self.bytes[start..end].iter_mut().zip(bytes.iter()) {
+@@ -1255,4 +1291,57 @@ mod tests {
+             ));
+         });
+     }
++
++    #[cfg(feature = "host")]
++    #[test]
++    fn unchanged_key_and_encoder_actions_are_not_stored_again() {
++        use core::sync::atomic::Ordering;
++        use rmk_types::action::Action;
++        use rmk_types::keycode::{HidKeyCode, KeyCode};
++
++        block_on(async {
++            type Flash = TestFlash<16_384, 4_096, 1>;
++            let keymap = [[[KeyAction::No; 1]; 1]; 1];
++            let encoder_map: Option<&mut [[EncoderAction; 0]; 1]> = None;
++            let mut storage = Storage::<Flash, 1, 1, 1, 0>::new(
++                Flash::new(),
++                &keymap,
++                &encoder_map,
++                &RuntimeStorageConfig::default(),
++                &RuntimeBehaviorConfig::default(),
++            )
++            .await;
++            let writes = || FLASH_WRITES.load(Ordering::Relaxed);
++            let a = KeyAction::Single(Action::Key(KeyCode::Hid(HidKeyCode::A)));
++
++            // Initialization stored the keymap, so the same action again costs nothing.
++            let start = writes();
++            storage.store_key_action(0, 0, 0, KeyAction::No).await.unwrap();
++            assert_eq!(writes(), start, "an unchanged key was written to flash");
++
++            // A different action is stored, and reads back.
++            storage.store_key_action(0, 0, 0, a).await.unwrap();
++            let after_change = writes();
++            assert!(after_change > start, "a changed key was not written");
++            assert!(matches!(
++                storage.fetch_data(StorageKey::keymap(0, 0, 0)).await,
++                Some(StorageData::KeyAction(saved)) if saved == a
++            ));
++
++            // Sending it again stores nothing.
++            storage.store_key_action(0, 0, 0, a).await.unwrap();
++            assert_eq!(writes(), after_change, "a resent key was written to flash again");
++
++            // Encoders: the first store writes, the same action again does not.
++            let encoder = EncoderAction::new(a, KeyAction::No);
++            storage.store_encoder_action(0, 0, encoder).await.unwrap();
++            let after_encoder = writes();
++            storage.store_encoder_action(0, 0, encoder).await.unwrap();
++            assert_eq!(
++                writes(),
++                after_encoder,
++                "a resent encoder action was written to flash again"
++            );
++        });
++    }
+ }
+-- 
+2.43.0
+

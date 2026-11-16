@@ -19,14 +19,14 @@ export function MatrixTester() {
       <div className="flex items-center gap-3">
         <SectionLabel>Matrix tester</SectionLabel>
         {active && (
-          <span className="flex items-center gap-1.5 text-[11.5px] text-accent">
+          <span className="flex items-center gap-1.5 text-small text-accent">
             <SpinnerIcon size={11} />
             polling
           </span>
         )}
         <div className="flex-1" />
         {active && (
-          <span className="tnum text-[12px] text-mute">
+          <span className="tnum text-body text-mute">
             {pressed.size} key{pressed.size === 1 ? "" : "s"} down
           </span>
         )}
@@ -55,7 +55,7 @@ export function MatrixTester() {
           />
         </div>
       ) : (
-        <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
+        <p className="mt-2 text-body leading-relaxed text-mute">
           Poll the live key matrix and light up whatever is physically pressed — handy for
           checking switches and solder joints.
         </p>

@@ -1,11 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { WorkbenchContext, type WorkbenchContextValue } from "../state";
+import { testWorkbench } from "../../test/workbench";
+import { WorkbenchContext } from "../state";
 import { FirmwareRulesPanel } from "./FirmwareRulesPanel";
 
 describe("firmware rule legends", () => {
   it("uses the selected layer's binding instead of the default or stock legend", () => {
-    const value = {
+    const value = testWorkbench({
       bundle: {
         caps: { num_cols: 1, num_layers: 2 },
         model: { keys: [{ row: 0, col: 0, address: "LH1", label: "Esc", ledId: 4 }] },
@@ -23,7 +24,7 @@ describe("firmware rule legends", () => {
         lightingControls: { wake_layers: 0 },
         layerMetadata: null,
       },
-    } as unknown as WorkbenchContextValue;
+    });
 
     const html = renderToStaticMarkup(
       <WorkbenchContext value={value}><FirmwareRulesPanel /></WorkbenchContext>,

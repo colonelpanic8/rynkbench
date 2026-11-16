@@ -9,11 +9,12 @@ import {
   replaceProfilePositions,
   type MatrixPosition,
 } from "./profiles";
-import { morseProfilePendingId, useWorkbench } from "./state";
+import { morseProfilePendingId } from "../workbench";
+import { useWorkbench } from "./state";
 import { useDeviceDraft } from "./device-draft";
 import { emptyMorseProfile } from "../model/slots";
 import { MORSE_MODES } from "./morse-profile";
-import { DEFAULT_TAP_HOLD_PROFILE } from "./morse";
+import { DEFAULT_TAP_HOLD_PROFILE } from "../model/morse";
 import { SaveBar, WriteStatus } from "./write-status";
 
 const NUMBER_FIELDS: Array<{ key: keyof MorseProfile; label: string }> = [
@@ -89,7 +90,7 @@ function HoldTriggerPositionsPanel({
     return (
       <Panel className="p-5">
         <SectionLabel>Related keys</SectionLabel>
-        <p className="mt-1.5 text-[12px] leading-relaxed text-faint">
+        <p className="mt-1.5 text-body leading-relaxed text-faint">
           This firmware does not expose runtime hold-trigger positions.
         </p>
       </Panel>
@@ -106,7 +107,7 @@ function HoldTriggerPositionsPanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <SectionLabel>Positional hold triggers</SectionLabel>
-          <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-faint">
+          <p className="mt-1.5 max-w-2xl text-body leading-relaxed text-faint">
             Select keys on the keyboard that may turn a pending tap-hold using {profileName} into
             a hold. A profile with no selections inherits the board default; an empty board
             default allows every key.
@@ -128,7 +129,7 @@ function HoldTriggerPositionsPanel({
         </BoardWell>
       </div>
 
-      <div className="mt-2 text-[11.5px] text-faint">
+      <div className="mt-2 text-small text-faint">
         {draft.length === 0
           ? profile === DEFAULT_TAP_HOLD_PROFILE
             ? "No board-wide restriction: any key may trigger a hold."
@@ -177,7 +178,7 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
   // The new-profile form has to survive a failed write: leaving it early drops
   // the entry the reducer just rolled back, along with its error.
   const save = async () => {
-    const result = await io.setMorseProfile({ ...draft, name: draft.name.trim() });
+    const result = await io.apply("set_behavior", { kind: "profiles", slot: draft.index, value: draft.profile, name: draft.name.trim() });
     if (result.ok) onSaved();
   };
 
@@ -186,7 +187,7 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <SectionLabel>{isNew ? "New tap-hold profile" : "Profile settings"}</SectionLabel>
-          <p className="mt-1.5 text-[12px] text-faint">Stable slot {entry.index}</p>
+          <p className="mt-1.5 text-body text-faint">Stable slot {entry.index}</p>
         </div>
         {!isNew && (
           <Button
@@ -194,14 +195,14 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
             disabled={pending?.status === "pending"}
             onClick={() => {
               onDelete();
-              io.deleteMorseProfile(entry.index);
+              void io.apply("delete_behavior", { kind: "profiles", slot: entry.index });
             }}
           >
             Delete profile
           </Button>
         )}
       </div>
-      <label className="mt-5 flex items-center justify-between gap-4 text-[13px]">
+      <label className="mt-5 flex items-center justify-between gap-4 text-ui">
         <span className="text-ink">Name</span>
         <TextInput
           value={draft.name}
@@ -212,13 +213,13 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
         />
       </label>
       {!validName && (
-        <div className="mt-2 text-right text-[11.5px] text-danger">
+        <div className="mt-2 text-right text-small text-danger">
           {duplicateName ? "Profile names must be unique." : "Enter a profile name."}
         </div>
       )}
       <div className="mt-5 grid gap-x-8 gap-y-4 md:grid-cols-2">
               {NUMBER_FIELDS.map(({ key, label }) => (
-                <label key={key} className="flex items-center justify-between gap-4 text-[13px]">
+                <label key={key} className="flex items-center justify-between gap-4 text-ui">
                   <span className="text-ink">{label}</span>
                   <span className="flex items-center gap-1.5">
                     <TextInput
@@ -234,11 +235,11 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
                       }
                       className="w-28 text-right"
                     />
-                    <span className="text-[11.5px] text-faint">ms</span>
+                    <span className="text-small text-faint">ms</span>
                   </span>
                 </label>
               ))}
-              <label className="flex items-center justify-between gap-4 text-[13px]">
+              <label className="flex items-center justify-between gap-4 text-ui">
                 <span className="text-ink">Decision mode</span>
                 <select
                   value={draft.profile.mode ?? ""}
@@ -251,7 +252,7 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
                       },
                     })
                   }
-                  className="rounded-md border border-line bg-raised px-2 py-1.5 text-[12px] text-ink"
+                  className="rounded-md border border-line bg-raised px-2 py-1.5 text-body text-ink"
                 >
                   <option value="">Global default</option>
                   {MORSE_MODES.map((mode) => (
@@ -262,7 +263,7 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
                 </select>
               </label>
               {BOOL_FIELDS.map(({ key, label }) => (
-                <label key={key} className="flex items-center justify-between gap-4 text-[13px]">
+                <label key={key} className="flex items-center justify-between gap-4 text-ui">
                   <span className="text-ink">{label}</span>
                   <select
                     value={draft.profile[key] === undefined ? "" : String(draft.profile[key])}
@@ -280,7 +281,7 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
                       }
                       setDraft({ ...draft, profile });
                     }}
-                    className="rounded-md border border-line bg-raised px-2 py-1.5 text-[12px] text-ink"
+                    className="rounded-md border border-line bg-raised px-2 py-1.5 text-body text-ink"
                   >
                     <option value="">Global default</option>
                     <option value="true">Enabled</option>
@@ -290,7 +291,7 @@ function ProfileEditor({ entry, isNew, onSaved, onDelete }: {
               ))}
       </div>
       {draft.profile.opposite_hand_hold === true && (
-        <p className="mt-4 rounded-lg border border-line-soft bg-well px-3 py-2 text-[11.5px] leading-relaxed text-faint">
+        <p className="mt-4 rounded-lg border border-line-soft bg-well px-3 py-2 text-small leading-relaxed text-faint">
           Opposite-hand hold uses the keyboard&apos;s L/R/* geometry tags. The timeout arms the
           hold; a same-hand ordinary key still resolves this key as a tap, while an
           opposite-hand or bilateral key activates the hold.
@@ -356,8 +357,8 @@ export function ProfilesMode() {
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-4 px-1">
         <div>
-          <h1 className="text-[17px] font-semibold text-ink">Tap-hold profiles</h1>
-          <p className="mt-1 max-w-3xl text-[12px] leading-relaxed text-faint">
+          <h1 className="text-title font-semibold text-ink">Tap-hold profiles</h1>
+          <p className="mt-1 max-w-3xl text-body leading-relaxed text-faint">
             Tune reusable tap-hold decisions and choose their related keys directly on the
             keyboard. Profile slots stay stable when another profile is renamed or removed.
           </p>
@@ -389,8 +390,8 @@ export function ProfilesMode() {
               )}
             >
               <span>
-                <span className="block text-[13px] font-medium">Board default</span>
-                <span className="mt-0.5 block text-[10.5px] text-faint">Fallback related keys</span>
+                <span className="block text-ui font-medium">Board default</span>
+                <span className="mt-0.5 block text-caption text-faint">Fallback related keys</span>
               </span>
               <Chip tone={activeSelection.kind === "default" ? "accent" : "neutral"} className="tnum">
                 {profilePositionCount(state.morseHoldTriggerPositions, DEFAULT_TAP_HOLD_PROFILE)}
@@ -405,8 +406,8 @@ export function ProfilesMode() {
                 className="flex w-full cursor-pointer items-center justify-between rounded-lg bg-accent-dim/40 px-3 py-2.5 text-left text-ink"
               >
                 <span>
-                  <span className="block text-[13px] font-medium">New profile</span>
-                  <span className="mt-0.5 block text-[10.5px] text-faint">
+                  <span className="block text-ui font-medium">New profile</span>
+                  <span className="mt-0.5 block text-caption text-faint">
                     Slot {activeSelection.index}
                   </span>
                 </span>
@@ -429,8 +430,8 @@ export function ProfilesMode() {
                   )}
                 >
                   <span className="min-w-0">
-                    <span className="block truncate text-[13px] font-medium">{entry.name}</span>
-                    <span className="mt-0.5 block text-[10.5px] text-faint">Slot {entry.index}</span>
+                    <span className="block truncate text-ui font-medium">{entry.name}</span>
+                    <span className="mt-0.5 block text-caption text-faint">Slot {entry.index}</span>
                   </span>
                   <Chip tone={active ? "accent" : "neutral"} className="tnum">
                     {profilePositionCount(state.morseHoldTriggerPositions, entry.index)}
@@ -439,12 +440,12 @@ export function ProfilesMode() {
               );
             })}
             {state.morseProfiles.length === 0 && activeSelection.kind !== "new" && (
-              <div className="px-3 py-5 text-center text-[12px] leading-relaxed text-faint">
+              <div className="px-3 py-5 text-center text-body leading-relaxed text-faint">
                 No custom profiles yet.
               </div>
             )}
           </div>
-          <div className="border-t border-line-soft px-4 py-3 text-[11px] text-faint">
+          <div className="border-t border-line-soft px-4 py-3 text-small text-faint">
             {state.morseProfiles.length} / {state.morseProfileCapacity} slots used
           </div>
         </Panel>
@@ -469,7 +470,7 @@ export function ProfilesMode() {
           ) : (
             <Panel className="p-5">
               <SectionLabel>Related keys</SectionLabel>
-              <p className="mt-1.5 text-[12px] leading-relaxed text-faint">
+              <p className="mt-1.5 text-body leading-relaxed text-faint">
                 Create the profile first, then choose its related keys on the keyboard layout.
               </p>
             </Panel>

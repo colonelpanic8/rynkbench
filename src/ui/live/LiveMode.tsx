@@ -9,15 +9,18 @@ import type { KeyView } from "../../model/keyboard";
 import { BoardWell, KeyboardCanvas } from "../KeyboardCanvas";
 import type { KeyDecor } from "../KeyboardCanvas";
 import { useWorkbench } from "../state";
-import { cssEmissiveRgb, hsvToRgb } from "../color";
+import { useCapabilities } from "../use-capabilities";
+import { cssEmissiveRgb, hsvToRgb } from "../../model/lighting/color";
 import { InspectorShell, Panel, Row, SectionLabel, cx } from "../kit";
 import { KIND_LABEL } from "../session-labels";
 import { compositeScenes, effectiveAction } from "./compositor";
 import { keyActionHoldsShift, liveKeyActionGlyph, reportedShiftState } from "./characters";
 import { LockIndicators } from "./LockIndicators";
 import { useMatrixPoll } from "../matrix-poll";
-import { layersInMask } from "../lighting/wakeLayers";
+import { layersInMask } from "../../model/lighting/wake-layers";
 import { effectAnim, effectColor } from "../lighting/decor";
+import { useLayerNames } from "../layer-names";
+import { layerRef } from "../labels";
 
 /** Wire HSV (0–255 each) → CSS color. */
 function wireHsvCss(hue: number, saturation: number, value: number): string {
@@ -49,7 +52,7 @@ function ModifierRow() {
           : active.map(([, label]) => (
               <span
                 key={label}
-                className="rounded-full border border-accent-deep/60 bg-accent-dim/30 px-2 py-0.5 text-[10.5px] text-accent"
+                className="rounded-full border border-accent-deep/60 bg-accent-dim/30 px-2 py-0.5 text-caption text-accent"
               >
                 {label}
               </span>
@@ -114,7 +117,7 @@ function LayerStack() {
                 tone,
               )}
             >
-              <span className="tnum font-mono text-[12px]">L{i}</span>
+              <span className="tnum font-mono text-body">L{i}</span>
               {litLayers.has(i) && (
                 <span
                   title="Has compiled or stored scene lighting"
@@ -122,12 +125,12 @@ function LayerStack() {
                 />
               )}
               <div className="flex-1" />
-              <span className="text-[10.5px] uppercase tracking-wide">{note}</span>
+              <span className="text-caption uppercase tracking-wide">{note}</span>
             </div>
           );
         })}
       </div>
-      <p className="mt-2.5 text-[10.5px] leading-relaxed text-faint">
+      <p className="mt-2.5 text-caption leading-relaxed text-faint">
         Precedence is by layer index — highest active layer wins; activation order never matters.
         Transparent keys fall through the remaining active layers.
       </p>
@@ -137,6 +140,8 @@ function LayerStack() {
 
 export function LiveMode() {
   const { bundle, state } = useWorkbench();
+  const layerNames = useLayerNames();
+  const capabilities = useCapabilities();
   const cols = bundle.caps.num_cols;
   // Only a firmware that cannot report resolved modifiers needs the matrix
   // fallback; on everything else the poll stays off.
@@ -148,7 +153,7 @@ export function LiveMode() {
     : [];
   const bg = lighting?.background;
   const bgOn = outputOn && (bg?.enabled ?? false);
-  const extensionActive = state.lightingExtension !== null;
+  const extensionActive = capabilities.has("lighting.extension");
   const bgColor = bg && bgOn && !extensionActive
     ? wireHsvCss(bg.hue, bg.saturation, bg.value)
     : null;
@@ -202,7 +207,7 @@ export function LiveMode() {
       state.defaultLayer,
       key.row * cols + key.col,
     );
-    const glyph = liveKeyActionGlyph(action, shiftActive);
+    const glyph = liveKeyActionGlyph(action, shiftActive, layerNames);
     if (!glyph.text && key.label) return { text: key.label, dim: true };
     return glyph.text ? { ...glyph, dim: true } : undefined;
   };
@@ -233,13 +238,13 @@ export function LiveMode() {
             className="animate-pop"
             title={`Active layers: ${activeLabel}. Default layer: ${state.defaultLayer}.`}
           >
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-accent-deep/60 bg-accent-dim/30 px-2 py-0.5 text-[10.5px] font-medium text-accent">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-accent-deep/60 bg-accent-dim/30 px-2 py-0.5 text-caption font-medium text-accent">
               <span className="size-1.5 rounded-full bg-accent" />
               {activeLabel}
             </span>
           </span>
           <div className="flex-1" />
-          <span className="text-[11px] text-faint">computed from last-known state</span>
+          <span className="text-small text-faint">computed from last-known state</span>
         </div>
         <BoardWell model={bundle.model}>
           {bgColor && (
@@ -256,7 +261,7 @@ export function LiveMode() {
             decorFor={decorFor}
           />
         </BoardWell>
-        <div className="px-1 text-[11px] leading-relaxed text-faint">
+        <div className="px-1 text-small leading-relaxed text-faint">
           {outputOn ? (
             <>
               Composited preview: scene lighting and the overlay over each key's effective binding.
@@ -279,7 +284,7 @@ export function LiveMode() {
               <SectionLabel>Lighting output</SectionLabel>
               <span
                 className={cx(
-                  "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-medium",
+                  "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-caption font-medium",
                   outputOn ? "border-ok/50 text-ok" : "border-line text-faint",
                 )}
               >
@@ -328,7 +333,7 @@ export function LiveMode() {
                     <Row label="Wake layers">
                       {wakeLayers.length === 0
                         ? "—"
-                        : `${wakeLayers.map((layer) => `L${layer}`).join(", ")}${state.lightingOutputMode.wake_active ? " · active" : ""}`}
+                        : `${wakeLayers.map((layer) => layerRef(layerNames, layer, `L${layer}`)).join(", ")}${state.lightingOutputMode.wake_active ? " · active" : ""}`}
                     </Row>
                   </>
                 )}
@@ -369,7 +374,7 @@ export function LiveMode() {
                 )}
               </div>
             ) : (
-              <div className="mt-2 text-[12.5px] text-faint">Lighting state unavailable.</div>
+              <div className="mt-2 text-body text-faint">Lighting state unavailable.</div>
             )}
           </Panel>
 

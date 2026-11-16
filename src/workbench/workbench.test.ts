@@ -1,0 +1,954 @@
+// Reducer coverage for per-target lighting drafts: the overlay draft and each
+// layer's scene draft are staged independently and stage against different
+// baselines (applied overlay vs. that layer's stored scene cells).
+
+import { describe, expect, it, vi } from "vitest";
+import type {
+  EncoderAction,
+  KeyAction,
+  LightingAdvancedConditionalSceneCell,
+  LightingEffect,
+  LightingExtensionParam,
+  LightingSceneCell,
+  LightingState,
+  ModifierCombination,
+  PointingConfig,
+} from "../vendor/rynk-wasm/rynk_wasm";
+import type { RynkSession } from "../session/types";
+import { conditionalTablesEqual, stagedBetween } from "../model/lighting/compare";
+import { activeLightingBase, activeLightingDraft } from "./lighting-drafts";
+import { canTravel, draftEditCount, pointingDraftDirty } from "./draft/selectors";
+import { emptyHistory } from "./draft/history";
+import { noLabels } from "../model/behavior-labels";
+import { normalizePointingConfig } from "../model/pointing";
+import { draftOf, storedImage, wantOf } from "./draft/want";
+import { writePlan } from "../sync";
+import { makeIo } from "./io";
+import { makeWorkbenchReducer } from "./reducer";
+import { type WorkbenchAction, type WorkbenchState } from "../model/workbench-state";
+
+const reducer = makeWorkbenchReducer(2);
+
+function solid(r: number): LightingEffect {
+  return { Solid: { color: { r, g: 0, b: 0 } } };
+}
+
+const LIGHTING: LightingState = {
+  revision: 1,
+  output_enabled: true,
+  output_brightness: 200,
+  background: { enabled: false, hue: 0, saturation: 0, value: 0, speed: 0, mode: "Solid" },
+  overlay_len: 0,
+};
+
+/** A workbench whose keyboard holds what it shows, unless `over.base` says otherwise. */
+function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
+  const { base, ...fields } = over;
+  const opened: Omit<WorkbenchState, "base"> = {
+    mode: "keymap",
+    uiLayer: 0,
+    currentLayer: 0,
+    defaultLayer: 0,
+    activeLayers: [0],
+    layerStateComplete: true,
+    layers: [[], []],
+    layerMetadata: null,
+    pointingConfig: null,
+    pointingDraft: null,
+    pointingBusy: false,
+    pointingError: null,
+    encoders: {},
+    battery: "Unavailable",
+    peripheralBattery: "Unavailable",
+    connection: null,
+    maintenanceMode: null,
+    splitTransport: null,
+    lightingState: LIGHTING,
+    lightingOutputMode: null,
+    applied: {},
+    draft: {},
+    lightingTarget: "overlay",
+    layerDrafts: {},
+    scenes: [],
+    compiledScenes: [],
+    conditionalScenes: [],
+    lightingControls: { output_toggle_user_action: undefined, wake_layers: 0 },
+    runtimeConditionalScenes: [],
+    runtimeConditionalDraft: [],
+    lightingExtension: null,
+    lightingExtensionLayers: null,
+    extensionParams: {},
+    scenePolicy: "EffectiveOnly",
+    compiledScenePolicy: "EffectiveOnly",
+    selection: null,
+    pending: {},
+    history: emptyHistory(),
+    labels: noLabels(),
+    batchMode: false,
+    batchBusy: false,
+    batchError: null,
+    layerBusy: false,
+    layerError: null,
+    lightingBusy: false,
+    lightingError: null,
+    hoverLeds: null,
+    combos: [],
+    morse: [],
+    forks: [],
+    macroOps: [],
+    behavior: null,
+    behaviorOptions: null,
+    morseProfileCapacity: 0,
+    morseProfiles: [],
+    morseHoldTriggerPositionCapacity: null,
+    morseHoldTriggerPositions: [],
+    autoMouseLayerCapacity: 0,
+    autoMouseLayers: [],
+    ledIndicator: null,
+    modifierState: null,
+    ...fields,
+  };
+  return { ...opened, base: base ?? storedImage(opened) };
+}
+
+describe("per-target lighting drafts", () => {
+  it("seeds a layer draft from that layer's stored scene cells on first select", () => {
+    const scenes: LightingSceneCell[] = [
+      { layer: 1, led_id: 5, effect: solid(9) },
+      { layer: 0, led_id: 2, effect: solid(3) },
+    ];
+    const s = reducer(baseState({ scenes }), { type: "lightingTarget", target: 1 });
+    expect(s.lightingTarget).toBe(1);
+    // Only layer 1's cell, as an overlay-shaped (ttl-less) draft.
+    expect(activeLightingDraft(s)).toEqual({ 5: { led_id: 5, effect: solid(9), ttl_ms: undefined } });
+    expect(activeLightingDraft(s)).toEqual(activeLightingBase(s));
+    expect(stagedBetween(activeLightingDraft(s), activeLightingBase(s)).size).toBe(0);
+  });
+
+  it("routes paint/erase to the active target and leaves other targets untouched", () => {
+    let s = baseState({ scenes: [{ layer: 1, led_id: 5, effect: solid(9) }] });
+    // Paint the overlay.
+    s = reducer(s, { type: "paint", cells: [{ led_id: 1, effect: solid(1), ttl_ms: undefined }] });
+    // Switch to layer 1 and paint there.
+    s = reducer(s, { type: "lightingTarget", target: 1 });
+    s = reducer(s, { type: "paint", cells: [{ led_id: 7, effect: solid(7), ttl_ms: undefined }] });
+
+    expect(s.draft).toEqual({ 1: { led_id: 1, effect: solid(1), ttl_ms: undefined } });
+    expect(s.layerDrafts[1]).toEqual({
+      5: { led_id: 5, effect: solid(9), ttl_ms: undefined },
+      7: { led_id: 7, effect: solid(7), ttl_ms: undefined },
+    });
+    // Layer 1 now has one staged edit (led 7) over its stored baseline.
+    expect(stagedBetween(activeLightingDraft(s), activeLightingBase(s))).toEqual(new Set([7]));
+  });
+
+  it("preserves each target's staged edits across tab switches", () => {
+    let s = baseState();
+    s = reducer(s, { type: "paint", cells: [{ led_id: 1, effect: solid(1), ttl_ms: undefined }] });
+    s = reducer(s, { type: "lightingTarget", target: 0 });
+    s = reducer(s, { type: "paint", cells: [{ led_id: 2, effect: solid(2), ttl_ms: undefined }] });
+    // Bounce back to overlay, then to the layer again.
+    s = reducer(s, { type: "lightingTarget", target: "overlay" });
+    expect(activeLightingDraft(s)).toEqual({ 1: { led_id: 1, effect: solid(1), ttl_ms: undefined } });
+    s = reducer(s, { type: "lightingTarget", target: 0 });
+    expect(activeLightingDraft(s)).toEqual({ 2: { led_id: 2, effect: solid(2), ttl_ms: undefined } });
+  });
+
+  it("draftReset returns the active layer draft to its stored scene baseline", () => {
+    let s = baseState({ scenes: [{ layer: 0, led_id: 2, effect: solid(3) }] });
+    s = reducer(s, { type: "lightingTarget", target: 0 });
+    s = reducer(s, { type: "erase", ledIds: [2] });
+    expect(stagedBetween(activeLightingDraft(s), activeLightingBase(s))).toEqual(new Set([2]));
+    s = reducer(s, { type: "draftReset" });
+    expect(activeLightingDraft(s)).toEqual({ 2: { led_id: 2, effect: solid(3), ttl_ms: undefined } });
+    expect(stagedBetween(activeLightingDraft(s), activeLightingBase(s)).size).toBe(0);
+  });
+
+  it("an explicit target edits that layer without moving the selected target", () => {
+    // The key's RGB Lighting tab edits the layer the Keymap shows, and must
+    // not move the selected target along with it.
+    let s = baseState({ scenes: [{ layer: 1, led_id: 5, effect: solid(9) }] });
+    s = reducer(s, {
+      type: "paint",
+      cells: [{ led_id: 7, effect: solid(7), ttl_ms: undefined }],
+      target: 1,
+    });
+
+    expect(s.lightingTarget).toBe("overlay");
+    expect(s.draft).toEqual({});
+    expect(s.layerDrafts[1]).toEqual({
+      5: { led_id: 5, effect: solid(9), ttl_ms: undefined },
+      7: { led_id: 7, effect: solid(7), ttl_ms: undefined },
+    });
+
+    s = reducer(s, { type: "erase", ledIds: [5], target: 1 });
+    expect(s.layerDrafts[1]).toEqual({ 7: { led_id: 7, effect: solid(7), ttl_ms: undefined } });
+    expect(s.lightingTarget).toBe("overlay");
+
+    s = reducer(s, { type: "draftReset", target: 1 });
+    expect(s.layerDrafts[1]).toEqual({ 5: { led_id: 5, effect: solid(9), ttl_ms: undefined } });
+    expect(s.lightingTarget).toBe("overlay");
+    // The overlay draft never moved while all of that happened.
+    expect(s.draft).toEqual({});
+  });
+
+  it("scenesApplied re-syncs clean layer drafts but keeps dirty ones", () => {
+    let s = baseState({ scenes: [{ layer: 0, led_id: 2, effect: solid(3) }] });
+    // Seed layer 0 (clean) and layer 1 (dirty).
+    s = reducer(s, { type: "lightingTarget", target: 0 });
+    s = reducer(s, { type: "lightingTarget", target: 1 });
+    s = reducer(s, { type: "paint", cells: [{ led_id: 8, effect: solid(8), ttl_ms: undefined }] });
+
+    const newScenes: LightingSceneCell[] = [{ layer: 0, led_id: 4, effect: solid(4) }];
+    s = reducer(s, { type: "scenesApplied", state: LIGHTING, cells: newScenes });
+
+    // Layer 0 was clean → re-synced to the new stored table.
+    expect(s.layerDrafts[0]).toEqual({ 4: { led_id: 4, effect: solid(4), ttl_ms: undefined } });
+    // Layer 1 had a staged edit → untouched.
+    expect(s.layerDrafts[1]).toEqual({ 8: { led_id: 8, effect: solid(8), ttl_ms: undefined } });
+  });
+
+  it("overlay draft still stages against the applied overlay", () => {
+    const overlay = { 1: { led_id: 1, effect: solid(1), ttl_ms: undefined } };
+    const s = baseState({ applied: overlay, draft: { ...overlay } });
+    expect(activeLightingBase(s)).toBe(s.applied);
+    const painted = reducer(s, {
+      type: "paint",
+      cells: [{ led_id: 2, effect: solid(2), ttl_ms: undefined }],
+    });
+    expect(stagedBetween(activeLightingDraft(painted), activeLightingBase(painted))).toEqual(
+      new Set([2]),
+    );
+  });
+});
+
+describe("conditional rule tables", () => {
+  function rule(ledId: number, r: number): LightingAdvancedConditionalSceneCell {
+    return {
+      cell: {
+        conditions: { layer: undefined, battery: undefined, output_mode: undefined },
+        led_id: ledId,
+        effect: solid(r),
+      },
+      connection: undefined,
+      effects: undefined,
+      layers: undefined,
+      indicators: undefined,
+    };
+  }
+
+  it("treats a reordered table as a difference", () => {
+    const a = rule(1, 1);
+    const b = rule(2, 2);
+    // Rules compose in table order and a later one wins a shared slot, so a
+    // permutation changes what the board renders and must count as dirty.
+    expect(conditionalTablesEqual([a, b], [a, b])).toBe(true);
+    expect(conditionalTablesEqual([a, b], [b, a])).toBe(false);
+    expect(conditionalTablesEqual([a, b], [a])).toBe(false);
+    expect(conditionalTablesEqual([], [])).toBe(true);
+  });
+
+  it("compares cells by value, not identity", () => {
+    expect(conditionalTablesEqual([rule(1, 1)], [rule(1, 1)])).toBe(true);
+    expect(conditionalTablesEqual([rule(1, 1)], [rule(1, 2)])).toBe(false);
+  });
+
+  it("lightingRefresh re-syncs a clean rule draft but keeps a dirty one", () => {
+    const stored = [rule(1, 1)];
+    const pushed = [rule(4, 4)];
+
+    // Clean draft (matches what is on the device) follows the push.
+    const clean = reducer(
+      baseState({ runtimeConditionalScenes: stored, runtimeConditionalDraft: stored }),
+      { type: "lightingRefresh", state: LIGHTING, overlay: [], runtimeConditional: pushed },
+    );
+    expect(clean.runtimeConditionalScenes).toEqual(pushed);
+    expect(clean.runtimeConditionalDraft).toEqual(pushed);
+
+    // Staged edits survive: the device's table advances, the draft does not.
+    const staged = [rule(1, 1), rule(9, 9)];
+    const dirty = reducer(
+      baseState({ runtimeConditionalScenes: stored, runtimeConditionalDraft: staged }),
+      { type: "lightingRefresh", state: LIGHTING, overlay: [], runtimeConditional: pushed },
+    );
+    expect(dirty.runtimeConditionalScenes).toEqual(pushed);
+    expect(dirty.runtimeConditionalDraft).toEqual(staged);
+  });
+
+  it("leaves both tables alone when the push carries no conditional data", () => {
+    const stored = [rule(1, 1)];
+    const next = reducer(
+      baseState({ runtimeConditionalScenes: stored, runtimeConditionalDraft: stored }),
+      { type: "lightingRefresh", state: LIGHTING, overlay: [] },
+    );
+    expect(next.runtimeConditionalScenes).toEqual(stored);
+    expect(next.runtimeConditionalDraft).toEqual(stored);
+  });
+});
+
+describe("layer-state snapshots", () => {
+  it("replaces the active set and derives the highest-precedence layer", () => {
+    const next = reducer(baseState(), {
+      type: "topicLayers",
+      defaultLayer: 1,
+      activeLayers: [1, 2, 4],
+      complete: true,
+    });
+    expect(next.defaultLayer).toBe(1);
+    expect(next.activeLayers).toEqual([1, 2, 4]);
+    expect(next.currentLayer).toBe(4);
+    expect(next.layerStateComplete).toBe(true);
+  });
+});
+
+describe("Magic-layer policy", () => {
+  it("updates both output-mode readback and the configured-controls summary", () => {
+    const outputMode = {
+      mode: "AlwaysOff" as const,
+      powered: false,
+      wake_active: true,
+      effective_enabled: true,
+      powered_only_scope: "Local" as const,
+      cycle_user_action: undefined,
+      wake_layers: 2 ** 2,
+      indicator: undefined,
+    };
+    const next = reducer(baseState({ lightingBusy: true }), {
+      type: "wakeLayersSet",
+      outputMode,
+    });
+
+    expect(next.lightingOutputMode).toEqual(outputMode);
+    expect(next.lightingControls.wake_layers).toBe(2 ** 2);
+    expect(next.lightingBusy).toBe(false);
+  });
+});
+
+describe("verified status writes", () => {
+  const statusRule = (ledId: number, red: number): LightingAdvancedConditionalSceneCell => ({
+    cell: {
+      conditions: { layer: undefined, battery: undefined, output_mode: undefined },
+      led_id: ledId,
+      effect: solid(red),
+    },
+    connection: undefined,
+    effects: undefined,
+    layers: undefined,
+    indicators: undefined,
+  });
+
+  it("does not report conditional success until device read-back matches", async () => {
+    const cells = [statusRule(1, 7)];
+    const calls: string[] = [];
+    const actions: WorkbenchAction[] = [];
+    const session = {
+      lighting: {
+        conditionalScenes: {
+          replace: async () => {
+            calls.push("replace");
+            return LIGHTING;
+          },
+          read: async () => {
+            calls.push("read");
+            return structuredClone(cells);
+          },
+        },
+      },
+    } as unknown as RynkSession;
+    const io = makeIo(session, () => baseState(), (act) => actions.push(act), { cols: 2, onDisconnect: () => {} });
+
+    const result = await io.applyConditionalScenes(cells);
+
+    expect(result).toEqual({ ok: true });
+    expect(calls).toEqual(["replace", "read"]);
+    expect(actions.at(-1)).toEqual({ type: "conditionalApplied", state: LIGHTING, cells });
+  });
+
+  it("returns a failure and keeps success state unset on read-back mismatch", async () => {
+    const actions: WorkbenchAction[] = [];
+    const session = {
+      lighting: {
+        conditionalScenes: {
+          replace: async () => LIGHTING,
+          read: async () => [],
+        },
+      },
+    } as unknown as RynkSession;
+    const io = makeIo(session, () => baseState(), (act) => actions.push(act), { cols: 2, onDisconnect: () => {} });
+
+    const result = await io.applyConditionalScenes([statusRule(1, 7)]);
+
+    expect(result).toEqual({
+      ok: false,
+      message: "conditional lighting read-back mismatch: wrote 1 rule(s), read 0",
+    });
+    expect(actions.some((action) => action.type === "conditionalApplied")).toBe(false);
+    expect(actions.at(-1)).toMatchObject({ type: "lightingBusy", busy: false });
+  });
+
+  it("returns the key-write failure after rolling the optimistic action back", async () => {
+    const actions: WorkbenchAction[] = [];
+    const session = {
+      keymap: {
+        setKey: async () => {
+          throw new Error("flash busy");
+        },
+      },
+    } as unknown as RynkSession;
+    const state = baseState({ layers: [["No", "No"], []] });
+    const io = makeIo(session, () => state, (act) => actions.push(act), { cols: 2, onDisconnect: () => {} });
+
+    const result = await io.setKey(0, 0, 0, "No");
+
+    expect(result).toEqual({ ok: false, message: "flash busy" });
+    expect(actions.at(-1)).toMatchObject({ type: "keyWriteErr", message: "flash busy" });
+  });
+});
+
+describe("positional hold triggers", () => {
+  const previous = [{ profile: 255, row: 0, col: 0 }];
+  const next = [{ profile: 2, row: 1, col: 1 }];
+
+  it("optimistically replaces the table and clears pending on success", () => {
+    const started = reducer(baseState({ morseHoldTriggerPositions: previous }), {
+      type: "fieldWriteStart",
+      field: "morseHoldTriggerPositions",
+      value: next,
+    });
+    expect(started.morseHoldTriggerPositions).toEqual(next);
+    expect(started.pending.morseHoldTriggerPositions).toEqual({ status: "pending" });
+
+    const finished = reducer(started, {
+      type: "fieldWriteOk",
+      field: "morseHoldTriggerPositions",
+    });
+    expect(finished.morseHoldTriggerPositions).toEqual(next);
+    expect(finished.pending.morseHoldTriggerPositions).toBeUndefined();
+  });
+
+  it("restores the previous table when the write fails", () => {
+    const failed = reducer(baseState({ morseHoldTriggerPositions: next }), {
+      type: "fieldWriteErr",
+      field: "morseHoldTriggerPositions",
+      prev: previous,
+      message: "flash busy",
+    });
+    expect(failed.morseHoldTriggerPositions).toEqual(previous);
+    expect(failed.pending.morseHoldTriggerPositions).toEqual({
+      status: "error",
+      message: "flash busy",
+    });
+  });
+});
+
+describe("named morse profiles", () => {
+  const profile = {
+    unilateral_tap: undefined,
+    opposite_hand_hold: undefined,
+    enable_flow_tap: undefined,
+    mode: "Normal" as const,
+    hold_timeout_ms: 180,
+    gap_timeout_ms: 180,
+    quick_tap_timeout_ms: undefined,
+    retro_tap: undefined,
+    prior_idle_time_ms: undefined,
+    hold_trigger_on_release: undefined,
+  };
+  const first = { index: 0, name: "first", profile };
+  const later = { index: 3, name: "later", profile };
+
+  it("deletes one stable slot without compacting later profiles", () => {
+    const started = reducer(
+      baseState({
+        morseProfileCapacity: 8,
+        morseProfiles: [first, later],
+        morseHoldTriggerPositions: [
+          { profile: 0, row: 0, col: 0 },
+          { profile: 3, row: 1, col: 1 },
+        ],
+      }),
+      { type: "morseProfileDeleteStart", index: 0 },
+    );
+    expect(started.morseProfiles).toEqual([later]);
+    expect(started.morseHoldTriggerPositions).toEqual([{ profile: 3, row: 1, col: 1 }]);
+    expect(started.morseProfiles[0].index).toBe(3);
+  });
+
+  it("restores the entry and position table when deletion fails", () => {
+    const positions = [{ profile: 0, row: 0, col: 0 }];
+    const failed = reducer(baseState({ morseProfiles: [later] }), {
+      type: "morseProfileDeleteErr",
+      entry: first,
+      positions,
+      message: "flash busy",
+    });
+    expect(failed.morseProfiles).toEqual([first, later]);
+    expect(failed.morseHoldTriggerPositions).toEqual(positions);
+  });
+});
+
+describe("extension parameters", () => {
+  const params: LightingExtensionParam[] = [
+    { name: "Density", min: 1, max: 32, default: 8, value: 12 },
+  ];
+
+  it("records a loaded list against the effect it describes", () => {
+    const next = reducer(baseState(), { type: "extensionParamsLoaded", effect: 6, items: params });
+    expect(next.extensionParams).toEqual({ 6: params });
+  });
+
+  it("keeps every effect's list, so base and overlay parameters coexist", () => {
+    const overlayParams: LightingExtensionParam[] = [
+      { name: "Width", min: 0, max: 10, default: 3, value: 4 },
+    ];
+    const next = reducer(
+      reducer(baseState(), { type: "extensionParamsLoaded", effect: 6, items: params }),
+      { type: "extensionParamsLoaded", effect: 2, items: overlayParams },
+    );
+    expect(next.extensionParams).toEqual({ 6: params, 2: overlayParams });
+  });
+
+  /** A session stub with just the extension surface the io facade touches. */
+  function ioWith(lighting: Partial<RynkSession["lighting"]>, state = baseState()) {
+    const actions: WorkbenchAction[] = [];
+    const session = { lighting } as unknown as RynkSession;
+    const io = makeIo(session, () => state, (act) => actions.push(act), { cols: 2, onDisconnect: () => {} });
+    return { io, actions };
+  }
+
+  it("loads a parameter list into state", async () => {
+    const { io, actions } = ioWith({ extensionParams: async () => params });
+    io.loadExtensionParams(6);
+    await vi.waitFor(() => expect(actions).toHaveLength(1));
+    expect(actions[0]).toEqual({ type: "extensionParamsLoaded", effect: 6, items: params });
+  });
+
+  it("records an empty list when the firmware lacks the parameter surface", async () => {
+    const { io, actions } = ioWith({
+      extensionParams: async () => {
+        throw new Error("UnknownCmd: GetLightingExtensionParams");
+      },
+    });
+    io.loadExtensionParams(6);
+    await vi.waitFor(() => expect(actions).toHaveLength(1));
+    // Feature detection is silent: no lightingError, just "no parameters".
+    expect(actions[0]).toEqual({ type: "extensionParamsLoaded", effect: 6, items: [] });
+  });
+
+  it("applies the selection first, then each staged parameter, then reads back the device", async () => {
+    const calls: string[] = [];
+    const selection = { effect: 6, palette: 2, value: 200, speed: 40 };
+    const applied = { ...selection, value: 180 };
+    const { io, actions } = ioWith({
+      setExtensionState: async () => {
+        calls.push("selection");
+        return LIGHTING;
+      },
+      setExtensionParam: async (effect, index, value) => {
+        calls.push(`param ${effect}:${index}=${value}`);
+        return { ...LIGHTING, revision: LIGHTING.revision + 1 + index };
+      },
+      state: async () => {
+        calls.push("readback state");
+        return { ...LIGHTING, revision: LIGHTING.revision + 4 };
+      },
+      extension: async () => {
+        calls.push("readback");
+        return {
+          revision: LIGHTING.revision + 4,
+          effect_count: 12,
+          palette_count: 4,
+          state: applied,
+        };
+      },
+      extensionParams: async () => {
+        calls.push("reload");
+        return params;
+      },
+    });
+
+    io.setExtensionState(selection, [
+      { effect: 6, index: 0, value: 20 },
+      { effect: 6, index: 2, value: 3 },
+    ]);
+    await vi.waitFor(() => expect(calls).toHaveLength(6));
+    expect(calls).toEqual([
+      "selection",
+      "param 6:0=20",
+      "param 6:2=3",
+      "readback state",
+      "readback",
+      "reload",
+    ]);
+    // The readback, including a device-clamped value, is the state of record.
+    expect(actions).toContainEqual({
+      type: "extensionStateSet",
+      state: { ...LIGHTING, revision: LIGHTING.revision + 4 },
+      extension: applied,
+      extensionLayers: null,
+    });
+  });
+
+  it("reports a failed parameter write as a lighting error", async () => {
+    const { io, actions } = ioWith({
+      setExtensionState: async () => LIGHTING,
+      setExtensionParam: async () => {
+        throw new Error("parameter 99 is outside 1..=32");
+      },
+    });
+    io.setExtensionState({ effect: 6, palette: 0, value: 0, speed: 0 }, [
+      { effect: 6, index: 0, value: 99 },
+    ]);
+    await vi.waitFor(() => expect(actions).toHaveLength(2));
+    expect(actions[1]).toEqual({
+      type: "lightingBusy",
+      busy: false,
+      error: "parameter 99 is outside 1..=32",
+    });
+  });
+
+  it("applies the overlay selection when layering is supported", async () => {
+    const calls: string[] = [];
+    const selection = { effect: 5, palette: 0, value: 128, speed: 128 };
+    const { io, actions } = ioWith(
+      {
+        setExtensionState: async () => {
+          calls.push("primary");
+          return { ...LIGHTING, revision: 2 };
+        },
+        setExtensionLayers: async (overlay) => {
+          calls.push(`overlay ${overlay}`);
+          return { ...LIGHTING, revision: 3 };
+        },
+        state: async () => {
+          calls.push("readback state");
+          return { ...LIGHTING, revision: 3 };
+        },
+        extension: async () => {
+          calls.push("readback primary");
+          return { revision: 3, effect_count: 12, palette_count: 4, state: selection };
+        },
+        extensionLayers: async () => {
+          calls.push("readback overlay");
+          return { revision: 3, overlay: 2 };
+        },
+        extensionParams: async (effect) => {
+          calls.push(`reload ${effect}`);
+          return [];
+        },
+      },
+      baseState({ lightingExtensionLayers: { revision: 1, overlay: 6 } }),
+    );
+
+    io.setExtensionState(selection, [], 2);
+    await vi.waitFor(() => expect(calls).toHaveLength(7));
+    expect(calls).toEqual([
+      "primary",
+      "overlay 2",
+      "readback state",
+      "readback primary",
+      "readback overlay",
+      "reload 5",
+      "reload 2",
+    ]);
+    expect(actions).toContainEqual({
+      type: "extensionStateSet",
+      state: { ...LIGHTING, revision: 3 },
+      extension: selection,
+      extensionLayers: { revision: 3, overlay: 2 },
+    });
+  });
+
+  it("changes value without rewriting an unchanged overlay selection", async () => {
+    const calls: string[] = [];
+    const current = { effect: 5, palette: 0, value: 51, speed: 128 };
+    const selection = { ...current, value: 52 };
+    const { io } = ioWith(
+      {
+        setExtensionState: async () => {
+          calls.push("primary");
+          return { ...LIGHTING, revision: 5 };
+        },
+        setExtensionLayers: async () => {
+          throw new Error("unchanged overlay selection was rewritten");
+        },
+        state: async () => {
+          calls.push("readback state");
+          return { ...LIGHTING, revision: 5 };
+        },
+        extension: async () => {
+          calls.push("readback primary");
+          return { revision: 5, effect_count: 12, palette_count: 4, state: selection };
+        },
+        extensionLayers: async () => {
+          calls.push("readback overlay");
+          return { revision: 5, overlay: 2 };
+        },
+        extensionParams: async (effect) => {
+          calls.push(`reload ${effect}`);
+          return [];
+        },
+      },
+      baseState({
+        lightingExtension: {
+          revision: 4,
+          effect_count: 12,
+          palette_count: 4,
+          state: current,
+        },
+        lightingExtensionLayers: { revision: 4, overlay: 2 },
+      }),
+    );
+
+    io.setExtensionState(selection, [], 2);
+    await vi.waitFor(() => expect(calls).toHaveLength(6));
+    expect(calls).toEqual([
+      "primary",
+      "readback state",
+      "readback primary",
+      "readback overlay",
+      "reload 5",
+      "reload 2",
+    ]);
+  });
+
+  it("does not rewrite unchanged primary and overlay selections", async () => {
+    const calls: string[] = [];
+    const selection = { effect: 5, palette: 0, value: 128, speed: 128 };
+    const layers = { revision: 4, overlay: 2 };
+    const { io, actions } = ioWith(
+      {
+        setExtensionState: async () => {
+          throw new Error("unchanged primary selection was rewritten");
+        },
+        setExtensionLayers: async () => {
+          throw new Error("unchanged overlay selection was rewritten");
+        },
+        setExtensionParam: async (effect, index, value) => {
+          calls.push(`param ${effect}:${index}=${value}`);
+          return { ...LIGHTING, revision: 5 };
+        },
+        state: async () => {
+          calls.push("readback state");
+          return { ...LIGHTING, revision: 5 };
+        },
+        extension: async () => {
+          calls.push("readback primary");
+          return { revision: 5, effect_count: 12, palette_count: 4, state: selection };
+        },
+        extensionLayers: async () => {
+          calls.push("readback overlay");
+          return { revision: 5, overlay: 2 };
+        },
+        extensionParams: async (effect) => {
+          calls.push(`reload ${effect}`);
+          return params;
+        },
+      },
+      baseState({
+        lightingExtension: {
+          revision: 4,
+          effect_count: 12,
+          palette_count: 4,
+          state: selection,
+        },
+        lightingExtensionLayers: layers,
+      }),
+    );
+
+    // A write names its own effect, so the overlay slot's parameters are
+    // editable alongside the base slot's, and both slots reload afterwards.
+    io.setExtensionState(
+      selection,
+      [
+        { effect: 5, index: 0, value: 20 },
+        { effect: 2, index: 0, value: 7 },
+      ],
+      2,
+    );
+    await vi.waitFor(() => expect(calls).toHaveLength(7));
+    expect(calls).toEqual([
+      "param 5:0=20",
+      "param 2:0=7",
+      "readback state",
+      "readback primary",
+      "readback overlay",
+      "reload 5",
+      "reload 2",
+    ]);
+    expect(actions).toContainEqual({
+      type: "extensionStateSet",
+      state: { ...LIGHTING, revision: 5 },
+      extension: selection,
+      extensionLayers: { revision: 5, overlay: 2 },
+    });
+  });
+});
+
+describe("modifier-state snapshots", () => {
+  it("replaces the resolved HID modifier state from a topic", () => {
+    const modifiers: ModifierCombination = {
+      left_ctrl: false,
+      left_shift: true,
+      left_alt: false,
+      left_gui: false,
+      right_ctrl: false,
+      right_shift: false,
+      right_alt: false,
+      right_gui: false,
+    };
+    const next = reducer(baseState(), { type: "topicModifier", modifiers });
+    expect(next.modifierState).toEqual(modifiers);
+  });
+});
+
+describe("pointing configuration state", () => {
+  const pointing = (revision: number, multiplier = 1): PointingConfig => ({
+    revision,
+    device_count: 1,
+    devices: [
+      {
+        device_id: 0,
+        mode: {
+          Cursor: { multiplier_x: multiplier, multiplier_y: 1, divisor_x: 1, divisor_y: 1, invert_x: false, invert_y: false },
+        },
+      },
+    ],
+    override_count: 0,
+    overrides: [],
+  });
+
+  it("stages and discards a pointing document without touching the applied copy", () => {
+    const applied = pointing(4);
+    const staged = pointing(4, 3);
+    let state = baseState({ pointingConfig: applied, pointingDraft: applied });
+    state = reducer(state, { type: "pointingDraftSet", config: staged });
+    expect(pointingDraftDirty(state)).toBe(true);
+    expect(state.pointingConfig?.devices[0].mode).toEqual(pointing(4).devices[0].mode);
+
+    state = reducer(state, { type: "pointingDraftReset" });
+    expect(pointingDraftDirty(state)).toBe(false);
+    expect(state.pointingError).toBeNull();
+  });
+
+  it("writes pointing with the keyboard's current revision, whatever the draft was based on", async () => {
+    const set = vi.fn(async (config: PointingConfig) => ({ ...config, revision: 8 }));
+    const session = { pointing: { set, get: vi.fn(async () => pointing(7)) } } as unknown as RynkSession;
+    await writePlan(session, [{ kind: "pointing", value: normalizePointingConfig(pointing(2, 5)) }]);
+    expect(set).toHaveBeenCalledOnce();
+    expect(set.mock.calls[0][0]).toMatchObject({ revision: 7, device_count: 1 });
+    expect(set.mock.calls[0][0].devices).toHaveLength(4);
+  });
+
+  it("keeps staged pointing in the draft until the keyboard copy is reloaded", async () => {
+    let state = baseState({ pointingConfig: pointing(2), pointingDraft: pointing(2, 9), batchMode: true });
+    expect(draftOf(state).changes.map(({ item }) => item.kind)).toEqual(["pointing"]);
+    const session = { pointing: { get: vi.fn(async () => pointing(3, 4)) } } as unknown as RynkSession;
+    const dispatch = (action: WorkbenchAction) => {
+      state = reducer(state, action);
+    };
+    const io = makeIo(session, () => state, dispatch, { cols: 2, onDisconnect: () => {} });
+    await expect(io.reloadPointingConfig()).resolves.toEqual({ ok: true });
+    expect(state.pointingConfig?.revision).toBe(3);
+    expect(pointingDraftDirty(state)).toBe(false);
+    expect(draftOf(state).changes).toEqual([]);
+  });
+
+  it("recovers a config the connect-time read failed to fetch", async () => {
+    let state = baseState({
+      pointingConfig: null,
+      pointingDraft: null,
+      pointingError: "io error: Other",
+    });
+    const session = {
+      pointing: { get: vi.fn(async () => pointing(4)) },
+    } as unknown as RynkSession;
+    const dispatch = (action: WorkbenchAction) => {
+      state = reducer(state, action);
+    };
+    const io = makeIo(session, () => state, dispatch, { cols: 2, onDisconnect: () => {} });
+
+    await expect(io.reloadPointingConfig()).resolves.toEqual({ ok: true });
+    expect(state.pointingConfig?.revision).toBe(4);
+    expect(state.pointingDraft).not.toBeNull();
+    expect(state.pointingError).toBeNull();
+  });
+});
+
+describe("layer management state", () => {
+  it("keeps the selected logical layer selected after a reorder", () => {
+    const state = baseState({
+      uiLayer: 1,
+      layerMetadata: [
+        { occupied: true, name: "Base" },
+        { occupied: true, name: "Nav" },
+      ],
+    });
+    const next = reducer(state, { type: "commit", image: wantOf(state), layerOrder: [1, 0] });
+    expect(next.uiLayer).toBe(0);
+  });
+});
+
+describe("batch mode", () => {
+  const key = (name: "A" | "B" | "C"): KeyAction => ({ Single: { Key: { Hid: name } } });
+  const enc = (name: "A" | "B"): EncoderAction => ({
+    clockwise: key(name),
+    counter_clockwise: "No",
+  });
+
+  it("stages key edits locally with last-write-wins over one device baseline", () => {
+    let s = baseState({ batchMode: true, layers: [["No", "No"], []] });
+    s = reducer(s, { type: "keyStage", layer: 0, row: 0, col: 0, action: key("A") });
+    s = reducer(s, { type: "keyStage", layer: 0, row: 0, col: 0, action: key("B") });
+
+    expect(s.layers[0][0]).toEqual(key("B"));
+    expect(draftOf(s).changes).toEqual([{ item: { kind: "key", layer: 0, offset: 0 }, before: "No", after: key("B") }]);
+    expect(draftEditCount(s)).toBe(1);
+  });
+
+  it("unstages a key edited back to what the device holds", () => {
+    let s = baseState({ batchMode: true, layers: [[key("A"), "No"], []] });
+    s = reducer(s, { type: "keyStage", layer: 0, row: 0, col: 0, action: key("B") });
+    s = reducer(s, { type: "keyStage", layer: 0, row: 0, col: 0, action: key("A") });
+
+    expect(draftEditCount(s)).toBe(0);
+    expect(s.layers[0][0]).toEqual(key("A"));
+  });
+
+  it("discard restores staged keys and encoders to their device values", () => {
+    let s = baseState({
+      batchMode: true,
+      layers: [[key("A"), "No"], []],
+      encoders: { "0:1": enc("A") },
+    });
+    s = reducer(s, { type: "keyStage", layer: 0, row: 0, col: 0, action: key("B") });
+    s = reducer(s, { type: "encoderStage", layer: 0, id: 1, action: enc("B") });
+    // An encoder never read before staging has no baseline to restore.
+    s = reducer(s, { type: "encoderStage", layer: 0, id: 2, action: enc("B") });
+    expect(draftEditCount(s)).toBe(3);
+
+    s = reducer(s, { type: "batchDiscard" });
+
+    expect(draftEditCount(s)).toBe(0);
+    expect(s.layers[0][0]).toEqual(key("A"));
+    expect(s.encoders["0:1"]).toEqual(enc("A"));
+    expect("0:2" in s.encoders).toBe(false);
+  });
+
+  it("refuses to leave batch mode while edits are staged", () => {
+    let s = baseState({ batchMode: true, layers: [["No", "No"], []] });
+    s = reducer(s, { type: "keyStage", layer: 0, row: 0, col: 0, action: key("A") });
+
+    expect(reducer(s, { type: "batchMode", enabled: false }).batchMode).toBe(true);
+
+    s = reducer(s, { type: "batchDiscard" });
+    expect(reducer(s, { type: "batchMode", enabled: false }).batchMode).toBe(false);
+  });
+
+  it("lets undo travel through drafted edits, but not while the draft is being sent", () => {
+    let s = baseState({ batchMode: true, layers: [["No", "No"], []] });
+    s = reducer(s, { type: "keyStage", layer: 0, row: 0, col: 1, action: key("B") });
+    expect(canTravel(s, "undo")).toBe(true);
+    expect(canTravel(reducer(s, { type: "batchApplyStart" }), "undo")).toBe(false);
+  });
+});

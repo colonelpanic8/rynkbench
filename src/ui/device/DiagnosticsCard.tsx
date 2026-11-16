@@ -40,19 +40,19 @@ export function DiagnosticsCard() {
           {records.length} recorded{failures > 0 ? ` · ${failures} failed` : ""}
         </Chip>
       </div>
-      <p className="mt-2 text-[12px] leading-relaxed text-mute">
+      <p className="mt-2 text-body leading-relaxed text-mute">
         Every request to the keyboard, with how long it took. Copy this if something misbehaves.
         Set <code className="text-faint">localStorage["rynk:debug"] = "1"</code> to mirror it to the
         console.
       </p>
       {recent.length === 0 && (
-        <p className="mt-2 text-[11.5px] text-faint">
+        <p className="mt-2 text-small text-faint">
           Nothing recorded yet. Simulated boards answer in-process and are not traced — this fills
           in against a real keyboard.
         </p>
       )}
       {recent.length > 0 && (
-        <div className="mt-3 max-h-48 overflow-y-auto rounded-md border border-line-soft bg-well p-2 font-mono text-[11px] leading-relaxed">
+        <div className="mt-3 max-h-48 overflow-y-auto rounded-md border border-line-soft bg-well p-2 font-mono text-small leading-relaxed">
           {recent.map((record, index) => (
             <div
               key={index}

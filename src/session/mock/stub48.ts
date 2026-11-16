@@ -14,7 +14,8 @@ import type {
   LightingZone,
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import { emptyMorseProfile } from "../../model/slots";
-import { buildTopology, hid, layerOn, type BoardSpec, type SimLed } from "./board";
+import { hid, layerOn, type BoardSpec } from "./board";
+import { buildTopology, type SimLed } from "./topology";
 
 const ROWS = 4;
 const COLS = 12;

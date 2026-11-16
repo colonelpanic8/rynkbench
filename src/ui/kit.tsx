@@ -24,7 +24,7 @@ export function Panel({
 
 export function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="text-[11px] font-semibold uppercase tracking-[0.09em] text-faint">
+    <div className="text-small font-semibold uppercase tracking-[0.09em] text-faint">
       {children}
     </div>
   );
@@ -48,7 +48,7 @@ export function Chip({
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-small font-medium",
         tones[tone],
         className,
       )}
@@ -60,28 +60,40 @@ export function Chip({
 
 type ButtonVariant = "primary" | "ghost" | "outline" | "danger";
 
+/** A button. With `disabled` and a `reason`, it stays focusable and says why
+ *  it cannot be used (hover title and accessible description), rather than
+ *  going silently grey. */
 export function Button({
   variant = "outline",
   className,
+  reason,
+  disabled,
+  onClick,
+  title,
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; reason?: string }) {
   const variants: Record<ButtonVariant, string> = {
     primary:
-      "bg-accent text-well font-semibold hover:brightness-110 disabled:opacity-40 disabled:hover:brightness-100",
-    ghost: "text-mute hover:text-ink hover:bg-hover disabled:opacity-40",
+      "bg-accent-fill text-on-accent font-semibold hover:brightness-110 disabled:opacity-40 disabled:hover:brightness-100 aria-disabled:opacity-40 aria-disabled:hover:brightness-100",
+    ghost: "text-mute hover:text-ink hover:bg-hover disabled:opacity-40 aria-disabled:opacity-40 aria-disabled:hover:bg-transparent",
     outline:
-      "border border-line text-ink hover:border-line-strong hover:bg-raised disabled:opacity-40",
+      "border border-line text-ink hover:border-line-strong hover:bg-raised disabled:opacity-40 aria-disabled:opacity-40 aria-disabled:hover:bg-transparent",
     danger:
-      "border border-danger/50 text-danger hover:bg-danger-dim/40 disabled:opacity-40",
+      "border border-danger/50 text-danger hover:bg-danger-dim/40 disabled:opacity-40 aria-disabled:opacity-40 aria-disabled:hover:bg-transparent",
   };
+  const explained = Boolean(disabled && reason);
   return (
     <button
       type="button"
       className={cx(
-        "inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] transition-colors duration-150 disabled:cursor-not-allowed",
+        "inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-ui transition-colors duration-150 disabled:cursor-not-allowed aria-disabled:cursor-not-allowed",
         variants[variant],
         className,
       )}
+      disabled={explained ? undefined : disabled}
+      aria-disabled={explained ? true : undefined}
+      title={explained ? reason : title}
+      onClick={explained ? (event) => event.preventDefault() : onClick}
       {...rest}
     />
   );
@@ -94,7 +106,7 @@ export function TextInput({
   return (
     <input
       className={cx(
-        "w-full rounded-lg border border-line bg-well px-2.5 py-1.5 text-[13px] text-ink placeholder:text-faint",
+        "w-full rounded-lg border border-line bg-well px-2.5 py-1.5 text-ui text-ink placeholder:text-faint",
         "transition-colors duration-150 focus:border-accent-deep",
         className,
       )}
@@ -124,8 +136,8 @@ export function Row({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-1">
-      <span className="text-[12.5px] text-mute">{label}</span>
-      <span className={cx("tnum text-right text-[12.5px] text-ink", mono && "font-mono")}>
+      <span className="text-body text-mute">{label}</span>
+      <span className={cx("tnum text-right text-body text-ink", mono && "font-mono")}>
         {children}
       </span>
     </div>
@@ -176,7 +188,7 @@ export function Segmented<T extends string>({
           className={cx(
             "flex cursor-pointer items-center justify-center gap-1.5 rounded-md px-1.5 font-medium transition-colors duration-120",
             "disabled:cursor-not-allowed disabled:opacity-40",
-            size === "sm" ? "py-1 text-[11.5px]" : "py-1.5 text-[12px]",
+            size === "sm" ? "py-1 text-small" : "py-1.5 text-body",
             layout === "fill" && "flex-1",
             item.value === value ? "bg-raised text-ink shadow-sm" : "text-faint hover:text-mute",
           )}
@@ -243,7 +255,7 @@ export function UnderlineTabs<T extends string | number>({
           title={item.title}
           onClick={() => onChange(item.id)}
           className={cx(
-            "relative flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors duration-150",
+            "relative flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-ui font-medium transition-colors duration-150",
             item.id === value ? "text-ink" : "text-faint hover:text-mute",
           )}
         >
@@ -265,7 +277,7 @@ export function UnderlineTabs<T extends string | number>({
 /** A failed device write, reported inline above the control that caused it. */
 export function ErrorBanner({ message, className }: { message: string; className?: string }) {
   return (
-    <div className={cx("flex items-center gap-2 text-[12px] text-danger", className)}>
+    <div className={cx("flex items-center gap-2 text-body text-danger", className)}>
       <WarningIcon size={13} />
       <span className="min-w-0 flex-1 truncate" title={message}>
         {message}

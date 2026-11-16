@@ -6,6 +6,7 @@ import type {
 } from "../../vendor/rynk-wasm/rynk_wasm";
 import { actionLabel, keyActionGlyph, modifierSymbols, type KeyGlyph } from "../labels";
 import { activeLocale, characterFor } from "../locale";
+import type { LayerNames } from "../labels";
 
 function shifted(mods: ModifierCombination): boolean {
   return mods.left_shift || mods.right_shift;
@@ -41,21 +42,21 @@ function printableActionLabel(action: Action, shift: boolean): string | null {
 }
 
 /** Live-only key glyph that displays the character produced under Shift. */
-export function liveKeyActionGlyph(action: KeyAction, shift: boolean): KeyGlyph {
+export function liveKeyActionGlyph(action: KeyAction, shift: boolean, names?: LayerNames): KeyGlyph {
   if (action === "No" || action === "Transparent" || "Morse" in action) {
-    return keyActionGlyph(action);
+    return keyActionGlyph(action, [], names);
   }
   if ("Single" in action) {
-    return { text: printableActionLabel(action.Single, shift) ?? actionLabel(action.Single) };
+    return { text: printableActionLabel(action.Single, shift) ?? actionLabel(action.Single, names) };
   }
   if ("Tap" in action) {
-    return { text: printableActionLabel(action.Tap, shift) ?? actionLabel(action.Tap) };
+    return { text: printableActionLabel(action.Tap, shift) ?? actionLabel(action.Tap, names) };
   }
-  if ("LayerModTap" in action) return keyActionGlyph(action);
+  if ("LayerModTap" in action) return keyActionGlyph(action, [], names);
   const [tap, hold] = action.TapHold;
   return {
-    text: printableActionLabel(tap, shift) ?? actionLabel(tap),
-    sub: printableActionLabel(hold, shift) ?? actionLabel(hold),
+    text: printableActionLabel(tap, shift) ?? actionLabel(tap, names),
+    sub: printableActionLabel(hold, shift) ?? actionLabel(hold, names),
   };
 }
 

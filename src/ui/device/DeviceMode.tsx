@@ -104,17 +104,17 @@ export function DeviceMode() {
                   size={34}
                 />
                 <div>
-                  <div className="tnum text-[20px] font-semibold text-ink">
+                  <div className="tnum text-heading font-semibold text-ink">
                     {battery.level != null ? `${battery.level}%` : "—"}
                   </div>
-                  <div className="text-[12px] text-mute">
+                  <div className="text-body text-mute">
                     {battery.charge_state}
                     {caps.is_split ? " · central half" : ""}
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="mt-3 text-[12.5px] text-faint">
+              <div className="mt-3 text-body text-faint">
                 Battery status is unavailable on this connection — likely a wired device.
               </div>
             )}

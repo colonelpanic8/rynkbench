@@ -2,12 +2,14 @@ import { readFileSync } from "node:fs";
 import type { ChangeEvent } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { testWorkbench } from "../test/workbench";
 import { initSync } from "../vendor/moergo-config-wasm/moergo_config_wasm";
 import { initSync as initRynkSync } from "../vendor/rynk-wasm/rynk_wasm";
 import { parseDocument, renderDocument, snapshotFromState } from "../config/document";
 import { openOfflineGlove80 } from "../session/offline/glove80";
 import { openBundle } from "./bundle";
-import { initialWorkbenchState, WorkbenchContext, type WorkbenchContextValue } from "./state";
+import { initialWorkbenchState } from "../workbench";
+import { WorkbenchContext } from "./state";
 import { useDocumentTransfer, type DocumentTransfer } from "./transfer-actions";
 
 beforeAll(() => {
@@ -44,7 +46,7 @@ describe("offline exports", () => {
         return null;
       }
       renderToStaticMarkup(
-        <WorkbenchContext value={{ bundle, state } as WorkbenchContextValue}>
+        <WorkbenchContext value={testWorkbench({ bundle, state })}>
           <Exporter />
         </WorkbenchContext>,
       );
@@ -77,7 +79,7 @@ describe("unregistered board document actions", () => {
         return null;
       }
       renderToStaticMarkup(
-        <WorkbenchContext value={{ bundle, state, dispatch } as unknown as WorkbenchContextValue}>
+        <WorkbenchContext value={testWorkbench({ bundle, state, dispatch })}>
           <Controller />
         </WorkbenchContext>,
       );

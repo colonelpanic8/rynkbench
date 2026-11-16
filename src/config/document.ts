@@ -24,8 +24,8 @@ import type {
 import { boardForMatrixCells } from "../model/boards/transfer";
 import type { LightingTopology, RynkSession } from "../session/types";
 import { ruleToWire } from "../session/lighting-rules";
-import { normalizePointingConfig } from "../ui/pointing";
-import type { WorkbenchState } from "../ui/state";
+import { normalizePointingConfig } from "../model/pointing";
+import type { WorkbenchState } from "../model/workbench-state";
 import { initWasm as initRynkWasm } from "../session/wasm";
 
 export type { ConfigFormat, ExtensionCatalog, ImportNote, ParsedConfig, RuntimeSnapshot };

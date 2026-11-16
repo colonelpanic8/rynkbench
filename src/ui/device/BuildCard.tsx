@@ -42,13 +42,13 @@ export function BuildCard({ build }: { build: BuildInfo | null }) {
         ))}
       </div>
       {parsed && revsDiverge(parsed) && (
-        <div className="mt-2 text-[11px] leading-relaxed text-faint">
+        <div className="mt-2 text-small leading-relaxed text-faint">
           Marked revisions differ from the firmware's. Usually harmless, but it is
           the first thing to check if a read fails to decode.
         </div>
       )}
       {parsed?.dirty && (
-        <div className="mt-2 text-[11px] leading-relaxed text-faint">
+        <div className="mt-2 text-small leading-relaxed text-faint">
           The firmware was built from a modified tree, so its revision does not
           fully identify it.
         </div>

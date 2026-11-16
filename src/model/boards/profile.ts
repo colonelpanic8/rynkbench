@@ -58,6 +58,8 @@ export interface BoardProfile {
     label: string;
     hint: string;
     danger?: boolean;
+    /** The key picture it shows (a name in ui/keyface/keyIconData.ts). */
+    icon?: string;
   }[];
   defaultStatusLayer?: number;
   /** Optional, declarative route from this device identity to trusted firmware. */

@@ -1,13 +1,15 @@
-// Device-wide lighting state: output enable/brightness and the VIA-style
-// background layer (mode + HSV + speed). Staged locally, applied via
-// lighting.setState; the device's returned state is the source of truth.
+// The keyboard's lights as a whole: on or off, brightness, and the VIA-style
+// background under every key's own light (mode, HSV, speed). Staged locally,
+// applied with io.setLightingState; the keyboard's returned state is the
+// source of truth. In Layout properties' RGB Lighting tab.
 
 import { useMemo } from "react";
 import type { LightingBackgroundMode } from "../../vendor/rynk-wasm/rynk_wasm";
 import { useWorkbench } from "../state";
 import { useDeviceDraft } from "../device-draft";
-import { cssRgb, hsvToRgb } from "../color";
-import { ApplyBar, SectionLabel, Segmented, cx } from "../kit";
+import { cssRgb, hsvToRgb } from "../../model/lighting/color";
+import { ApplyBar, Segmented, cx } from "../kit";
+import { BigSwitch } from "../properties/BigSwitch";
 
 const MODES: LightingBackgroundMode[] = ["Solid", "Breathe"];
 
@@ -33,7 +35,7 @@ export function Slider({
   return (
     <label
       className={cx(
-        "flex items-center gap-2.5 text-[12px] text-mute",
+        "flex items-center gap-2.5 text-body text-mute",
         disabled && "opacity-40",
       )}
     >
@@ -56,7 +58,7 @@ export function Slider({
           className={cx("relative w-full accent-(--color-accent)", track && "opacity-90")}
         />
       </span>
-      <span className="tnum w-8 shrink-0 text-right text-[11.5px] text-faint">{value}</span>
+      <span className="tnum w-8 shrink-0 text-right text-small text-faint">{value}</span>
     </label>
   );
 }
@@ -90,27 +92,17 @@ export function BackgroundPanel() {
     setDraft({ ...draft, background: { ...bg, ...patch } });
 
   return (
-    <div>
-      <div className="flex items-center justify-between">
-        <SectionLabel>Output & background</SectionLabel>
-        {dirty && <span className="text-[10.5px] text-warn">unapplied</span>}
-      </div>
-
-      <div className="mt-2 flex flex-col gap-2">
-        <label className="flex cursor-pointer items-center justify-between text-[12.5px] text-mute">
-          <span>All RGB lighting</span>
-          <input
-            type="checkbox"
-            checked={draft.output_enabled}
-            onChange={(e) => setDraft({ ...draft, output_enabled: e.target.checked })}
-            className="accent-(--color-accent)"
-          />
-        </label>
-        <p className="text-[11.5px] leading-relaxed text-faint">
-          Applies to layer colors, effects, and indicators. To toggle from a key, select
-          the key in Keymap and use its Lighting tab.
-          {state.lightingOutputMode?.wake_layers ? " Wake layers can temporarily turn lighting back on; disable the wake setting for those layers below to keep it off on every layer." : ""}
-        </p>
+    <div className="flex flex-col gap-2">
+      <BigSwitch
+        name="Lights"
+        state={draft.output_enabled ? "On" : "Off: the keyboard stays dark"}
+        on={draft.output_enabled}
+        onChange={(output_enabled) => setDraft({ ...draft, output_enabled })}
+      />
+      {!draft.output_enabled && state.lightingOutputMode?.wake_layers ? (
+        <p className="text-small leading-relaxed text-warn">A wake layer still turns the lights on while it is active.</p>
+      ) : null}
+      <div className="mt-1 flex flex-col gap-2">
         <Slider
           label="Brightness"
           value={draft.output_brightness}
@@ -118,7 +110,7 @@ export function BackgroundPanel() {
           onChange={(v) => setDraft({ ...draft, output_brightness: v })}
         />
 
-        <label className="mt-1 flex cursor-pointer items-center justify-between text-[12.5px] text-mute">
+        <label className="mt-1 flex cursor-pointer items-center justify-between text-body text-mute">
           <span className="flex items-center gap-2">
             Background
             <span
@@ -138,10 +130,6 @@ export function BackgroundPanel() {
           />
         </label>
 
-        <p className="text-[11.5px] leading-relaxed text-faint">
-          Background hue, saturation, and speed do not change painted layer colors.
-          Edit those colors with the layer brush. RGB toggle controls the background/effect only.
-        </p>
         {bg.enabled && (
           <>
             <Segmented

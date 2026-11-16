@@ -25,13 +25,13 @@ export function WriteStatus({
   const pending = state.pending[id];
   if (!pending) return null;
   if (pending.status === "pending") {
-    return <div className="text-[11.5px] text-accent">Writing to device…</div>;
+    return <div className="text-small text-accent">Writing to device…</div>;
   }
   const dismiss = () => dispatch({ type: "pendingErrDismiss", id });
 
   if (compact) {
     return (
-      <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-danger">
+      <span className="flex min-w-0 items-center gap-1.5 text-body text-danger">
         <WarningIcon size={13} className="shrink-0" />
         <span className="truncate">Write failed: {pending.message}</span>
         {onRetry && (
@@ -55,7 +55,7 @@ export function WriteStatus({
   }
 
   return (
-    <div className="flex items-start gap-2 rounded-lg border border-danger/40 bg-danger-dim/25 px-3 py-2 text-[12px] text-danger">
+    <div className="flex items-start gap-2 rounded-lg border border-danger/40 bg-danger-dim/25 px-3 py-2 text-body text-danger">
       <WarningIcon size={14} className="mt-0.5 shrink-0" />
       <div className="min-w-0 flex-1">
         <div>Write failed: {pending.message}</div>

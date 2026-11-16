@@ -1,0 +1,135 @@
+From e4a52089816a4d5273603f65fb78aff15e413135 Mon Sep 17 00:00:00 2001
+From: moosylog <noreply@users.noreply.github.com>
+Date: Sat, 14 Nov 2026 10:08:41 +0100
+Subject: [PATCH] storage: do not store a key or encoder action flash already
+ holds
+
+Hosts resend unchanged keys (a whole-layer write, a retry, an import). Every
+store appends an item to sequential-storage and brings the next page
+migration, and erase, closer. The lighting tables already compare before
+storing; the storage task now does the same for key and encoder actions, for
+one flash read (put_unless_stored).
+
+Adds a test on the in-memory flash's write counter: an unchanged key or
+encoder action is not written, a changed one is and reads back.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01QpAvhdLg1SQXb32XiJhdax
+---
+ rmk/src/storage/mod.rs | 86 ++++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 83 insertions(+), 3 deletions(-)
+
+diff --git a/rmk/src/storage/mod.rs b/rmk/src/storage/mod.rs
+index 20444b3..5a842b0 100644
+--- a/rmk/src/storage/mod.rs
++++ b/rmk/src/storage/mod.rs
+@@ -1054,6 +1054,35 @@ impl<F: AsyncNorFlash> Storage<F> {
+         }
+     }
+ 
++    /// Stores `item`, unless it is a key or encoder action flash already holds.
++    ///
++    /// Hosts resend unchanged keys (a whole-layer write, a retry, an import).
++    /// Every store appends an item to sequential-storage and brings the next
++    /// page migration, and erase, closer; one flash read avoids it. The lighting
++    /// tables already compare before storing.
++    async fn put_unless_stored(&mut self, item: StorageItem) -> Result<(), SSError<F::Error>> {
++        let (key, value) = item.split();
++        #[cfg(feature = "host")]
++        {
++            let stored = match &value {
++                StorageValue::KeyAction(_) | StorageValue::EncoderAction(_) => self.fetch(key).await.ok().flatten(),
++                _ => None,
++            };
++            let unchanged = match (&value, &stored) {
++                (StorageValue::KeyAction(new), Some(StorageValue::KeyAction(old))) => new == old,
++                (StorageValue::EncoderAction(new), Some(StorageValue::EncoderAction(old))) => new == old,
++                _ => false,
++            };
++            if unchanged {
++                return Ok(());
++            }
++        }
++        self.flash
++            .store_item(&mut self.buffer, &key, &value)
++            .await
++            .inspect_err(|_| error!("Failed to store {:?}", key))
++    }
++
+     pub async fn new(flash: F, storage_config: &StorageConfig) -> Self {
+         assert!(
+             storage_config.num_sectors >= 2,
+@@ -1810,9 +1839,11 @@ impl<F: AsyncNorFlash> crate::core_traits::Runnable for Storage<F> {
+         loop {
+             let (message, reply_id) = FLASH_CHANNEL.receive().await;
+             let result = match message {
+-                FlashOperationMessage::Store(item) => {
+-                    self.put(item).await.map(|_| None).map_err(print_storage_error::<F>)
+-                }
++                FlashOperationMessage::Store(item) => self
++                    .put_unless_stored(item)
++                    .await
++                    .map(|_| None)
++                    .map_err(print_storage_error::<F>),
+                 FlashOperationMessage::Read(key) => self.fetch(key).await,
+                 FlashOperationMessage::Reset => {
+                     let _ = self.flash.erase_all().await;
+@@ -2318,6 +2349,55 @@ mod tests {
+         });
+     }
+ 
++    /// A host that sends a key or encoder action flash already holds costs no flash write.
++    #[cfg(feature = "host")]
++    #[test]
++    fn unchanged_key_and_encoder_actions_are_not_stored_again() {
++        use rmk_types::action::{Action, EncoderAction};
++        use rmk_types::keycode::{HidKeyCode, KeyCode};
++
++        let a = KeyAction::Single(Action::Key(KeyCode::Hid(HidKeyCode::A)));
++        let b = KeyAction::Single(Action::Key(KeyCode::Hid(HidKeyCode::B)));
++        let key = |action| StorageItem::Keymap {
++            layer: 0,
++            row: 0,
++            col: 0,
++            action,
++        };
++
++        block_on(async {
++            let part = Part::new();
++            let flash = part.clone();
++            let mut storage = new_storage(async_flash_wrapper(part)).await;
++
++            storage.put_unless_stored(key(a)).await.unwrap();
++            let stored = flash.writes();
++            storage.put_unless_stored(key(a)).await.unwrap();
++            assert_eq!(flash.writes(), stored, "an unchanged key was written to flash");
++
++            storage.put_unless_stored(key(b)).await.unwrap();
++            assert!(flash.writes() > stored, "a changed key was not written");
++            assert!(matches!(
++                storage.fetch(StorageKey::Keymap { layer: 0, row: 0, col: 0 }).await,
++                Ok(Some(StorageValue::KeyAction(saved))) if saved == b
++            ));
++
++            let encoder = |action| StorageItem::Encoder {
++                layer: 0,
++                idx: 0,
++                action: EncoderAction::new(action, KeyAction::No),
++            };
++            storage.put_unless_stored(encoder(a)).await.unwrap();
++            let stored = flash.writes();
++            storage.put_unless_stored(encoder(a)).await.unwrap();
++            assert_eq!(
++                flash.writes(),
++                stored,
++                "an unchanged encoder action was written to flash"
++            );
++        });
++    }
++
+     /// Storage outranks the compiled-in keymap: an edit made over the host protocol survives
+     /// both a reboot and a firmware built from another `keyboard.toml`. `clear_layout` is the
+     /// only way to hand the compiled-in layout back the win, and it keeps the pairings.
+-- 
+2.43.0
+
