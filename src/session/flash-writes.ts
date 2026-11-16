@@ -67,3 +67,16 @@ export async function writeKeyRun(
     );
   }
 }
+
+/** Cells of one row the firmware stores as one flash item (RMK's `KEYMAP_SEGMENT_KEYS`). */
+export const KEYMAP_SEGMENT_KEYS = 16;
+
+/** Flash items stored by writing `count` cells from row-major offset `start` of
+ *  a layer `cols` wide: one per row segment the cells fall in. */
+export function keymapSegments(start: number, count: number, cols: number): number {
+  let segments = 0;
+  for (let offset = start; offset < start + count; offset += 1) {
+    if (offset === start || (offset % cols) % KEYMAP_SEGMENT_KEYS === 0) segments += 1;
+  }
+  return segments;
+}
