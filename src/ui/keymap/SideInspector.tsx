@@ -9,7 +9,7 @@ import type {
 } from "../../model/action-types";
 
 
-import { encoderPendingId } from "../../workbench";
+import { encoderPendingId, isDrafted } from "../../workbench";
 import { useWorkbench } from "../state";
 import { ActionEditor } from "./ActionEditor";
 
@@ -28,7 +28,7 @@ function EncoderInspector({ id }: { id: number }) {
   const layer = state.uiLayer;
   const encoder = state.encoders[`${layer}:${id}`];
   const pending = state.pending[encoderPendingId(layer, id)];
-  const staged = state.stagedEncoders[encoderPendingId(layer, id)];
+  const staged = isDrafted(state, { kind: "encoder", layer, id });
   const [slot, setSlot] = useState<"cw" | "ccw">("cw");
 
   useEffect(() => {

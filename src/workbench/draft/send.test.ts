@@ -8,6 +8,7 @@ import { initialWorkbenchState } from "../initial-state";
 import { ioFeaturesFor, makeIo } from "../io";
 import { makeWorkbenchReducer } from "../reducer";
 import { type WorkbenchState } from "../../model/workbench-state";
+import { draftOf } from "./want";
 
 const key = (code: string) => ({ Single: { Key: { Hid: code } } }) as KeyAction;
 
@@ -36,7 +37,7 @@ describe("Send", () => {
       const before = storedKeysOf(session);
       expect(await io.applyBatch()).toEqual({ ok: true });
       expect(storedKeysOf(session) - before).toBe(3);
-      expect(state().stagedKeys).toEqual({});
+      expect(draftOf(state()).changes).toEqual([]);
       expect(state().batchBusy).toBe(false);
       const [layer0] = await session.keymap.readAll();
       expect(layer0.actions[0]).toEqual(key("F13"));
@@ -62,7 +63,7 @@ describe("Send", () => {
       const result = await io.applyBatch({ confirmOverwrite: async (items) => { asked = items; return false; } });
       expect(asked).toEqual([{ kind: "key", layer: 0, offset: 0 }]);
       expect(result).toMatchObject({ ok: false, guarded: true });
-      expect(Object.keys(state().stagedKeys)).toHaveLength(1);
+      expect(draftOf(state()).changes).toHaveLength(1);
       expect((await session.keymap.readAll())[0].actions[0]).toEqual(key("F20"));
     });
   });
@@ -76,7 +77,7 @@ describe("Send", () => {
       session.keymap.writeKeys = (layer, start, actions) =>
         layer === 2 && failures-- > 0 ? Promise.reject(new Error("link dropped")) : writeKeys(layer, start, actions);
       expect(await io.applyBatch()).toEqual({ ok: false, message: "link dropped" });
-      expect(Object.values(state().stagedKeys).map((edit) => edit.layer)).toEqual([2]);
+      expect(draftOf(state()).changes.map(({ item }) => item)).toEqual([{ kind: "key", layer: 2, offset: 0 }]);
       const before = storedKeysOf(session);
       expect(await io.applyBatch()).toEqual({ ok: true });
       expect(storedKeysOf(session) - before).toBe(1);
@@ -87,10 +88,10 @@ describe("Send", () => {
     await inDraft(async ({ session, io, state }) => {
       const entry = { profile: state().morse[0].profile, actions: [[1, { Key: { Hid: "F13" } }]] } as never;
       await io.setSlot("morse", 0, entry);
-      expect(Object.values(state().stagedSlots)).toMatchObject([{ kind: "morse", index: 0, value: entry }]);
+      expect(draftOf(state()).changes).toMatchObject([{ item: { kind: "slot", table: "morse", index: 0 }, after: entry }]);
       expect(await io.applyBatch()).toEqual({ ok: true });
       expect((await session.morse.readAll())[0]).toEqual(entry);
-      expect(state().stagedSlots).toEqual({});
+      expect(draftOf(state()).changes).toEqual([]);
     });
   });
 });

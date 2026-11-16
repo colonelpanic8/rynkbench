@@ -6,7 +6,8 @@ import { setLink } from "./link";
 
 const A = { Single: { Key: { Hid: "A" } } } as unknown as KeyAction;
 const keyboard = { session: { kind: "webhid" as const }, info: { product_name: "Glove80" } };
-const staged = { "k:0:0:0": { layer: 0, row: 0, col: 0, before: "No" as KeyAction, action: A } };
+/** One key drafted: the keyboard holds nothing there, you want A. */
+const drafted = { layers: [[A]], base: { layers: [["No" as KeyAction]] } };
 
 describe("the connection chip", () => {
   it("says a file is a file", () => {
@@ -21,7 +22,7 @@ describe("the connection chip", () => {
   });
 
   it("counts the changes not on the keyboard and offers Review & send", () => {
-    const html = renderInWorkbench(<ConnectionChip />, { bundle: keyboard, state: { batchMode: true, stagedKeys: staged } });
+    const html = renderInWorkbench(<ConnectionChip />, { bundle: keyboard, state: { batchMode: true, ...drafted } });
     expect(html).toContain("Review &amp; send");
     expect(html).toMatch(/Review &amp; send<span[^>]*>1<\/span>/);
     expect(html).toContain("Discard the changes not on the keyboard");
@@ -36,7 +37,7 @@ describe("the connection chip", () => {
   it("says when the keyboard cannot be reached, keeps the changes and offers Reconnect", () => {
     setLink({ lost: true, reconnect: () => {} });
     try {
-      const html = renderInWorkbench(<ConnectionChip />, { bundle: keyboard, state: { batchMode: true, stagedKeys: staged } });
+      const html = renderInWorkbench(<ConnectionChip />, { bundle: keyboard, state: { batchMode: true, ...drafted } });
       expect(html).toContain("not connected");
       expect(html).toContain("1 change kept for when it is back");
       expect(html).toContain("Reconnect");

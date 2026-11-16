@@ -8,8 +8,6 @@ export type {
   Selection,
   ConnectedBundle,
   PendingInfo,
-  StagedKeyEdit,
-  StagedEncoderEdit,
   SlotKind,
   SlotValueOf,
   WritableField,
@@ -33,9 +31,10 @@ export {
 export {
   canTravelKeyEditHistory,
   hasPendingConfigurationWrite,
+  draftEditCount,
   pointingDraftDirty,
-  stagedEditCount,
 } from "./draft/selectors";
+export { draftOf, isDrafted, type Draft } from "./draft/want";
 export {
   makeIo,
   ioFeaturesFor,

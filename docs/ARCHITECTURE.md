@@ -44,9 +44,11 @@ Take a key changed in the key editor.
    │                            judgeChange(before, after) may stop or ask
    ▼
  io (workbench/io-keys.ts)
-   ├─ Draft: dispatch keyStage ──▶ reducer: stagedKeys += edit   (nothing sent yet)
+   ├─ Draft: dispatch keyStage ──▶ reducer: what you want changes (nothing sent yet)
+   │          the draft = differences(base, want)   (workbench/draft/want.ts)
    │          … Send: io.applyBatch ──▶ workbench/draft/send.ts
-   │                    readImage ─▶ conflicts(base, now, want) ─▶ syncTo(want)
+   │                    readImage ─▶ conflicts(based-on, now, want) ─▶ syncTo(want)
+   │                    read-back ─▶ base   (what reached the keyboard leaves the draft)
    │                                                                 │
    └─ Live:  dispatch keyWriteStart ──▶ session.keymap.setKey ───────┤
              keyWriteOk / keyWriteErr + key history                  │
@@ -58,7 +60,7 @@ Take a key changed in the key editor.
 ```
 
 1. **A screen never writes.** It calls `io` (from `useWorkbench()`), and every key write passes Guard first (ADR 0011).
-2. **`io` decides when.** In Draft the change is staged in the state (ADR 0010); in Live it is written at once and narrated by actions (`…Start`, then `…Ok` or `…Err`).
+2. **`io` decides when.** In Draft the change only changes what you want; the draft is its difference from `base`, what the keyboard held at the last read (ADR 0010, ADR 0018). In Live it is written at once and narrated by actions (`…Start`, then `…Ok` or `…Err`), and `base` with it.
 3. **The reducer is the only place state changes** (`workbench/reducer.ts`). It is pure; topic events from the keyboard arrive through it too.
 4. **Bulk writes go through the one write path.** Send, layer moves and (later) operations and Flows build the keyboard they want as an image; `sync/` plans only the difference, writes it and reads it back (ADR 0012, `docs/sync.md`).
 5. **Undo** is the draft's history in Draft and the keyboard's key history in Live, until ADR 0013 makes them one.

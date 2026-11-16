@@ -3,7 +3,7 @@
 
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { stagedEditCount } from "../../workbench";
+import { draftEditCount } from "../../workbench";
 import { useWorkbench } from "../state";
 import { Button, Chip, Panel, SectionLabel } from "../kit";
 import { CenterScroll } from "./bits";
@@ -82,7 +82,7 @@ export function TransformsTab({ nav }: { nav: ReactNode }) {
   );
 
   const busy = run.phase === "running";
-  const blocked = transformBlockedReason(state.batchMode, stagedEditCount(state));
+  const blocked = transformBlockedReason(state.batchMode, draftEditCount(state));
 
   const execute = async (plan: TransformPlan) => {
     const total = planSize(plan);

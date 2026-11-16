@@ -4,7 +4,8 @@
 // unchanged (ADR 0017).
 
 import type { ComboDefinition, Fork, Morse } from "../vendor/rynk-wasm/rynk_wasm";
-import type { WorkbenchAction, WorkbenchState } from "../model/workbench-state";
+import type { SlotKind, WorkbenchAction, WorkbenchState } from "../model/workbench-state";
+import type { KeyboardImage } from "../sync";
 import { FIELD_STATE_KEY } from "../model/workbench-state";
 import { normalizePointingConfig } from "../model/pointing";
 import { morseProfilePendingId, slotPendingId } from "./pending";
@@ -40,6 +41,12 @@ export function isSettingsAction(act: WorkbenchAction): act is SettingsAction {
   return SETTINGS_ACTIONS.has(act.type);
 }
 
+function withSlot(image: KeyboardImage, kind: SlotKind, index: number, value: ComboDefinition | Morse | Fork): KeyboardImage {
+  const table = [...image[kind]] as unknown[];
+  table[index] = value;
+  return { ...image, [kind]: table };
+}
+
 export function reduceSettings(state: WorkbenchState, act: SettingsAction): WorkbenchState {
   switch (act.type) {
     case "pointingDraftSet":
@@ -73,8 +80,10 @@ export function reduceSettings(state: WorkbenchState, act: SettingsAction): Work
       const id = slotPendingId(act.kind, act.index);
       const table = state[act.kind].slice() as Array<ComboDefinition | Morse | Fork>;
       table[act.index] = act.value;
+      // Live: written at once, so the keyboard holds it (the base, ADR 0018).
       return {
         ...state,
+        base: withSlot(state.base, act.kind, act.index, act.value),
         [act.kind]: table,
         pending: { ...state.pending, [id]: { status: "pending" } },
       };
@@ -90,6 +99,7 @@ export function reduceSettings(state: WorkbenchState, act: SettingsAction): Work
       table[act.index] = act.prev;
       return {
         ...state,
+        base: withSlot(state.base, act.kind, act.index, act.prev),
         [act.kind]: table,
         pending: { ...state.pending, [id]: { status: "error", message: act.message } },
       };

@@ -14,7 +14,7 @@ import { PREFERENCES, usePreference } from "../preferences";
 import { useFaceContext } from "../keyface/useFaceContext";
 import { keyAddressLabel } from "../key-address";
 
-import { encoderPendingId, keyPendingId, lightingBaseFor, lightingDraftFor, pointingDraftDirty } from "../../workbench";
+import { encoderPendingId, isDrafted, keyPendingId, lightingBaseFor, lightingDraftFor, pointingDraftDirty } from "../../workbench";
 import { useWorkbench } from "../state";
 import { stagedBetween } from "../../model/lighting/compare";
 
@@ -110,8 +110,7 @@ export function KeymapCenter() {
     const action = layer?.[key.row * cols + key.col];
     const pending =
       state.pending[keyPendingId(state.uiLayer, key.row, key.col)];
-    const stagedBinding =
-      state.stagedKeys[keyPendingId(state.uiLayer, key.row, key.col)] !== undefined;
+    const stagedBinding = isDrafted(state, { kind: "key", layer: state.uiLayer, offset: key.row * cols + key.col });
     const scene =
       sceneEffects && key.ledId !== undefined ? sceneEffects.get(key.ledId) : undefined;
     // A light that is off (black) leaves the key as it is: its own face and special colour.
@@ -216,9 +215,7 @@ export function KeymapCenter() {
             selected:
               state.selection?.type === "encoder" &&
               state.selection.id === enc.id,
-            staged:
-              state.stagedEncoders[encoderPendingId(state.uiLayer, enc.id)] !==
-              undefined,
+            staged: isDrafted(state, { kind: "encoder", layer: state.uiLayer, id: enc.id }),
             pending:
               state.pending[encoderPendingId(state.uiLayer, enc.id)]?.status ===
               "pending",

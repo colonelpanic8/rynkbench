@@ -1,10 +1,9 @@
 // The lighting drafts the workbench keeps: the overlay's, and one per layer
-// seeded from the stored scene table. Which draft a target edits, what it is
-// staged against, and how drafts follow the keyboard while they are clean.
+// seeded from the stored scene table: which draft a target edits and what it
+// is staged against. How they follow the keyboard is in draft/want.ts.
 
 import type { LightingOverlayCell, LightingSceneCell } from "../vendor/rynk-wasm/rynk_wasm";
 import type { LightingTarget, WorkbenchState } from "../model/workbench-state";
-import { overlaysEqual } from "../model/lighting/compare";
 
 /** The effects whose parameters are in play, base first and deduplicated —
  *  both slots may point at the same effect, which has one parameter set. */
@@ -51,23 +50,6 @@ export function setTargetDraft(
   return target === "overlay"
     ? { draft }
     : { layerDrafts: { ...state.layerDrafts, [target]: draft } };
-}
-
-/** After the scene table changes, re-sync every layer draft that was clean
- *  against the old table (mirrors the overlay's follow-when-clean rule);
- *  drafts with staged edits are left untouched. */
-export function reseedLayerDrafts(
-  layerDrafts: Record<number, Record<number, LightingOverlayCell>>,
-  oldScenes: LightingSceneCell[],
-  newScenes: LightingSceneCell[],
-): Record<number, Record<number, LightingOverlayCell>> {
-  const next = { ...layerDrafts };
-  for (const key of Object.keys(layerDrafts)) {
-    const layer = Number(key);
-    if (overlaysEqual(layerDrafts[layer], layerSceneCells(oldScenes, layer)))
-      next[layer] = layerSceneCells(newScenes, layer);
-  }
-  return next;
 }
 
 /** The draft a given target edits (overlay draft, or that layer's). */

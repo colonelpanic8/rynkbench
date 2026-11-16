@@ -18,7 +18,8 @@ import type { RynkSession } from "../session/types";
 import { initialKeyEditHistory } from "../model/history";
 import { conditionalTablesEqual, stagedBetween } from "../model/lighting/compare";
 import { activeLightingBase, activeLightingDraft } from "./lighting-drafts";
-import { canTravelKeyEditHistory, pointingDraftDirty, stagedEditCount } from "./draft/selectors";
+import { canTravelKeyEditHistory, draftEditCount, pointingDraftDirty } from "./draft/selectors";
+import { draftOf, storedImage } from "./draft/want";
 import { makeIo } from "./io";
 import { makeWorkbenchReducer } from "./reducer";
 import { type WorkbenchAction, type WorkbenchState } from "../model/workbench-state";
@@ -37,8 +38,10 @@ const LIGHTING: LightingState = {
   overlay_len: 0,
 };
 
+/** A workbench whose keyboard holds what it shows, unless `over.base` says otherwise. */
 function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
-  return {
+  const { base, ...fields } = over;
+  const opened: Omit<WorkbenchState, "base"> = {
     mode: "keymap",
     uiLayer: 0,
     currentLayer: 0,
@@ -79,9 +82,6 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     keyEditHistory: initialKeyEditHistory(),
     keyEditHistorySuspended: false,
     batchMode: false,
-    stagedKeys: {},
-    stagedEncoders: {},
-    stagedSlots: {},
     batchBusy: false,
     batchError: null,
     layerBusy: false,
@@ -103,8 +103,9 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     autoMouseLayers: [],
     ledIndicator: null,
     modifierState: null,
-    ...over,
+    ...fields,
   };
+  return { ...opened, base: base ?? storedImage(opened) };
 }
 
 describe("per-target lighting drafts", () => {
@@ -1128,14 +1129,8 @@ describe("batch mode", () => {
     s = reducer(s, { type: "keyStage", layer: 0, row: 0, col: 0, action: key("B") });
 
     expect(s.layers[0][0]).toEqual(key("B"));
-    expect(s.stagedKeys["0:0:0"]).toEqual({
-      layer: 0,
-      row: 0,
-      col: 0,
-      before: "No",
-      action: key("B"),
-    });
-    expect(stagedEditCount(s)).toBe(1);
+    expect(draftOf(s).changes).toEqual([{ item: { kind: "key", layer: 0, offset: 0 }, before: "No", after: key("B") }]);
+    expect(draftEditCount(s)).toBe(1);
   });
 
   it("unstages a key edited back to what the device holds", () => {
@@ -1143,7 +1138,7 @@ describe("batch mode", () => {
     s = reducer(s, { type: "keyStage", layer: 0, row: 0, col: 0, action: key("B") });
     s = reducer(s, { type: "keyStage", layer: 0, row: 0, col: 0, action: key("A") });
 
-    expect(stagedEditCount(s)).toBe(0);
+    expect(draftEditCount(s)).toBe(0);
     expect(s.layers[0][0]).toEqual(key("A"));
   });
 
@@ -1157,11 +1152,11 @@ describe("batch mode", () => {
     s = reducer(s, { type: "encoderStage", layer: 0, id: 1, action: enc("B") });
     // An encoder never read before staging has no baseline to restore.
     s = reducer(s, { type: "encoderStage", layer: 0, id: 2, action: enc("B") });
-    expect(stagedEditCount(s)).toBe(3);
+    expect(draftEditCount(s)).toBe(3);
 
     s = reducer(s, { type: "batchDiscard" });
 
-    expect(stagedEditCount(s)).toBe(0);
+    expect(draftEditCount(s)).toBe(0);
     expect(s.layers[0][0]).toEqual(key("A"));
     expect(s.encoders["0:1"]).toEqual(enc("A"));
     expect("0:2" in s.encoders).toBe(false);
@@ -1185,7 +1180,8 @@ describe("batch mode", () => {
       canTravelKeyEditHistory(
         baseState({
           keyEditHistory: history,
-          stagedKeys: { "0:0:1": { layer: 0, row: 0, col: 1, before: "No", action: key("B") } },
+          layers: [["No", key("B")], []],
+          base: storedImage(baseState({ layers: [["No", "No"], []] })),
         }),
         "undo",
       ),

@@ -14,7 +14,7 @@ import { layerName } from "../layer-names";
 import { askConfirm, showToast } from "../messages/store";
 import type { IoWriteResult, KeyWrite, WorkbenchIo, WorkbenchState } from "../../workbench";
 import { askRequest, overwriteRequest, stopText, type GuardNames } from "./words";
-import { discardStagedSlots } from "../../workbench/draft/slot-stage";
+import { atBase } from "../../workbench/draft/want";
 
 function sideOf(state: WorkbenchState, cols: number, layers: KeyAction[][]): GuardInput {
   return {
@@ -98,9 +98,8 @@ export function guardIo(io: WorkbenchIo, bundle: ConnectedBundle, getState: () =
     // and asks before overwriting changes made on the keyboard since (ADR 0012).
     async applyBatch(options) {
       const state = getState();
-      const staged = Object.values(state.stagedKeys).map((edit) => ({ ...edit, action: edit.before }));
-      const onKeyboard = withKeys(state.layers, cols, staged);
-      const findings = judgeChange(sideOf(discardStagedSlots(state), cols, onKeyboard), sideOf(state, cols, state.layers));
+      const onKeyboard = atBase(state);
+      const findings = judgeChange(sideOf(onKeyboard, cols, onKeyboard.layers), sideOf(state, cols, state.layers));
       const refused = await verdict(findings, names(state, state.layers), false);
       if (refused) return { ok: false, message: refused, guarded: true };
       const named = names(state, state.layers);

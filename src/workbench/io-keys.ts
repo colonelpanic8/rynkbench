@@ -147,7 +147,7 @@ export function keyIo(context: IoContext): KeyIo {
       return travelKeyHistory("redo");
     },
     applyBatch(options) {
-      return sendStaged({ session, getState, dispatch, cols, features }, options);
+      return sendStaged({ session, getState, dispatch, features }, options);
     },
     loadEncoder(layer, id) {
       session.keymap.getEncoder(id, layer).then(

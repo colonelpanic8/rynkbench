@@ -61,14 +61,14 @@ Guard judges the end result (ADR 0011). Every intermediate state is not judged: 
 | **Draft** | On Send | On Send | On Send | At once (not in the draft yet) |
 | **Not connected** | Kept in the draft | Kept in the draft | Kept in the draft | Not possible |
 
-- **Send** (`workbench/draft/send.ts`): reads the keyboard fresh, builds what you want (the read with the draft on top, `draft/image.ts`), runs the three-way check and Guard, then `syncTo`. Whatever reached the keyboard leaves the draft; the rest stays and is sent next time.
+- **Send** (`workbench/draft/send.ts`): reads the keyboard fresh, builds what you want (the read with the draft's patch on top), runs the three-way check and Guard, then `syncTo`. The read-back becomes `base` (ADR 0018): whatever reached the keyboard no longer differs and leaves the draft; the rest stays and is sent next time.
 - **The three-way check at Send** compares each drafted item with what it was based on (`before`, kept with the draft, also across visits) and with what the keyboard holds now. Anything changed on both sides is shown in Guard's window ("Send overwrites N changes made on the keyboard", Show details) with **Send anyway** and **Don't send**.
 - **Layer move, delete and duplicate** (`workbench/io-layers.ts`) plan the rewritten layout against the read and write only the difference; the way back on failure is planned the same way. Moving a layer with three keys on it stores six keys, not the whole keymap.
 - **Not connected:** when a dropped link cannot be restored, the workbench stays open in Draft (`ui/draft/link.ts`). The status chip says "not connected", how many changes are kept, and offers Reconnect. The draft is kept for this keyboard; after reconnecting it is offered back with what each change was based on, so Send's three-way check sees anything changed meanwhile.
 
 ## For GLIDE Flows
 
-A Flow produces a new wanted layout. It goes through the same steps as a draft: Guard judges it, you review it (the plan's `storedItems` and `itemsOf` give the counts and the list), and `syncTo` writes only the difference. A Flow that changes 30 keys stores 30 keys. Nothing new is needed in the write path.
+A Flow produces a new wanted layout. It goes through the same steps as a draft: Guard judges it, you review it (`storedItems` and `differences` give the counts and the list), and `syncTo` writes only the difference. A Flow that changes 30 keys stores 30 keys. Nothing new is needed in the write path.
 
 ## What it costs, measured
 
@@ -90,13 +90,14 @@ Reads cost no flash, but take time over Bluetooth: Send reads the keyboard once 
 |---|---|
 | `src/sync/image.ts` | `KeyboardImage`: what a keyboard stores |
 | `src/sync/plan.ts` | `planSync`, `storedItems`, `plannedKeys` |
-| `src/sync/conflicts.ts` | `conflicts`, `itemsOf` (the three-way check) |
+| `src/sync/items.ts` | Stored items named one by one: `differences`, `valueAt`, `withValues` |
+| `src/sync/patch.ts` | Patches (items before and after): apply, invert, join, `rebase` |
+| `src/sync/conflicts.ts` | `conflicts` (the three-way check) |
 | `src/sync/read.ts` | `readImage` |
 | `src/sync/write.ts` | `writePlan`, `syncTo`, `SyncStopped` |
 | `src/session/flash-writes.ts` | Busy resend, page size, `writeKeyRun` (bulk where supported) |
-| `src/workbench/draft/image.ts` | The draft as images: what you want, what it was based on |
+| `src/workbench/draft/want.ts` | The draft as a wanted image beside its base (ADR 0018) |
 | `src/workbench/draft/send.ts` | Send |
-| `src/workbench/draft/slot-stage.ts` | Combos, morse and forks in the draft |
 | `src/ui/draft/link.ts` | Whether the keyboard can be reached |
 | `src/ui/guard/guardIo.ts` | Guard at the io; unchanged keys are not sent |
 
@@ -105,6 +106,7 @@ Reads cost no flash, but take time over Bluetooth: Send reads the keyboard once 
 ## Tests
 
 - `src/sync/plan.test.ts`: only differences, runs, write order, missing parts, the three-way check.
+- `src/sync/items.test.ts`: items named as the planner writes them, patches, `rebase`, lighting clashing per layer.
 - `src/sync/write.test.ts` (simulated Glove80): stores exactly the changed keys, nothing when nothing differs, resumes after a failure without storing anything twice.
 - `src/workbench/draft/send.test.ts`: Send stores only drafted keys, asks before overwriting a keyboard-side change and keeps the draft on no, keeps only the unsent part after a dropped link, sends drafted morse entries.
 - `src/ui/layer-io.test.ts`: a layer move stores only the keys that move; a failed layer write is put back.
@@ -116,7 +118,7 @@ The original layer move, delete and duplicate compared their read-back with the 
 
 ## Not done yet
 
-- **Macros, layer names, behavior and morse-profile settings** still write at once, even in Draft. They are already items the planner knows (macros, layer names, behavior options); they need staging like `slot-stage.ts`.
+- **Macros, layer names, behavior and morse-profile settings** still write at once, even in Draft. They are already items the planner knows (macros, layer names, behavior options); they join what you want (ADR 0018, part 2).
 - **Starting without the keyboard:** today you keep working when the link is lost. Opening a keyboard you have used before, without connecting it, needs its last read kept per keyboard and a session built from it.
 - **Live keys after a short pause:** keys go at once in Live because RMK only applies a key once it is written. Gathering repeated edits of one key would save a little more flash at the cost of trying it slightly later.
 - **Read only what is needed:** Send reads the whole keyboard before and after. Reading only the parts in the plan would make Send faster over Bluetooth.

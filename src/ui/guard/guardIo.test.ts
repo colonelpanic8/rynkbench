@@ -86,7 +86,7 @@ describe("guardIo", () => {
   it("keeps a broken draft off the keyboard at Send", async () => {
     const { io, writes } = setup({
       layers: [[mo(7), mo(1)], [key("B"), "No"]],
-      stagedKeys: { "0:0:0": { layer: 0, row: 0, col: 0, before: key("A"), action: mo(7) } },
+      base: { layers: [[key("A"), mo(1)], [key("B"), "No"]] },
     });
     expect(await io.applyBatch()).toMatchObject({ ok: false, guarded: true });
     expect(writes).toEqual([]);

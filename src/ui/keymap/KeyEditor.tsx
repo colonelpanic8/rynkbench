@@ -10,7 +10,7 @@ import type { Action, KeyAction } from "../../model/action-types";
 import { keyFace } from "../keyface/keyFace";
 import { useFaceContext } from "../keyface/useFaceContext";
 import { keyAddressLabel, keyPlaceName } from "../key-address";
-import { keyPendingId } from "../../workbench";
+import { isDrafted, keyPendingId } from "../../workbench";
 import { useWorkbench } from "../state";
 import { useCapabilities } from "../use-capabilities";
 
@@ -60,7 +60,7 @@ export function KeyEditor({ size = 310 }: { size?: number }) {
   const layer = state.uiLayer;
   const action: KeyAction = state.layers[layer]?.[row * cols + col] ?? "No";
   const pending = state.pending[keyPendingId(layer, row, col)];
-  const staged = state.stagedKeys[keyPendingId(layer, row, col)];
+  const staged = isDrafted(state, { kind: "key", layer, offset: row * cols + col });
   const key = bundle.model.keys.find((candidate) => candidate.row === row && candidate.col === col);
   const addressable = key ?? { row, col };
   const slots = slotsOf(action, state.morse);

@@ -32,7 +32,6 @@ function editor(binding: KeyAction | null, { morse = [] as Morse[], morseSlots =
       uiLayer: 0,
       layers: [[binding ?? "No", "No"]],
       pending: {},
-      stagedKeys: {},
       layerMetadata: [{ occupied: true, name: "Base" }, { occupied: true, name: "Lower" }],
       morseProfiles: [],
       morse,

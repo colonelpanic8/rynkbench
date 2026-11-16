@@ -69,8 +69,8 @@ export function itemName(item: SyncItem, names: GuardNames): string {
       return placeName({ kind: item.table === "combos" ? "combo" : item.table === "forks" ? "fork" : "morse", index: item.index }, names);
     case "layerMetadata":
       return `${names.layerName(item.layer)}: name`;
-    case "scenes":
-      return "Layer lighting";
+    case "lighting":
+      return `${names.layerName(item.layer)}: RGB Lighting`;
     case "rules":
       return "Lock and battery lights";
     default:

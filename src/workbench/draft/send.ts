@@ -5,12 +5,10 @@
 
 import type { WorkbenchState } from "../../model/workbench-state";
 import type { RynkSession } from "../../session/types";
-import { conflicts, readImage, syncTo, type KeyboardImage, type ImageFeatures, type SyncItem } from "../../sync";
-import { same } from "../../model/deep-equal";
+import { applyPatch, conflicts, readImage, syncTo, valueAt, type KeyboardImage, type ImageFeatures, type SyncItem } from "../../sync";
+import { sameValue } from "../../model/deep-equal";
 import { errorMessage } from "../../session/errors";
-import { draftBase, draftImage } from "./image";
-import { changedRuleLeds, lightingLayers } from "./changes";
-import { stagedEditCount } from "./selectors";
+import { draftOf } from "./want";
 import type { WorkbenchDispatch } from "../io";
 
 export interface SendOptions {
@@ -22,57 +20,34 @@ export interface SendDeps {
   session: RynkSession;
   getState: () => WorkbenchState;
   dispatch: WorkbenchDispatch;
-  cols: number;
   features: ImageFeatures;
 }
 
 export type SendResult = { ok: true } | { ok: false; message: string; guarded?: true };
 
-/** Marks every drafted key and encoder the keyboard now holds as sent. */
-function markSent(image: KeyboardImage, state: WorkbenchState, cols: number, dispatch: WorkbenchDispatch): number {
-  let keys = 0;
-  for (const edit of Object.values(state.stagedKeys)) {
-    if (!same(image.layers[edit.layer]?.[edit.row * cols + edit.col], edit.action)) continue;
-    dispatch({ type: "keyStageApplied", layer: edit.layer, row: edit.row, col: edit.col });
-    keys += 1;
-  }
-  for (const edit of Object.values(state.stagedEncoders)) {
-    if (same(image.encoders[edit.layer]?.[edit.id], edit.action)) {
-      dispatch({ type: "encoderStageApplied", layer: edit.layer, id: edit.id });
-    }
-  }
-  for (const edit of Object.values(state.stagedSlots)) {
-    if (same(image[edit.kind][edit.index], edit.value)) dispatch({ type: "slotStageApplied", kind: edit.kind, index: edit.index });
-  }
-  // Sent keys are a bulk write outside per-key history, like an import.
-  if (keys > 0) dispatch({ type: "keyHistoryClear" });
-  return keys;
-}
-
 export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Promise<SendResult> {
-  const { session, getState, dispatch, cols, features } = deps;
+  const { session, getState, dispatch, features } = deps;
   const start = getState();
   if (start.batchBusy) return { ok: false, message: "the draft is already being sent" };
-  const lighting = lightingLayers(start).size > 0;
-  const rules = changedRuleLeds(start.runtimeConditionalDraft, start.runtimeConditionalScenes).size > 0;
-  if (stagedEditCount(start) === 0 && !lighting && !rules) {
-    return { ok: true };
-  }
+  const patch = draftOf(start).changes;
+  if (patch.length === 0) return { ok: true };
   dispatch({ type: "batchApplyStart" });
   try {
+    // The draft on top of what the keyboard holds now; what you started from is
+    // the same with each drafted item as it was based on (an item never read,
+    // such as an encoder, was based on nothing and cannot clash).
     const now = await readImage(session, features);
-    const want = draftImage(now, start, cols);
-    const clashes = conflicts(draftBase(now, start, cols), now, want);
+    const want = applyPatch(now, patch, "after");
+    const startedFrom = applyPatch(now, patch.filter(({ before }) => before !== undefined), "before");
+    const clashes = conflicts(startedFrom, now, want);
     if (clashes.length > 0 && options.confirmOverwrite && !(await options.confirmOverwrite(clashes))) {
       dispatch({ type: "batchApplyDone", error: null });
       return { ok: false, message: "Not sent: the keyboard keeps its own changes", guarded: true };
     }
     const { readback } = await syncTo(session, now, want, features);
-    markSent(readback, start, cols, dispatch);
-    if (lighting || rules) {
-      const lightingState = await session.lighting.state();
-      if (lighting) dispatch({ type: "scenesApplied", state: lightingState, cells: readback.scenes });
-      if (rules) dispatch({ type: "conditionalApplied", state: lightingState, cells: readback.runtimeConditionalScenes });
+    stored(readback);
+    if (patch.some(({ item }) => item.kind === "lighting" || item.kind === "rules")) {
+      dispatch({ type: "lightingStateSet", state: await session.lighting.state() });
     }
     dispatch({ type: "batchApplyDone", error: null });
     return { ok: true };
@@ -80,11 +55,20 @@ export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Pro
     const message = errorMessage(error);
     // Whatever reached the keyboard leaves the draft; the rest is sent next time.
     try {
-      markSent(await readImage(session, features), start, cols, dispatch);
+      stored(await readImage(session, features));
     } catch {
       // The keyboard cannot be read now: everything stays in the draft.
     }
     dispatch({ type: "batchApplyDone", error: message });
     return { ok: false, message };
+  }
+
+  /** The keyboard now holds `image`: what reached it is no longer in the draft. */
+  function stored(image: KeyboardImage) {
+    dispatch({ type: "draftStored", image });
+    // Sent keys are a bulk write outside per-key history, like an import.
+    if (patch.some(({ item, after }) => item.kind === "key" && sameValue(valueAt(image, item), after))) {
+      dispatch({ type: "keyHistoryClear" });
+    }
   }
 }

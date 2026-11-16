@@ -57,6 +57,7 @@ import type { BoardProfile } from "./boards";
 import type { KeyboardModel } from "./keyboard";
 import type { KeyEditHistory, KeyEditHistoryEntry } from "./history";
 import type { LayerRewrite } from "../layers/management";
+import type { KeyboardImage, PatchEntry, SyncItem } from "../sync";
 
 /** The screen on show: one section of one area (src/ui/areas.ts). */
 export type Mode =
@@ -177,25 +178,6 @@ export interface PendingInfo {
   attempted?: KeyAction;
 }
 
-/** One batch-mode key edit held locally: `before` is the on-device action
- *  from when the key was first staged, so a discard can restore it. */
-export interface StagedKeyEdit {
-  layer: number;
-  row: number;
-  col: number;
-  before: KeyAction;
-  action: KeyAction;
-}
-
-/** One batch-mode encoder edit. `before` is undefined when the encoder had
- *  not been read before staging; a discard then just forgets the local value. */
-export interface StagedEncoderEdit {
-  layer: number;
-  id: number;
-  before: EncoderAction | undefined;
-  action: EncoderAction;
-}
-
 /** Slot-table kinds sharing the optimistic-write plumbing. */
 export type SlotKind = "combos" | "morse" | "forks";
 
@@ -204,14 +186,6 @@ export type SlotValueOf<K extends SlotKind> = K extends "combos"
   : K extends "morse"
     ? Morse
     : Fork;
-
-/** A combo, morse or fork slot changed in the draft, with what it was based on. */
-export interface StagedSlotEdit {
-  kind: SlotKind;
-  index: number;
-  before: ComboDefinition | Morse | Fork;
-  value: ComboDefinition | Morse | Fork;
-}
 
 /** Whole-value configuration surfaces written optimistically as one unit.
  *  The key is the pending id; the value names the state field it replaces. */
@@ -234,6 +208,10 @@ export type FieldWriteAction = {
 }[WritableField];
 
 export interface WorkbenchState {
+  /** What the keyboard (or the file) held at the last read, read-back or save.
+   *  What you want is what the fields below show; the draft is the difference
+   *  (ADR 0018, workbench/draft/want.ts). */
+  base: KeyboardImage;
   mode: Mode;
   uiLayer: number;
   /** Highest-precedence active layer, derived from `activeLayers`. */
@@ -299,15 +277,9 @@ export interface WorkbenchState {
   keyEditHistory: KeyEditHistory;
   /** Bulk configuration transactions suspend history traversal. */
   keyEditHistorySuspended: boolean;
-  /** Batch mode: key and encoder writes are staged locally and written to the
-   *  keyboard together on apply, instead of one write per edit. */
+  /** Draft mode (ADR 0010): edits change what you want, and Send writes the
+   *  difference; in Live each edit is written at once. */
   batchMode: boolean;
-  /** keyPendingId → staged key edit. */
-  stagedKeys: Record<string, StagedKeyEdit>;
-  /** encoderPendingId → staged encoder edit. */
-  stagedEncoders: Record<string, StagedEncoderEdit>;
-  /** slotPendingId → staged combo, morse or fork. */
-  stagedSlots: Record<string, StagedSlotEdit>;
   /** A batch apply is writing staged edits to the device. */
   batchBusy: boolean;
   batchError: string | null;
@@ -377,14 +349,18 @@ export type WorkbenchAction =
   | { type: "keyHistorySuspend"; suspended: boolean }
   | { type: "keyHistoryErrorDismiss" }
   | { type: "batchMode"; enabled: boolean }
-  /** `before`: what the edit was based on, when a kept draft is restored (else what the keyboard has). */
-  | { type: "keyStage"; layer: number; row: number; col: number; action: KeyAction; before?: KeyAction }
-  | { type: "keyStageApplied"; layer: number; row: number; col: number }
+  /** Draft edits: what you want changes; the keyboard is not written. */
+  | { type: "keyStage"; layer: number; row: number; col: number; action: KeyAction }
   | { type: "encoderStage"; layer: number; id: number; action: EncoderAction }
-  | { type: "encoderStageApplied"; layer: number; id: number }
-  | { type: "slotStage"; kind: SlotKind; index: number; value: ComboDefinition | Morse | Fork; before?: ComboDefinition | Morse | Fork }
-  | { type: "slotStageApplied"; kind: SlotKind; index: number }
+  | { type: "slotStage"; kind: SlotKind; index: number; value: ComboDefinition | Morse | Fork }
+  /** Everything you want set back to what the keyboard holds. */
   | { type: "batchDiscard" }
+  /** These items of what you want set back to what the keyboard holds. */
+  | { type: "draftRevert"; items: SyncItem[] }
+  /** The keyboard was read (Send's read-back): the base is this image. */
+  | { type: "draftStored"; image: KeyboardImage }
+  /** A kept draft put back: each item based on `before`, wanted as `after`. */
+  | { type: "draftRestore"; patch: PatchEntry[] }
   | { type: "batchApplyStart" }
   | { type: "batchApplyDone"; error: string | null }
   | { type: "encoderLoaded"; layer: number; id: number; action: EncoderAction }

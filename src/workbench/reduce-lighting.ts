@@ -3,8 +3,9 @@
 // reducer's own, moved here unchanged (ADR 0017).
 
 import type { WorkbenchAction, WorkbenchState } from "../model/workbench-state";
-import { conditionalTablesEqual, overlaysEqual } from "../model/lighting/compare";
-import { cellsToRecord, layerSceneCells, lightingDraftFor, reseedLayerDrafts, setTargetDraft } from "./lighting-drafts";
+import { overlaysEqual } from "../model/lighting/compare";
+import { withBase, wantOf, withWant } from "./draft/want";
+import { cellsToRecord, layerSceneCells, lightingDraftFor, setTargetDraft } from "./lighting-drafts";
 
 const LIGHTING_ACTION_TYPES = [
   "lightingRefresh",
@@ -39,14 +40,15 @@ export function reduceLighting(state: WorkbenchState, act: LightingAction): Work
     case "lightingRefresh": {
       const applied = cellsToRecord(act.overlay);
       const draftWasClean = overlaysEqual(state.draft, state.applied);
-      // Same follow-when-clean rule as the overlay: a device push replaces
-      // an untouched rule draft, but never discards staged edits.
-      const conditionalWasClean = conditionalTablesEqual(
-        state.runtimeConditionalDraft,
-        state.runtimeConditionalScenes,
-      );
+      // What the keyboard stores (scenes, rules) is read: drafts you had not
+      // changed follow it, changed ones stay (ADR 0018).
+      const stored = withBase(state, {
+        ...state.base,
+        ...(act.scenes ? { scenes: act.scenes } : {}),
+        ...(act.runtimeConditional ? { runtimeConditionalScenes: act.runtimeConditional } : {}),
+      });
       return {
-        ...state,
+        ...stored,
         lightingState: act.state,
         lightingOutputMode: act.outputMode ?? state.lightingOutputMode,
         lightingControls:
@@ -57,15 +59,6 @@ export function reduceLighting(state: WorkbenchState, act: LightingAction): Work
         lightingExtensionLayers: act.extensionLayers ?? state.lightingExtensionLayers,
         applied,
         draft: draftWasClean ? { ...applied } : state.draft,
-        scenes: act.scenes ?? state.scenes,
-        layerDrafts: act.scenes
-          ? reseedLayerDrafts(state.layerDrafts, state.scenes, act.scenes)
-          : state.layerDrafts,
-        runtimeConditionalScenes: act.runtimeConditional ?? state.runtimeConditionalScenes,
-        runtimeConditionalDraft:
-          act.runtimeConditional !== undefined && conditionalWasClean
-            ? act.runtimeConditional
-            : state.runtimeConditionalDraft,
       };
     }
     case "lightingTarget":
@@ -124,10 +117,8 @@ export function reduceLighting(state: WorkbenchState, act: LightingAction): Work
     }
     case "scenesApplied":
       return {
-        ...state,
+        ...withBase(state, { ...state.base, scenes: act.cells }),
         lightingState: act.state,
-        scenes: act.cells,
-        layerDrafts: reseedLayerDrafts(state.layerDrafts, state.scenes, act.cells),
         lightingBusy: false,
         lightingError: null,
       };
@@ -141,10 +132,11 @@ export function reduceLighting(state: WorkbenchState, act: LightingAction): Work
       };
     case "conditionalApplied":
       return {
-        ...state,
+        ...withWant(withBase(state, { ...state.base, runtimeConditionalScenes: act.cells }), {
+          ...wantOf(state),
+          runtimeConditionalScenes: act.cells,
+        }),
         lightingState: act.state,
-        runtimeConditionalScenes: act.cells,
-        runtimeConditionalDraft: act.cells,
         lightingBusy: false,
         lightingError: null,
       };

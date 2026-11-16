@@ -1,4 +1,4 @@
-// Undo and redo for what is staged: the staged keys (in Draft) and the layers'
+// Undo and redo for what is drafted: the drafted keys (in Draft) and the layers'
 // lighting (always staged first; in Live sent once painting pauses). Every
 // change in one go (a key, a paste, a swap, a light) is one step, and a Paint
 // stroke, however many keys it crosses, is one step too (`merge`). Undo stages
@@ -10,7 +10,6 @@
 import type { KeyAction } from "../../model/action-types";
 import { sameValue } from "../../model/deep-equal";
 import type { LightingOverlayCell } from "../../model/lighting-types";
-import type { StagedKeyEdit } from "../../model/workbench-state";
 import type { Rules } from "../../model/lighting/rules";
 
 export interface KeyChange {
@@ -45,10 +44,18 @@ export interface DraftHistory {
   future: Step[];
 }
 
-/** What a step is taken from: the keys, the staged ones, and each layer's lighting and the rules. */
+/** A key by its place. */
+export interface KeyPlace {
+  layer: number;
+  row: number;
+  col: number;
+}
+
+/** What a step is taken from: the keys, the drafted ones, and each layer's lighting and the rules. */
 export interface DraftImage {
   layers: KeyAction[][];
-  stagedKeys: Record<string, StagedKeyEdit>;
+  /** The keys that differ from the keyboard. */
+  draftedKeys: readonly KeyPlace[];
   lighting: Cells[];
   rules: Rules;
 }
@@ -60,13 +67,11 @@ export const isEmptyStep = (step: Step) => step.keys.length === 0 && step.lights
 // they are compared without regard to key order.
 const same = sameValue;
 
-/** What a state transition changed: the keys among those staged before or
+/** What a state transition changed: the keys among those drafted before or
  *  after it, each layer's lighting, and the rules. */
 export function stepBetween(before: DraftImage, after: DraftImage, cols: number, order = 0): Step {
-  const places = new Map<string, StagedKeyEdit>();
-  for (const edit of [...Object.values(before.stagedKeys), ...Object.values(after.stagedKeys)]) {
-    places.set(`${edit.layer}:${edit.row}:${edit.col}`, edit);
-  }
+  const places = new Map<string, KeyPlace>();
+  for (const place of [...before.draftedKeys, ...after.draftedKeys]) places.set(`${place.layer}:${place.row}:${place.col}`, place);
   const keys: KeyChange[] = [];
   for (const { layer, row, col } of places.values()) {
     const from = before.layers[layer]?.[row * cols + col] ?? "No";

@@ -7,7 +7,7 @@ import type { ChangeEvent } from "react";
 import { FORMAT_EXTENSION, FORMAT_LABEL } from "../config/document";
 import type { ConfigFormat, ExtensionCatalog } from "../config/document";
 import { documentAdapterFor } from "../config/adapters";
-import { pointingDraftDirty, stagedEditCount } from "../workbench";
+import { draftEditCount, pointingDraftDirty } from "../workbench";
 import { useWorkbench } from "./state";
 import { errorReport } from "./TransferReport";
 import type { TransferReport } from "./TransferReport";
@@ -74,7 +74,7 @@ export function useDocumentTransfer(): DocumentTransfer {
       setReport(errorReport("Could not import configuration", error));
       return;
     }
-    if (stagedEditCount(state) > 0 || pointingDraftDirty(state)) {
+    if (draftEditCount(state) > 0 || pointingDraftDirty(state)) {
       // An import writes device differences directly; staged edits would go
       // stale underneath it.
       setReport({
@@ -152,7 +152,7 @@ export function useDocumentTransfer(): DocumentTransfer {
       setReport({ outcome: "error", headline: "No configuration migration is registered for this board." });
       return;
     }
-    if (stagedEditCount(state) > 0 || pointingDraftDirty(state)) {
+    if (draftEditCount(state) > 0 || pointingDraftDirty(state)) {
       setReport({ outcome: "error", headline: "Apply or discard staged edits before migrating." });
       return;
     }

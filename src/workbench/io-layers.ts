@@ -13,9 +13,9 @@ import {
   type LayerRewriteSnapshot,
   type LayerStructureOperation,
 } from "../layers/management";
-import { conditionalTablesEqual } from "../model/lighting/compare";
 import { errorMessage } from "../session/errors";
-import { pointingDraftDirty, stagedEditCount } from "./draft/selectors";
+import { draftEditCount, pointingDraftDirty } from "./draft/selectors";
+import { draftOf } from "./draft/want";
 import type { IoContext, IoFeatures, IoWriteResult, WorkbenchIo } from "./io";
 
 type LayerIo = Pick<
@@ -81,16 +81,17 @@ export function layerIo(context: IoContext): LayerIo {
     ) {
       return rejectLayerOperation("wait for pending device writes before editing layers");
     }
-    if (stagedEditCount(before) > 0) {
+    if (draftEditCount(before) > 0) {
       return rejectLayerOperation("apply or discard staged batch edits before editing layers");
     }
     if (pointingDraftDirty(before)) {
       return rejectLayerOperation("apply or discard staged pointing edits before editing layers");
     }
-    if (Object.keys(before.layerDrafts).length > 0) {
+    const drafted = draftOf(before).changes.map(({ item }) => item.kind);
+    if (drafted.includes("lighting")) {
       return rejectLayerOperation("apply or discard staged layer lighting before editing layers");
     }
-    if (!conditionalTablesEqual(before.runtimeConditionalDraft, before.runtimeConditionalScenes)) {
+    if (drafted.includes("rules")) {
       return rejectLayerOperation("apply or discard staged conditional lighting before editing layers");
     }
     dispatch({ type: "layerOperationStart" });

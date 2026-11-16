@@ -10,6 +10,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ConnectedBundle, WorkbenchState } from "../model/workbench-state";
 import { WorkbenchContext, type WorkbenchContextValue } from "../ui/state";
 import { initialWorkbenchState } from "../workbench/initial-state";
+import { storedImage } from "../workbench/draft/want";
+import type { KeyboardImage } from "../sync";
 import { DocumentTransferContext, type DocumentTransfer } from "../ui/transfer-actions";
 
 /** Every field optional, all the way down; field names and types still checked. */
@@ -115,7 +117,10 @@ export function testWorkbench(parts: TestWorkbenchParts = {}): WorkbenchContextV
     caps: { ...(base.caps as object), ...(given.caps as object | undefined) },
     model: { ...(base.model as object), ...(given.model as object | undefined) },
   } as unknown as ConnectedBundle; // the one cast: neutral defaults stand in for a board
-  const state = { ...initialWorkbenchState(bundle), ...(parts.state as Partial<WorkbenchState>) };
+  const opened = { ...initialWorkbenchState(bundle), ...(parts.state as Partial<WorkbenchState>) };
+  // What the keyboard holds is the test's state, with the parts of `base` it
+  // gives on top: a test drafts a change by giving the base the old value.
+  const state: WorkbenchState = { ...opened, base: { ...storedImage(opened), ...(parts.state?.base as Partial<KeyboardImage>) } };
   return {
     bundle,
     state,

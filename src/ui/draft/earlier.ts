@@ -3,12 +3,12 @@
 
 import { useSyncExternalStore } from "react";
 import { useWorkbench } from "../state";
-import { restoreActions, type StoredDraft } from "../../workbench/draft/changes";
+import { keptPatch, type KeptDraft } from "../../workbench/draft/changes";
 
 /** A draft kept from an earlier visit, offered back until restored or forgotten. */
-let earlier: StoredDraft | null = null;
+let earlier: KeptDraft | null = null;
 const listeners = new Set<() => void>();
-export const setEarlier = (next: StoredDraft | null) => {
+export const setEarlier = (next: KeptDraft | null) => {
   earlier = next;
   for (const listener of listeners) listener();
 };
@@ -19,16 +19,16 @@ export const earlierDraft = {
     return () => listeners.delete(listener);
   },
 };
-export function useEarlierDraft(): StoredDraft | null {
+export function useEarlierDraft(): KeptDraft | null {
   return useSyncExternalStore(earlierDraft.subscribe, earlierDraft.get, earlierDraft.get);
 }
 
 /** Puts a kept draft back on top of what the keyboard has now, then forgets the offer. */
 export function useRestoreEarlier() {
-  const { state, dispatch } = useWorkbench();
+  const { bundle, state, dispatch } = useWorkbench();
   return {
-    restore(kept: StoredDraft) {
-      for (const action of restoreActions(kept, state)) dispatch(action);
+    restore(kept: KeptDraft) {
+      dispatch({ type: "draftRestore", patch: keptPatch(kept, state.base, bundle.caps.num_cols) });
       setEarlier(null);
     },
     forget() {

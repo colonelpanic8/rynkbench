@@ -1,14 +1,15 @@
 // The workbench as it opens: everything the connect snapshot read, with
-// nothing staged, selected or in flight.
+// nothing drafted, selected or in flight: what you want is what it holds.
 
 import type { ConnectedBundle, WorkbenchState } from "../model/workbench-state";
 import { initialKeyEditHistory } from "../model/history";
 import { normalizePointingConfig } from "../model/pointing";
 import { cellsToRecord } from "./lighting-drafts";
+import { storedImage } from "./draft/want";
 
 export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
   const applied = cellsToRecord(bundle.overlay);
-  return {
+  const opened: Omit<WorkbenchState, "base"> = {
     mode: "keymap",
     uiLayer: bundle.currentLayer,
     currentLayer: bundle.currentLayer,
@@ -53,9 +54,6 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     keyEditHistory: initialKeyEditHistory(),
     keyEditHistorySuspended: false,
     batchMode: bundle.session.kind !== "offline", // a keyboard starts in Draft (ADR 0010)
-    stagedKeys: {},
-    stagedEncoders: {},
-    stagedSlots: {},
     batchBusy: false,
     batchError: null,
     layerBusy: false,
@@ -78,4 +76,5 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     ledIndicator: bundle.ledIndicator,
     modifierState: bundle.modifierState,
   };
+  return { ...opened, base: storedImage(opened) };
 }

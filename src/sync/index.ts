@@ -2,8 +2,11 @@
 export type { KeyboardImage, SlotTable } from "./image";
 export type { StepKind, SyncStep } from "./plan";
 export { plannedKeys, planSync, storedItems } from "./plan";
-export type { SyncItem } from "./conflicts";
-export { conflicts, itemsOf } from "./conflicts";
+export type { ItemChange, ItemKind, SyncItem } from "./items";
+export { differences, itemKey, valueAt, withValues } from "./items";
+export type { Patch, PatchEntry } from "./patch";
+export { applyPatch, invertPatch, joinPatches, patchBetween, rebase } from "./patch";
+export { conflicts } from "./conflicts";
 export type { ImageFeatures, ReadImage } from "./read";
 export { readImage } from "./read";
 export type { SyncResult } from "./write";

@@ -3,13 +3,13 @@
 // file has keys, key history, Draft, encoders, layers and topics; lighting and
 // settings have their own parts (reduce-lighting.ts, reduce-settings.ts).
 
-import type { KeyAction } from "../vendor/rynk-wasm/rynk_wasm";
+import type { EncoderAction, KeyAction } from "../vendor/rynk-wasm/rynk_wasm";
 import type { WorkbenchAction, WorkbenchState } from "../model/workbench-state";
-import { same } from "../model/deep-equal";
 import { reduceKeyEditHistory } from "../model/history";
 import { normalizePointingConfig } from "../model/pointing";
-import { stagedEditCount } from "./draft/selectors";
-import { discardStagedSlots, reduceStagedSlot } from "./draft/slot-stage";
+import { draftEditCount } from "./draft/selectors";
+import { applyPatch, type KeyboardImage } from "../sync";
+import { atBase, storedImage, wantOf, withBase, withItemsAtBase, withStored, withWant } from "./draft/want";
 import { encoderPendingId, keyPendingId } from "./pending";
 import { isLightingAction, reduceLighting } from "./reduce-lighting";
 import { isSettingsAction, reduceSettings } from "./reduce-settings";
@@ -29,9 +29,14 @@ function setLayerKey(
   return next;
 }
 
+function withEncoder(image: KeyboardImage, layer: number, id: number, action: EncoderAction | undefined): KeyboardImage {
+  const encoders = image.encoders.map((row) => [...row]);
+  if (encoders[layer]) encoders[layer][id] = action as EncoderAction;
+  return { ...image, encoders };
+}
+
 export function makeWorkbenchReducer(cols: number) {
   return function reducer(state: WorkbenchState, act: WorkbenchAction): WorkbenchState {
-    if (act.type === "slotStage" || act.type === "slotStageApplied") return reduceStagedSlot(state, act);
     if (isLightingAction(act)) return reduceLighting(state, act);
     if (isSettingsAction(act)) return reduceSettings(state, act);
     switch (act.type) {
@@ -42,9 +47,11 @@ export function makeWorkbenchReducer(cols: number) {
       case "select":
         return { ...state, selection: act.selection };
       case "keyWriteStart": {
+        // Live: the keyboard is written at once, so it holds the key as soon as it says yes.
         const id = keyPendingId(act.layer, act.row, act.col);
         return {
           ...state,
+          base: { ...state.base, layers: setLayerKey(state.base.layers, cols, act.layer, act.row, act.col, act.action) },
           layers: setLayerKey(state.layers, cols, act.layer, act.row, act.col, act.action),
           pending: { ...state.pending, [id]: { status: "pending" } },
         };
@@ -58,6 +65,7 @@ export function makeWorkbenchReducer(cols: number) {
         const id = keyPendingId(act.layer, act.row, act.col);
         return {
           ...state,
+          base: { ...state.base, layers: setLayerKey(state.base.layers, cols, act.layer, act.row, act.col, act.prev) },
           layers: setLayerKey(state.layers, cols, act.layer, act.row, act.col, act.prev),
           pending: {
             ...state.pending,
@@ -120,91 +128,42 @@ export function makeWorkbenchReducer(cols: number) {
           }),
         };
       case "batchMode": {
-        // Leaving batch mode requires the staged set to be empty; edits must
-        // be applied or discarded, never silently promoted or dropped.
-        if (!act.enabled && stagedEditCount(state) > 0) return state;
+        // Leaving Draft needs the drafted keys, encoders and slots sent or
+        // discarded, never silently written or dropped.
+        if (!act.enabled && draftEditCount(state) > 0) return state;
         return { ...state, batchMode: act.enabled, batchError: null };
       }
-      case "keyStage": {
-        const id = keyPendingId(act.layer, act.row, act.col);
-        const before =
-          state.stagedKeys[id]?.before ?? act.before ?? state.layers[act.layer][act.row * cols + act.col];
-        const layers = setLayerKey(state.layers, cols, act.layer, act.row, act.col, act.action);
-        if (same(before, act.action)) {
-          // Edited back to what the device holds: nothing left to apply.
-          const { [id]: _gone, ...stagedKeys } = state.stagedKeys;
-          return { ...state, layers, stagedKeys };
-        }
-        return {
-          ...state,
-          layers,
-          stagedKeys: {
-            ...state.stagedKeys,
-            [id]: { layer: act.layer, row: act.row, col: act.col, before, action: act.action },
-          },
-        };
+      case "keyStage":
+        return { ...state, layers: setLayerKey(state.layers, cols, act.layer, act.row, act.col, act.action) };
+      case "encoderStage":
+        return { ...state, encoders: { ...state.encoders, [`${act.layer}:${act.id}`]: act.action } };
+      case "slotStage": {
+        const table = [...state[act.kind]] as unknown[];
+        table[act.index] = act.value;
+        return { ...state, [act.kind]: table };
       }
-      case "keyStageApplied": {
-        const id = keyPendingId(act.layer, act.row, act.col);
-        const { [id]: _done, ...stagedKeys } = state.stagedKeys;
-        return { ...state, stagedKeys };
-      }
-      case "encoderStage": {
-        const id = encoderPendingId(act.layer, act.id);
-        const key = `${act.layer}:${act.id}`;
-        const before = id in state.stagedEncoders ? state.stagedEncoders[id].before : state.encoders[key];
-        const encoders = { ...state.encoders, [key]: act.action };
-        if (same(before, act.action)) {
-          const { [id]: _gone, ...stagedEncoders } = state.stagedEncoders;
-          return { ...state, encoders, stagedEncoders };
-        }
-        return {
-          ...state,
-          encoders,
-          stagedEncoders: {
-            ...state.stagedEncoders,
-            [id]: { layer: act.layer, id: act.id, before, action: act.action },
-          },
-        };
-      }
-      case "encoderStageApplied": {
-        const id = encoderPendingId(act.layer, act.id);
-        const { [id]: _done, ...stagedEncoders } = state.stagedEncoders;
-        return { ...state, stagedEncoders };
-      }
-      case "batchDiscard": {
-        let layers = state.layers;
-        for (const edit of Object.values(state.stagedKeys)) {
-          layers = setLayerKey(layers, cols, edit.layer, edit.row, edit.col, edit.before);
-        }
-        const encoders = { ...state.encoders };
-        for (const edit of Object.values(state.stagedEncoders)) {
-          const key = `${edit.layer}:${edit.id}`;
-          if (edit.before === undefined) delete encoders[key];
-          else encoders[key] = edit.before;
-        }
-        return {
-          ...discardStagedSlots(state),
-          layers,
-          encoders,
-          stagedKeys: {},
-          stagedEncoders: {},
-          batchError: null,
-        };
+      case "batchDiscard":
+        return { ...atBase(state), batchError: null };
+      case "draftRevert":
+        return withItemsAtBase(state, act.items);
+      case "draftStored":
+        return withBase(state, act.image);
+      case "draftRestore": {
+        const base = applyPatch(state.base, act.patch, "before");
+        const restored = { ...state, base, scenes: base.scenes, runtimeConditionalScenes: base.runtimeConditionalScenes };
+        return withWant(restored, applyPatch(wantOf(restored), act.patch, "after"));
       }
       case "batchApplyStart":
         return { ...state, batchBusy: true, batchError: null };
       case "batchApplyDone":
         return { ...state, batchBusy: false, batchError: act.error };
       case "encoderLoaded":
-        return {
-          ...state,
-          encoders: { ...state.encoders, [`${act.layer}:${act.id}`]: act.action },
-        };
+        return withStored(state, [{ item: { kind: "encoder", layer: act.layer, id: act.id }, value: act.action }]);
       case "encoderWriteStart": {
         const id = encoderPendingId(act.layer, act.id);
         return {
           ...state,
+          base: withEncoder(state.base, act.layer, act.id, act.action),
           encoders: { ...state.encoders, [`${act.layer}:${act.id}`]: act.action },
           pending: { ...state.pending, [id]: { status: "pending" } },
         };
@@ -220,6 +179,7 @@ export function makeWorkbenchReducer(cols: number) {
         if (act.prev) encoders[`${act.layer}:${act.id}`] = act.prev;
         return {
           ...state,
+          base: withEncoder(state.base, act.layer, act.id, act.prev),
           encoders,
           pending: { ...state.pending, [id]: { status: "error", message: act.message } },
         };
@@ -244,7 +204,7 @@ export function makeWorkbenchReducer(cols: number) {
           movedUiLayer >= 0
             ? movedUiLayer
             : Math.min(state.uiLayer, rewrite.order.length - 1);
-        return {
+        const next: WorkbenchState = {
           ...state,
           layers: rewrite.layers,
           layerMetadata: rewrite.metadata,
@@ -270,11 +230,11 @@ export function makeWorkbenchReducer(cols: number) {
           encoders: {},
           layerDrafts: {},
           pending: {},
-          stagedKeys: {},
-          stagedEncoders: {},
           layerBusy: false,
           layerError: null,
         };
+        // The keyboard holds the rewrite, and so does what you want.
+        return { ...next, base: storedImage(next) };
       }
       case "topicLayers":
         return {

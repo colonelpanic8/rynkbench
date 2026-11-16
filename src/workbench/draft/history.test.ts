@@ -4,22 +4,22 @@ import { emptyHistory, merge, record, redo, stepBetween, undo, type Cells, type 
 
 const A = { Single: { Key: { Hid: "A" } } } as unknown as KeyAction;
 const B = { Single: { Key: { Hid: "B" } } } as unknown as KeyAction;
-const edit = (action: KeyAction) => ({ layer: 0, row: 0, col: 1, before: "No" as KeyAction, action });
-const image = (over: Partial<DraftImage>): DraftImage => ({ layers: [["No", "No"]], stagedKeys: {}, lighting: [{}], rules: [], ...over });
+const drafted = [{ layer: 0, row: 0, col: 1 }];
+const image = (over: Partial<DraftImage>): DraftImage => ({ layers: [["No", "No"]], draftedKeys: [], lighting: [{}], rules: [], ...over });
 const lit = (led: number, r: number): Cells => ({ [led]: { led_id: led, effect: { Solid: { color: { r, g: 0, b: 0 } } }, ttl_ms: undefined } });
 const keyStep = (from: KeyAction, to: KeyAction): Step => ({ order: 1, keys: [{ layer: 0, row: 0, col: 1, from, to }], lights: [], rules: null });
 const lightStep = (from: Cells, to: Cells): Step => ({ order: 1, keys: [], lights: [{ layer: 0, from, to }], rules: null });
 
 describe("the draft's undo and redo", () => {
-  it("takes a step from how the staged keys changed", () => {
+  it("takes a step from how the drafted keys changed", () => {
     const before = image({});
-    const after = image({ layers: [["No", A]], stagedKeys: { k: edit(A) } });
+    const after = image({ layers: [["No", A]], draftedKeys: drafted });
     expect(stepBetween(before, after, 2).keys).toEqual([{ layer: 0, row: 0, col: 1, from: "No", to: A }]);
-    // A key edited back to what the keyboard has leaves the staged set, and is still a step.
+    // A key edited back to what the keyboard has leaves the draft, and is still a step.
     expect(stepBetween(after, image({}), 2).keys).toEqual([{ layer: 0, row: 0, col: 1, from: A, to: "No" }]);
   });
 
-  it("ignores changes that are not to staged keys", () => {
+  it("ignores changes that are not to drafted keys", () => {
     expect(stepBetween(image({ layers: [[A, "No"]] }), image({ layers: [[B, "No"]] }), 2)).toEqual({ order: 0, keys: [], lights: [], rules: null });
   });
 

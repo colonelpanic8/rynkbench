@@ -1,12 +1,13 @@
 // Questions asked of the workbench state about what is waiting: drafted
-// edits, writes in flight, whether undo may travel. Pure.
+// changes, writes in flight, whether undo may travel. Pure.
 
 import type { WorkbenchState } from "../../model/workbench-state";
 import { pointingConfigsEqual } from "../../model/pointing";
+import { draftOf } from "./want";
 
-/** How many key, encoder and slot edits the draft is holding, unsent. */
-export function stagedEditCount(state: WorkbenchState): number {
-  return Object.keys(state.stagedKeys).length + Object.keys(state.stagedEncoders).length + Object.keys(state.stagedSlots).length;
+/** How many keys, encoders and slots the draft changes, unsent. */
+export function draftEditCount(state: WorkbenchState): number {
+  return draftOf(state).changes.filter(({ item }) => item.kind === "key" || item.kind === "encoder" || item.kind === "slot").length;
 }
 
 export function pointingDraftDirty(state: WorkbenchState): boolean {
@@ -30,7 +31,7 @@ export function canTravelKeyEditHistory(
   if (state.keyEditHistory.operation || hasPendingConfigurationWrite(state)) return false;
   // Staged batch edits sit between the history's device state and the boards':
   // traveling would write under them and stale their restore points.
-  if (stagedEditCount(state) > 0) return false;
+  if (draftEditCount(state) > 0) return false;
   return direction === "undo"
     ? state.keyEditHistory.past.length > 0
     : state.keyEditHistory.future.length > 0;

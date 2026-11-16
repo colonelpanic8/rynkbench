@@ -9,7 +9,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } fro
 import { keyActionGlyph } from "../labels";
 import { layerName, layerNamesOf } from "../layer-names";
 import { showToast } from "../messages/store";
-import { lightingDraftFor } from "../../workbench";
+import { draftOf, lightingDraftFor } from "../../workbench";
 import { nextEditOrder } from "../../model/history";
 import type { WorkbenchAction, WorkbenchState } from "../../model/workbench-state";
 import { layerLightingActions } from "../../workbench/draft/changes";
@@ -69,12 +69,13 @@ export function useDraftHistory(state: WorkbenchState, dispatch: (action: Workbe
   const image = useMemo(
     (): DraftImage => ({
       layers: state.layers,
-      stagedKeys: state.stagedKeys,
+      draftedKeys: draftOf(state)
+        .changes.flatMap(({ item }) => (item.kind === "key" ? [{ layer: item.layer, row: Math.floor(item.offset / cols), col: item.offset % cols }] : [])),
       lighting: state.layers.map((_, layer) => lightingDraftFor(state, layer)),
       rules: state.runtimeConditionalDraft,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.layers, state.stagedKeys, state.layerDrafts, state.scenes, state.runtimeConditionalDraft],
+    [state.base, state.layers, state.layerDrafts, state.scenes, state.runtimeConditionalDraft, cols],
   );
   const previous = useRef(image);
   // An Undo toast's action can run after later renders: it reads the state then.
