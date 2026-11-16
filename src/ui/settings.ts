@@ -22,6 +22,8 @@ export const SETTING_KEYS = {
   sidePanelSide: "rynk:side-panel-side",
   /** Changes not yet sent to a keyboard, kept per device (ADR 0010). */
   draft: (serial: string) => `rynk:draft:${serial || "unknown"}`,
+  /** Behavior names and descriptions, per device (ADR 0020). */
+  behaviorLabels: (serial: string) => `rynk:behavior-labels:${serial || "unknown"}`,
   /** Layer lighting presets on boards without scene storage, per device. */
   layerLighting: (serial: string) => `rynkbench:layer-lighting:${serial || "unknown"}`,
   /** The effects' brightness to turn them back on at, per device: off is brightness 0 on the keyboard. */

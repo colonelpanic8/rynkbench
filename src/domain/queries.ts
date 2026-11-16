@@ -85,3 +85,16 @@ export function dangling(graph: Graph): Edge[] {
   }
   return out;
 }
+
+/** How a behavior slot is used: by a place (a key, combo or fork, directly or
+ *  through a tap pattern), only by tap patterns nothing uses, or not at all. */
+export type BehaviorUse = "used" | "only-by-unused" | "unused";
+
+export function behaviorUse(graph: Graph, attributed: readonly Attributed[], target: Ref, morseSlots: number): BehaviorUse {
+  if (referencedBy(attributed, target).length > 0) return "used";
+  for (let index = 0; index < morseSlots; index += 1) {
+    const slot: Ref = { kind: "morse", index };
+    if (!sameRef(slot, target) && graph.from(slot).some((edge) => sameRef(edge.to, target))) return "only-by-unused";
+  }
+  return "unused";
+}

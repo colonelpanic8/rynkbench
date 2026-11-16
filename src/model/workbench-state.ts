@@ -8,6 +8,7 @@
 // later phase. The reducer and io that use them are in src/workbench (ADR 0017).
 
 import type { MacroOp } from "../vendor/rynk-wasm/rynk_wasm";
+import type { BehaviorLabels } from "./behavior-labels";
 import type {
   AutoMouseLayerConfig,
   BatteryStatus,
@@ -273,6 +274,8 @@ export interface WorkbenchState {
   pending: Record<string, PendingInfo>;
   /** Every commit, for Undo and Redo, in Draft, Live and a file alike (ADR 0018). */
   history: History;
+  /** The behaviors' names and descriptions (ADR 0020): beside what you want, never sent. */
+  labels: BehaviorLabels;
   /** Draft mode (ADR 0010): edits change what you want, and Send writes the
    *  difference; in Live each edit is written at once. */
   batchMode: boolean;
@@ -350,7 +353,9 @@ export type WorkbenchAction =
   /** An operation's result (ADR 0019): what you want, whole, as one step; `join`
    *  puts it in the last step (Live putting back a send that failed); a layer
    *  rewrite's `layerOrder` (destination → source slot) moves the layer on show with it. */
-  | { type: "commit"; image: KeyboardImage; join?: boolean; layerOrder?: number[] }
+  | { type: "commit"; image: KeyboardImage; join?: boolean; layerOrder?: number[]; labels?: BehaviorLabels }
+  /** Labels kept for this keyboard or read from a file (ADR 0020): no step. */
+  | { type: "labelsLoaded"; labels: BehaviorLabels }
   /** The keyboard was read (Send's read-back): the base is this image. */
   | { type: "draftStored"; image: KeyboardImage }
   /** A kept draft put back: each item based on `before`, wanted as `after`. */

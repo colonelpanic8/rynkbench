@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Action, ComboDefinition, Fork, KeyAction, Morse } from "../vendor/rynk-wasm/rynk_wasm";
 import { noStateBits } from "../model/slots";
-import { activators, attributedEdges, buildGraph, cellRef, dangling, keyActionReferences, layerRef, reachableLayers, referencedBy, refKey, slotRef } from "./index";
+import { activators, attributedEdges, behaviorUse, buildGraph, cellRef, dangling, keyActionReferences, layerRef, reachableLayers, referencedBy, refKey, slotRef } from "./index";
 import type { GraphSource } from "./index";
 
 const key = (code: string): KeyAction => ({ Single: { Key: { Hid: code as never } } });
@@ -149,5 +149,21 @@ describe("combos and forks", () => {
     // A combo limited to layer 1 refers to layer 1, besides turning on layer 2.
     expect(g.from(slotRef("combo", 0)).map((e) => `${e.kind}>${refKey(e.to)}`)).toEqual(["activates>layer:2", "scopes>layer:1"]);
     expect(g.from(slotRef("fork", 0)).map((e) => `${e.kind}>${refKey(e.to)}`)).toEqual(["activates>layer:1", "invokes>macro:1"]);
+  });
+});
+
+describe("how a behavior is used", () => {
+  it("is used by a key, only by a tap pattern nothing uses, or not at all", () => {
+    const macroMorse: Morse = { profile: {} as Morse["profile"], actions: [[2, { TriggerMacro: 0 }]] };
+    const kept: Morse = { profile: {} as Morse["profile"], actions: [[2, { TriggerMacro: 1 }]] };
+    const built = source({ layers: [[{ Morse: 1 }, key("A")]], morse: [macroMorse, kept], macroCount: 3 });
+    const graph = buildGraph(built);
+    const attributed = attributedEdges(graph);
+    const use = (ref: Parameters<typeof behaviorUse>[2]) => behaviorUse(graph, attributed, ref, built.morse.length);
+    expect(use(slotRef("morse", 1))).toBe("used");
+    expect(use(slotRef("macro", 1))).toBe("used");
+    expect(use(slotRef("morse", 0))).toBe("unused");
+    expect(use(slotRef("macro", 0))).toBe("only-by-unused");
+    expect(use(slotRef("macro", 2))).toBe("unused");
   });
 });

@@ -236,7 +236,7 @@ export function ForksTab({ nav }: { nav: ReactNode }) {
                   draft.trigger === "No" ||
                   (draft.negative_output === "No" && draft.positive_output === "No")
                 }
-                onClick={() => io.setSlot("forks", sel, JSON.parse(JSON.stringify(draft)) as Fork)}
+                onClick={() => io.apply("set_behavior", { kind: "forks", slot: sel, value: structuredClone(draft) })}
               >
                 Save fork
               </Button>
@@ -245,7 +245,7 @@ export function ForksTab({ nav }: { nav: ReactNode }) {
                 title="Delete this fork (frees the slot)"
                 disabled={pending || (saved !== null && forkIsEmpty(saved))}
                 onClick={() => {
-                  io.setSlot("forks", sel, emptyFork());
+                  void io.apply("delete_behavior", { kind: "forks", slot: sel });
                   close();
                 }}
               >

@@ -11,12 +11,24 @@ import { ioFeaturesFor, makeIo, type WorkbenchIo } from "../io";
 import { makeWorkbenchReducer } from "../reducer";
 import { emptyHistory, HISTORY_LIMIT, recordStep, travel, type History } from "./history";
 import { draftOf } from "./want";
+import { noLabels, withLabel } from "../../model/behavior-labels";
 
 const key = (code: string) => ({ Single: { Key: { Hid: code } } }) as KeyAction;
 const change = (offset: number, before: KeyAction, after: KeyAction): PatchEntry => ({ item: { kind: "key", layer: 0, offset }, before, after });
 const RED = { Solid: { color: { r: 255, g: 0, b: 0 } } };
 
 describe("the history (pure)", () => {
+  it("keeps the behavior labels a commit changed, and joins them with the rest of a step", () => {
+    const named = withLabel(noLabels(), "morse", 0, { name: "Home", description: "" });
+    const renamed = withLabel(noLabels(), "morse", 0, { name: "Away", description: "" });
+    let history = recordStep(emptyHistory(), [], false, { before: noLabels(), after: named });
+    expect(history.past).toEqual([{ changes: [], labels: { before: noLabels(), after: named } }]);
+    history = recordStep(history, [change(0, "No", key("A"))], true, { before: named, after: renamed });
+    expect(history.past).toEqual([{ changes: [change(0, "No", key("A"))], labels: { before: noLabels(), after: renamed } }]);
+    // Joined back to where it started, the step is gone.
+    expect(recordStep(history, [change(0, key("A"), "No")], true, { before: renamed, after: noLabels() }).past).toEqual([]);
+  });
+
   it("keeps commits as patches, undoes with the inverse and redoes with the patch", () => {
     let history = recordStep(emptyHistory(), [change(0, "No", key("A"))]);
     history = recordStep(history, [change(1, "No", key("B"))]);

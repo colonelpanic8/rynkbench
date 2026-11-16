@@ -6,6 +6,15 @@ import { setKeys, swapKeys } from "./keys";
 import { deleteLayer, duplicateLayer, moveLayer } from "./layers";
 import { setKeyLight } from "./lighting";
 import { applyTransform } from "./transform";
+import {
+  createBehavior,
+  deleteBehavior,
+  deleteUnusedBehaviors,
+  duplicateBehavior,
+  pasteBehaviors,
+  renameBehavior,
+  setBehavior,
+} from "./behaviors";
 import { checkInput } from "./inputs";
 import type { InputField, OperationFacts, OperationResult } from "./types";
 import type { KeyboardImage } from "../sync/image";
@@ -18,6 +27,13 @@ export const OPERATIONS = {
   duplicate_layer: duplicateLayer,
   set_key_light: setKeyLight,
   apply_transform: applyTransform,
+  create_behavior: createBehavior,
+  set_behavior: setBehavior,
+  rename_behavior: renameBehavior,
+  duplicate_behavior: duplicateBehavior,
+  delete_behavior: deleteBehavior,
+  delete_unused_behaviors: deleteUnusedBehaviors,
+  paste_behaviors: pasteBehaviors,
 } as const;
 
 export type OperationName = keyof typeof OPERATIONS;

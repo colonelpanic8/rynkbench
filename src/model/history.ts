@@ -2,10 +2,18 @@
 // and the keyboard shortcuts for Undo and Redo.
 
 import type { PatchEntry } from "../sync";
+import type { BehaviorLabels } from "./behavior-labels";
 
-/** One commit: its items with their value before and after. */
+/** The behavior labels before and after a commit that changed them (ADR 0020). */
+export interface LabelsChange {
+  before: BehaviorLabels;
+  after: BehaviorLabels;
+}
+
+/** One commit: its items with their value before and after, and the labels when it changed them. */
 export interface HistoryStep {
   changes: readonly PatchEntry[];
+  labels?: LabelsChange;
 }
 
 export interface History {

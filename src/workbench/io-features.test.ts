@@ -13,6 +13,7 @@ function legacy(bundle: Pick<ConnectedBundle, "sceneStatus" | "runtimeConditiona
     extensionSupported: bundle.lightingExtension !== null,
     pointingSupported: bundle.pointingConfig !== null,
     lightingOutputSupported: bundle.lightingState !== null && bundle.lightingOutputMode !== null,
+    macroSpace: null,
   };
 }
 
@@ -36,11 +37,27 @@ describe("ioFeaturesFor", () => {
                   pointingConfig,
                   lightingState,
                   lightingOutputMode,
-                  caps: { max_morse: 0, max_patterns_per_key: 0 },
+                  caps: { max_morse: 0, max_patterns_per_key: 0, max_macros: 0, macro_space_size: 0, macros_writable: false, max_forks: 0 },
+                  morseProfileCapacity: 0,
                 } as unknown as ConnectedBundle;
                 expect(ioFeaturesFor(bundle)).toEqual(legacy(bundle));
                 checked += 1;
               }
     expect(checked).toBe(3 * 3 * 2 * 2 * 2 * 2);
+  });
+
+  it("gives the operations the macro slots and the bytes they share", () => {
+    const bundle = {
+      sceneStatus: null,
+      runtimeConditionalStatus: null,
+      compiledSceneStatus: null,
+      lightingExtension: null,
+      pointingConfig: null,
+      lightingState: null,
+      lightingOutputMode: null,
+      caps: { max_morse: 0, max_patterns_per_key: 0, max_macros: 16, macro_space_size: 512, macros_writable: true, max_forks: 0 },
+      morseProfileCapacity: 0,
+    } as unknown as ConnectedBundle;
+    expect(ioFeaturesFor(bundle).macroSpace).toEqual({ slots: 16, bytes: 512 });
   });
 });

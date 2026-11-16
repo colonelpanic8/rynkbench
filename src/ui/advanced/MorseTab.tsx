@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 import type { ReactNode } from "react";
-import type { Action, Morse, MorseMode, MorseProfile } from "../../vendor/rynk-wasm/rynk_wasm";
+import type { Action, MorseMode, MorseProfile } from "../../vendor/rynk-wasm/rynk_wasm";
 
 import { SlotPicker } from "../keymap/ActionEditor";
 import { useWorkbench } from "../state";
@@ -336,7 +336,7 @@ export function MorseTab({ nav }: { nav: ReactNode }) {
                 variant="primary"
                 className="flex-1"
                 disabled={!dirty || pending || draft.actions.length === 0}
-                onClick={() => io.setSlot("morse", sel, JSON.parse(JSON.stringify(draft)) as Morse)}
+                onClick={() => io.apply("set_behavior", { kind: "morse", slot: sel, value: structuredClone(draft) })}
               >
                 Save morse key
               </Button>
@@ -345,7 +345,7 @@ export function MorseTab({ nav }: { nav: ReactNode }) {
                 title="Delete this morse key (frees the slot)"
                 disabled={pending || (saved !== null && morseIsEmpty(saved))}
                 onClick={() => {
-                  io.setSlot("morse", sel, emptyMorse());
+                  void io.apply("delete_behavior", { kind: "morse", slot: sel });
                   close();
                 }}
               >

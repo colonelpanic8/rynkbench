@@ -27,8 +27,8 @@ Each layer imports only from layers below it. The rules are tests (`src/architec
 | Layer | Lines | Holds | Never imports |
 |---|---|---|---|
 | `ui/` | 21,400 | Screens (`Workbench.tsx`, areas in `areas.ts`), the context (`state.tsx`), hooks, words (`terms.ts`, `labels.ts`), themes, key faces, the canvas, Guard's questions (`guard/`) | a transport or simulated board, the wire package |
-| `workbench/` | 2,700 | `initial-state`, `reducer` (+ `reduce-lighting`, `reduce-settings`), `pending`, `lighting-drafts`, `io` (+ `io-keys`, `io-layers`, `io-lighting`, `io-settings`), `apply` (an operation's result as one commit), `draft/`, `usage`, `layer-impact` | `ui/`, a transport |
-| `operations/` | 450 | Each operation (`keys`, `layers`, `lighting`, `transform`), the `catalog` with `runOperation`, input checks, Guard's view of an image (ADR 0019) | a session, a reader or writer, `workbench/`, `ui/` |
+| `workbench/` | 2,700 | `initial-state`, `reducer` (+ `reduce-lighting`, `reduce-settings`), `pending`, `lighting-drafts`, `io` (+ `io-keys`, `io-layers`, `io-lighting`, `io-settings`), `apply` (an operation's result as one commit), `labels` (behavior names against what a keyboard holds), `draft/`, `usage`, `layer-impact` | `ui/`, a transport |
+| `operations/` | 900 | Each operation (`keys`, `layers`, `lighting`, `transform`, `behaviors` with their slots and Copy text, ADR 0020), the `catalog` with `runOperation`, input checks, Guard's view of an image (ADR 0019) | a session, a reader or writer, `workbench/`, `ui/` |
 | `sync/` | 430 | `image`, `plan`, `write`, `conflicts` (ADR 0012, `docs/sync.md`) | `ui/`, `workbench/`, a transport |
 | `layers/`, `config/`, `domain/`, `firmware/` | 2,100 | Layer rewrites; layout files; the graph and Guard (ADR 0011); firmware releases | `ui/`, `workbench/` |
 | `model/` | 4,900 | Key slots, combos, macros, morse, pointing, history, transforms, `lighting/`, `boards/`, the workbench state's types | `ui/`, `workbench/` |
@@ -78,6 +78,7 @@ Take a key changed in the key editor.
 | What the draft is | `workbench/draft/changes.ts`, ADR 0010 |
 | What protects a layout | `domain/guard.ts`, ADR 0011 |
 | What a Flow or an assistant can call | `operations/catalog.ts`, `workbench/apply.ts`, ADR 0019 |
+| Behavior names and descriptions (labels) | `model/behavior-labels.ts`, `state.labels`, `ui/behaviors/LabelKeeper.tsx`, ADR 0020 |
 | What a keyboard can do | `capabilities/`, ADR 0002 |
 | How a screen gets all this | `ui/state.tsx` (`useWorkbench`), `ui/Workbench.tsx` |
 | How screens are tested | `src/test/workbench.tsx` (`renderInWorkbench`) |

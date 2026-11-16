@@ -5,6 +5,7 @@
 
 import type { LightingConditionalSceneCell, LightingSceneCell } from "../vendor/rynk-wasm/rynk_wasm";
 import type { KeyboardImage } from "../sync/image";
+import type { BehaviorLabels } from "../model/behavior-labels";
 
 /** What the keyboard is but does not store: what an operation may need besides the image. */
 export interface OperationFacts {
@@ -20,6 +21,10 @@ export interface OperationFacts {
   compiledRules: readonly LightingConditionalSceneCell[];
   /** Which half of a split board each LED is on (0 or 1); absent means 0. */
   ledNodes: Readonly<Record<number, number>>;
+  /** The behaviors' names and descriptions, which the keyboard does not store (ADR 0020). */
+  labels: BehaviorLabels;
+  /** Macro slots and the bytes they share; null when the keyboard has no macros. */
+  macroSpace: { slots: number; bytes: number } | null;
 }
 
 /** The kinds of input an operation takes; `value` is any stored value (a key action, a light). */
@@ -45,6 +50,8 @@ export type OperationResult =
       image: KeyboardImage;
       /** A layer rewrite: destination slot → source slot, so the layer on show can follow. */
       layerOrder?: number[];
+      /** The behavior labels after the change, when it changed them (ADR 0020). */
+      labels?: BehaviorLabels;
     }
   | { ok: false; message: string };
 

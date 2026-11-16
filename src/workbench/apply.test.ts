@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { mockProvider } from "../session/mock/board";
 import { glove80Board } from "../session/mock/glove80";
 import type { RynkSession } from "../session/types";
-import type { KeyAction } from "../vendor/rynk-wasm/rynk_wasm";
+import type { KeyAction, Morse } from "../vendor/rynk-wasm/rynk_wasm";
+import { emptyMorse } from "../model/slots";
 import { openBundle } from "../ui/bundle";
 import { initialWorkbenchState } from "./initial-state";
 import { ioFeaturesFor, makeIo, type IoOptions, type WorkbenchIo } from "./io";
@@ -101,6 +102,38 @@ describe("applying an operation (ADR 0019)", () => {
   it("answers a refused operation with its message", async () => {
     await withBoard(true, async (_session, io) => {
       expect(await io.apply("set_keys", { keys: [{ layer: 0, row: 99, col: 0, action: "No" }] })).toMatchObject({ ok: false });
+    });
+  });
+});
+
+describe("behavior operations (ADR 0020)", () => {
+  const tapA = { ...emptyMorse(), actions: [[2, { Key: { Hid: "A" } }]] } as Morse;
+
+  it("in Draft: a new tap pattern and its name are one step; Undo takes both back", async () => {
+    await withBoard(true, async (_session, io, state) => {
+      const slot = state().morse.findIndex((morse) => morse.actions.length === 0);
+      expect(await io.apply("create_behavior", { kind: "morse", value: tapA, name: "Home" })).toEqual({ ok: true });
+      expect(state().morse[slot]).toEqual(tapA);
+      expect(state().labels.morse[slot]?.name).toBe("Home");
+      expect(state().history.past).toHaveLength(1);
+      expect(await io.travel("undo")).toEqual({ ok: true });
+      expect(state().labels.morse).toEqual({});
+      expect(state().morse[slot]).toEqual(emptyMorse());
+      expect(await io.travel("redo")).toEqual({ ok: true });
+      expect(state().labels.morse[slot]?.name).toBe("Home");
+    });
+  });
+
+  it("in Live: a rename writes nothing and is still a step", async () => {
+    await withBoard(false, async (session, io, state) => {
+      const slot = state().morse.findIndex((morse) => morse.actions.length === 0);
+      expect(await io.apply("create_behavior", { kind: "morse", value: tapA })).toEqual({ ok: true });
+      const write = vi.spyOn(session.morse, "set");
+      expect(await io.apply("rename_behavior", { kind: "morse", slot, name: "Home" })).toEqual({ ok: true });
+      expect(write).not.toHaveBeenCalled();
+      expect(state().history.past).toHaveLength(2);
+      expect(await io.travel("undo")).toEqual({ ok: true });
+      expect(state().labels.morse).toEqual({});
     });
   });
 });

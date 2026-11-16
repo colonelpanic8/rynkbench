@@ -13,7 +13,6 @@ import type {
   LightingSceneCell,
   MacroOp,
   MorseHoldTriggerPosition,
-  MorseProfileEntry,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import type { RuntimeLightingRule, RynkSession } from "../session/types";
 import type { SyncItem } from "../sync";
@@ -88,8 +87,6 @@ export interface WorkbenchIo {
   setSlot<K extends SlotKind>(kind: K, index: number, value: SlotValueOf<K>): Promise<IoWriteResult>;
   writeMacros(ops: MacroOp[][]): Promise<IoWriteResult>;
   setBehavior(config: BehaviorConfig): Promise<IoWriteResult>;
-  setMorseProfile(entry: MorseProfileEntry): Promise<IoWriteResult>;
-  deleteMorseProfile(index: number): Promise<IoWriteResult>;
   setMorseHoldTriggerPositions(positions: MorseHoldTriggerPosition[]): Promise<IoWriteResult>;
   reloadPointingConfig(): Promise<IoWriteResult>;
   disconnect(): void;
@@ -107,6 +104,8 @@ export interface IoFeatures {
   extensionSupported: boolean;
   pointingSupported: boolean;
   lightingOutputSupported: boolean;
+  /** Macro slots and the bytes they share; null without macros. */
+  macroSpace: { slots: number; bytes: number } | null;
 }
 
 export const NO_IO_FEATURES: IoFeatures = {
@@ -117,6 +116,7 @@ export const NO_IO_FEATURES: IoFeatures = {
   extensionSupported: false,
   pointingSupported: false,
   lightingOutputSupported: false,
+  macroSpace: null,
 };
 
 /** The io facade's view of the firmware, read from the capability set so the
@@ -131,7 +131,12 @@ export function ioFeaturesFor(bundle: ConnectedBundle): IoFeatures {
     extensionSupported: capabilities.has("lighting.extension"),
     pointingSupported: capabilities.has("pointing"),
     lightingOutputSupported: capabilities.has("lighting.output"),
+    macroSpace: macroSpaceOf(capabilities.get("behaviors.macros")),
   };
+}
+
+function macroSpaceOf(macros: { slots: number; bytes?: number } | undefined): IoFeatures["macroSpace"] {
+  return macros ? { slots: macros.slots, bytes: macros.bytes ?? 0 } : null;
 }
 
 export interface IoOptions {

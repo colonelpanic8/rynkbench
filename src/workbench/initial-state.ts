@@ -6,6 +6,7 @@ import { normalizePointingConfig } from "../model/pointing";
 import { cellsToRecord } from "./lighting-drafts";
 import { storedImage } from "./draft/want";
 import { emptyHistory } from "./draft/history";
+import { noLabels } from "../model/behavior-labels";
 
 export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
   const applied = cellsToRecord(bundle.overlay);
@@ -52,6 +53,7 @@ export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
     selection: null,
     pending: {},
     history: emptyHistory(),
+    labels: noLabels(),
     batchMode: bundle.session.kind !== "offline", // a keyboard starts in Draft (ADR 0010)
     batchBusy: false,
     batchError: null,

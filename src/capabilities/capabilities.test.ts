@@ -9,7 +9,8 @@ const none: FactSource = {
   pointingConfig: null,
   lightingState: null,
   lightingOutputMode: null,
-  caps: { max_morse: 0, max_patterns_per_key: 0 },
+  caps: { max_morse: 0, max_patterns_per_key: 0, max_macros: 0, macro_space_size: 0, macros_writable: false, max_forks: 0 },
+  morseProfileCapacity: 0,
 };
 
 describe("firmwareFactsOf", () => {
@@ -24,6 +25,11 @@ describe("firmwareFactsOf", () => {
       outputMode: false,
       morseSlots: 0,
       morsePatterns: 0,
+      macroSlots: 0,
+      macroBytes: 0,
+      macrosWritable: false,
+      forkSlots: 0,
+      profileSlots: 0,
     });
   });
 
@@ -68,6 +74,11 @@ describe("resolveCapabilities", () => {
       outputMode: true,
       morseSlots: 32,
       morsePatterns: 8,
+      macroSlots: 0,
+      macroBytes: 0,
+      macrosWritable: false,
+      forkSlots: 0,
+      profileSlots: 0,
     });
     expect(set.get("lighting.scenes")).toEqual({ id: "lighting.scenes", slots: 16, reach: "device", readOnly: false });
     expect(set.get("lighting.rules")).toEqual({ id: "lighting.rules", slots: 24, reach: "device", readOnly: false });
@@ -77,14 +88,31 @@ describe("resolveCapabilities", () => {
     expect(set.has("lighting.output")).toBe(true);
     expect(set.has("pointing")).toBe(true);
     expect(set.get("keys.doubleTap")).toEqual({ id: "keys.doubleTap", slots: 32, reach: "device", readOnly: false });
-    expect(set.list()).toHaveLength(8);
+    expect(set.get("behaviors.morse")).toEqual({ id: "behaviors.morse", slots: 32, reach: "device", readOnly: false });
+    expect(set.list()).toHaveLength(9);
   });
 
   it("offers a double tap only when a morse entry fits tap, hold and tap-tap", () => {
-    const facts = firmwareFactsOf({ ...none, caps: { max_morse: 8, max_patterns_per_key: 3 } });
+    const facts = firmwareFactsOf({ ...none, caps: { ...none.caps, max_morse: 8, max_patterns_per_key: 3 } });
     expect(resolveCapabilities(facts).get("keys.doubleTap")?.slots).toBe(8);
     expect(resolveCapabilities({ ...facts, morsePatterns: 2 }).has("keys.doubleTap")).toBe(false);
     expect(resolveCapabilities({ ...facts, morseSlots: 0 }).has("keys.doubleTap")).toBe(false);
+  });
+
+  it("offers each behavior kind the keyboard has slots for, macros with their shared bytes", () => {
+    const facts = firmwareFactsOf({
+      ...none,
+      caps: { ...none.caps, max_macros: 32, macro_space_size: 1024, macros_writable: true, max_forks: 4 },
+      morseProfileCapacity: 8,
+    });
+    const set = resolveCapabilities(facts);
+    expect(set.get("behaviors.macros")).toEqual({ id: "behaviors.macros", slots: 32, bytes: 1024, reach: "device", readOnly: false });
+    expect(set.get("behaviors.forks")?.slots).toBe(4);
+    expect(set.get("behaviors.profiles")?.slots).toBe(8);
+    expect(set.has("behaviors.morse")).toBe(false);
+    const readOnly = firmwareFactsOf({ ...none, caps: { ...none.caps, max_macros: 4, macro_space_size: 64 } });
+    expect(resolveCapabilities(readOnly).get("behaviors.macros")?.readOnly).toBe(true);
+    expect(resolveCapabilities(firmwareFactsOf({ ...none, caps: { ...none.caps, max_macros: 4 } })).has("behaviors.macros")).toBe(false);
   });
 
   it("gives table capabilities a slot count the type can rely on", () => {

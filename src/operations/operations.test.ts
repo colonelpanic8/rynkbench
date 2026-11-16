@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BehaviorOptions, KeyAction, MorseProfile } from "../vendor/rynk-wasm/rynk_wasm";
 import type { KeyboardImage } from "../sync/image";
+import { noLabels } from "../model/behavior-labels";
 import { catalog, guardInputOf, OPERATIONS, runOperation, type OperationFacts } from ".";
 
 const key = (code: string): KeyAction => ({ Single: { Key: { Hid: code } } }) as KeyAction;
@@ -47,6 +48,8 @@ const facts: OperationFacts = {
   compiledScenes: [],
   compiledRules: [],
   ledNodes: {},
+  labels: noLabels(),
+  macroSpace: null,
 };
 
 const run = (name: Parameters<typeof runOperation>[0], input: unknown, on = image(), with_ = facts) =>

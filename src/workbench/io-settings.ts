@@ -14,8 +14,6 @@ type SettingsIo = Pick<
   | "setSlot"
   | "writeMacros"
   | "setBehavior"
-  | "setMorseProfile"
-  | "deleteMorseProfile"
   | "setMorseHoldTriggerPositions"
   | "reloadPointingConfig"
 >;
@@ -87,36 +85,6 @@ export function settingsIo(context: IoContext): SettingsIo {
       const drafted = whole("behavior", config);
       if (drafted) return Promise.resolve(drafted);
       return writeField("behavior", config, () => session.behavior.set(config));
-    },
-    setMorseProfile(entry) {
-      const drafted = draft([{ item: { kind: "morseProfile", index: entry.index }, value: entry }]);
-      if (drafted) return Promise.resolve(drafted);
-      const prev = getState().morseProfiles.find((item) => item.index === entry.index) ?? null;
-      dispatch({ type: "morseProfileWriteStart", entry });
-      return settle(
-        session.behavior.setProfile(entry),
-        () => dispatch({ type: "morseProfileWriteOk", index: entry.index }),
-        (message) =>
-          dispatch({ type: "morseProfileWriteErr", index: entry.index, prev, message }),
-      );
-    },
-    deleteMorseProfile(index) {
-      const state = getState();
-      const entry = state.morseProfiles.find((item) => item.index === index);
-      if (!entry) return Promise.resolve({ ok: false, message: `no profile in slot ${index}` });
-      const positions = state.morseHoldTriggerPositions;
-      // The keyboard forgets a profile's hold-trigger positions with it.
-      const drafted = draft([
-        { item: { kind: "morseProfile", index }, value: null },
-        { item: { kind: "holdTriggerPositions" }, value: positions.filter((position) => position.profile !== index) },
-      ]);
-      if (drafted) return Promise.resolve(drafted);
-      dispatch({ type: "morseProfileDeleteStart", index });
-      return settle(
-        session.behavior.deleteProfile(index),
-        () => dispatch({ type: "morseProfileDeleteOk", index }),
-        (message) => dispatch({ type: "morseProfileDeleteErr", entry, positions, message }),
-      );
     },
     setMorseHoldTriggerPositions(positions) {
       const drafted = whole("holdTriggerPositions", positions);

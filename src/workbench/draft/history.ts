@@ -6,29 +6,42 @@
 // leave the history alone; Discard is a step like any other. It belongs to the
 // open workbench and starts over with another keyboard or file. Pure.
 
-import type { History, HistoryStep } from "../../model/history";
+import type { History, HistoryStep, LabelsChange } from "../../model/history";
+import { sameValue } from "../../model/deep-equal";
 import { invertPatch, joinPatches, type PatchEntry } from "../../sync";
 
-export type { History, HistoryStep };
+export type { History, HistoryStep, LabelsChange };
 
 export const HISTORY_LIMIT = 100;
 
 export const emptyHistory = (): History => ({ past: [], future: [], stroke: "none", suspended: false });
 
+/** Two steps one after the other as one; null when together they change nothing. */
+function joinSteps(first: HistoryStep, second: HistoryStep): HistoryStep | null {
+  const changes = joinPatches(first.changes, second.changes);
+  const before = first.labels?.before ?? second.labels?.before;
+  const after = second.labels?.after ?? first.labels?.after;
+  const labels = before && after && !sameValue(before, after) ? { before, after } : undefined;
+  if (changes.length === 0 && !labels) return null;
+  return labels ? { changes, labels } : { changes };
+}
+
 /** A commit: a new step (the future is gone), or joined to the last one (the rest
- *  of a Paint stroke, or a write that failed and put things back). */
-export function recordStep(history: History, changes: readonly PatchEntry[], join = false): History {
-  if (history.suspended || changes.length === 0) return history;
+ *  of a Paint stroke, or a write that failed and put things back). `labels`: the
+ *  behavior labels, when the commit changed them (ADR 0020). */
+export function recordStep(history: History, changes: readonly PatchEntry[], join = false, labels?: LabelsChange): History {
+  if (history.suspended || (changes.length === 0 && !labels)) return history;
+  const step: HistoryStep = labels ? { changes, labels } : { changes };
   const last = history.past.at(-1);
   if ((join || history.stroke === "joined") && last) {
-    const joined = joinPatches(last.changes, changes);
-    const past = joined.length === 0 ? history.past.slice(0, -1) : [...history.past.slice(0, -1), { changes: joined }];
+    const joined = joinSteps(last, step);
+    const past = joined ? [...history.past.slice(0, -1), joined] : history.past.slice(0, -1);
     return { ...history, past, future: join ? history.future : [] };
   }
   if (join) return history;
   return {
     ...history,
-    past: [...history.past, { changes }].slice(-HISTORY_LIMIT),
+    past: [...history.past, step].slice(-HISTORY_LIMIT),
     future: [],
     stroke: history.stroke === "open" ? "joined" : history.stroke,
   };

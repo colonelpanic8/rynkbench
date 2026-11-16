@@ -23,6 +23,14 @@ export interface FirmwareFacts {
   morseSlots: number;
   /** Patterns one morse entry can hold. */
   morsePatterns: number;
+  /** Macro slots and the bytes they share; 0 when the firmware has none. */
+  macroSlots: number;
+  macroBytes: number;
+  /** Whether macros can be changed (a firmware without storage serves its own). */
+  macrosWritable: boolean;
+  forkSlots: number;
+  /** Tap-hold profile slots. */
+  profileSlots: number;
 }
 
 /** Anything that carries the connect-time reads: a connect bundle or the
@@ -35,7 +43,15 @@ export interface FactSource {
   pointingConfig: unknown;
   lightingState: unknown;
   lightingOutputMode: unknown;
-  caps: { max_morse: number; max_patterns_per_key: number };
+  caps: {
+    max_morse: number;
+    max_patterns_per_key: number;
+    max_macros: number;
+    macro_space_size: number;
+    macros_writable: boolean;
+    max_forks: number;
+  };
+  morseProfileCapacity: number;
 }
 
 /** A read that came back `null` means the firmware does not have the surface. */
@@ -50,6 +66,11 @@ export function firmwareFactsOf(source: FactSource): FirmwareFacts {
     outputMode: source.lightingState !== null && source.lightingOutputMode !== null,
     morseSlots: source.caps.max_morse,
     morsePatterns: source.caps.max_patterns_per_key,
+    macroSlots: source.caps.macro_space_size > 0 ? source.caps.max_macros : 0,
+    macroBytes: source.caps.macro_space_size,
+    macrosWritable: source.caps.macros_writable,
+    forkSlots: source.caps.max_forks,
+    profileSlots: source.morseProfileCapacity,
   };
 }
 
@@ -79,6 +100,12 @@ export function resolveCapabilities(facts: FirmwareFacts): CapabilitySet {
   if (facts.morseSlots > 0 && facts.morsePatterns >= 3) {
     add({ id: "keys.doubleTap", slots: facts.morseSlots, reach: "device", readOnly: false });
   }
+  if (facts.macroSlots > 0) {
+    add({ id: "behaviors.macros", slots: facts.macroSlots, bytes: facts.macroBytes, reach: "device", readOnly: !facts.macrosWritable });
+  }
+  if (facts.morseSlots > 0) add({ id: "behaviors.morse", slots: facts.morseSlots, reach: "device", readOnly: false });
+  if (facts.forkSlots > 0) add({ id: "behaviors.forks", slots: facts.forkSlots, reach: "device", readOnly: false });
+  if (facts.profileSlots > 0) add({ id: "behaviors.profiles", slots: facts.profileSlots, reach: "device", readOnly: false });
   if (facts.pointing) {
     add({ id: "pointing", reach: "device", readOnly: false });
   }

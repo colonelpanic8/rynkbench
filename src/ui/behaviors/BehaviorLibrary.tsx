@@ -12,7 +12,6 @@ import { Button, TextInput, cx } from "../kit";
 import { ChevronDownIcon, ChevronRightIcon, MoreIcon, PlusIcon } from "../icons";
 import { RowMenu, useRowMenu } from "../RowMenu";
 import { askConfirm, showToast } from "../messages/store";
-import { emptyFork, emptyMorse } from "../../model/slots";
 import { useUsageReport } from "./useUsage";
 import { setBehaviorFocus, type BehaviorFocus } from "./focus";
 import {
@@ -90,7 +89,7 @@ function Row({ row, onOpen, onMenu, menuOpen }: { row: LibraryRow; onOpen: () =>
 
 /** The library once open. `kinds`: the lists this keyboard has, in order. */
 export function BehaviorLibrary({ kinds }: { kinds: LibraryKind[] }) {
-  const { state, dispatch, io } = useWorkbench();
+  const { dispatch, io } = useWorkbench();
   const term = useTerms();
   const input = useLibraryInput();
   const [chosen, setKind] = useState<LibraryKind | null>(null);
@@ -122,15 +121,7 @@ export function BehaviorLibrary({ kinds }: { kinds: LibraryKind[] }) {
       });
       if (!yes) return;
     }
-    const result =
-      row.kind === "morse"
-        ? await io.setSlot("morse", row.index, emptyMorse())
-        : row.kind === "forks"
-          ? await io.setSlot("forks", row.index, emptyFork())
-          : row.kind === "profiles"
-            ? await io.deleteMorseProfile(row.index)
-            // Cleared in place, so later macros keep their numbers and the keys that run them.
-            : await io.writeMacros(state.macroOps.map((ops, index) => (index === row.index ? [] : ops)));
+    const result = await io.apply("delete_behavior", { kind: row.kind, slot: row.index });
     showToast(result.ok ? `${row.name} deleted` : `${row.name} was not deleted: ${result.message}`, { tone: result.ok ? "ok" : "danger" });
   };
 

@@ -19,6 +19,7 @@ import { conditionalTablesEqual, stagedBetween } from "../model/lighting/compare
 import { activeLightingBase, activeLightingDraft } from "./lighting-drafts";
 import { canTravel, draftEditCount, pointingDraftDirty } from "./draft/selectors";
 import { emptyHistory } from "./draft/history";
+import { noLabels } from "../model/behavior-labels";
 import { normalizePointingConfig } from "../model/pointing";
 import { draftOf, storedImage, wantOf } from "./draft/want";
 import { writePlan } from "../sync";
@@ -82,6 +83,7 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     selection: null,
     pending: {},
     history: emptyHistory(),
+    labels: noLabels(),
     batchMode: false,
     batchBusy: false,
     batchError: null,

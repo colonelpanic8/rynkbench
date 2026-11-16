@@ -6,6 +6,7 @@
 import type { EncoderAction, KeyAction } from "../vendor/rynk-wasm/rynk_wasm";
 import type { WorkbenchAction, WorkbenchState } from "../model/workbench-state";
 import { draftEditCount } from "./draft/selectors";
+import { sameValue } from "../model/deep-equal";
 import { applyPatch, patchBetween, withValues, type KeyboardImage } from "../sync";
 import { emptyHistory, recordStep, travel } from "./draft/history";
 import { atBase, wantOf, withBase, withItemsAtBase, withRead, withStored, withWant } from "./draft/want";
@@ -79,7 +80,8 @@ const FAILED_WRITES = new Set<WorkbenchAction["type"]>([
 
 function withStep(before: WorkbenchState, after: WorkbenchState, join: boolean): WorkbenchState {
   const changes = patchBetween(wantOf(before), wantOf(after));
-  const history = recordStep(after.history, changes, join);
+  const labels = sameValue(before.labels, after.labels) ? undefined : { before: before.labels, after: after.labels };
+  const history = recordStep(after.history, changes, join, labels);
   return history === after.history ? after : { ...after, history };
 }
 
@@ -142,7 +144,8 @@ export function makeWorkbenchReducer(cols: number) {
       case "historyTravel": {
         const moved = travel(state.history, act.direction);
         if (!moved) return state;
-        return { ...withWant(state, applyPatch(wantOf(state), moved.patch)), history: moved.history };
+        const labels = moved.step.labels?.[act.direction === "undo" ? "before" : "after"] ?? state.labels;
+        return { ...withWant(state, applyPatch(wantOf(state), moved.patch)), history: moved.history, labels };
       }
       case "historyStroke":
         return { ...state, history: { ...state.history, stroke: act.open ? "open" : "none" } };
@@ -171,8 +174,10 @@ export function makeWorkbenchReducer(cols: number) {
         return withItemsAtBase(state, act.items);
       case "wantSet":
         return withWant(state, withValues(wantOf(state), act.values));
+      case "labelsLoaded":
+        return { ...state, labels: act.labels };
       case "commit": {
-        const next = withWant(state, act.image);
+        const next = { ...withWant(state, act.image), labels: act.labels ?? state.labels };
         return act.layerOrder ? { ...next, uiLayer: movedLayer(state.uiLayer, act.layerOrder), selection: null } : next;
       }
       case "draftStored":

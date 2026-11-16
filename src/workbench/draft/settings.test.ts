@@ -4,6 +4,7 @@ import { glove80Board } from "../../session/mock/glove80";
 import type { RynkSession } from "../../session/types";
 import { openBundle } from "../../ui/bundle";
 import type { WorkbenchState } from "../../model/workbench-state";
+import type { MorseProfileEntry } from "../../model/action-types";
 import { initialWorkbenchState } from "../initial-state";
 import { ioFeaturesFor, makeIo, type WorkbenchIo } from "../io";
 import { makeWorkbenchReducer } from "../reducer";
@@ -65,15 +66,15 @@ describe("settings in Draft (ADR 0018)", () => {
 
   it("a tap-hold profile, new or deleted, waits in the draft until Send", async () => {
     await inDraft(async ({ session, io, state }) => {
-      const entry = { index: 0, name: "hrm", profile: state().morse[0].profile } as never;
-      expect(await io.setMorseProfile(entry)).toEqual({ ok: true });
+      const entry: MorseProfileEntry = { index: 0, name: "hrm", profile: state().morse[0].profile };
+      expect(await io.apply("set_behavior", { kind: "profiles", slot: 0, value: entry.profile, name: entry.name })).toEqual({ ok: true });
       expect(state().morseProfiles).toEqual([entry]);
       expect((await session.behavior.profiles()).entries).toEqual([]);
       expect(draftGroups(state())).toEqual([{ area: "profiles", count: 1 }]);
       expect(await io.applyBatch()).toEqual({ ok: true });
       expect((await session.behavior.profiles()).entries).toEqual([entry]);
 
-      expect(await io.deleteMorseProfile(0)).toEqual({ ok: true });
+      expect(await io.apply("delete_behavior", { kind: "profiles", slot: 0 })).toEqual({ ok: true });
       expect(state().morseProfiles).toEqual([]);
       expect((await session.behavior.profiles()).entries).toEqual([entry]);
       expect(await io.applyBatch()).toEqual({ ok: true });

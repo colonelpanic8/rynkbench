@@ -24,3 +24,5 @@ One word, one meaning. Code, docs and screens use these terms.
 - **RGB Lighting:** each key's own light, per layer: Off, a Color, Layer below or a Status light. Set in the key editor's RGB Lighting tab or with Paint (ADR 0016). Never "key colours".
 - **Status light:** a key's light that shows the keyboard's state (Caps, Num or Scroll Lock, a half's battery level, a Bluetooth profile, USB); it lives in the firmware's rule table.
 - **RGB Effects:** the firmware's effects across the whole keyboard (effect, palette, speed).
+- **Behavior:** a numbered slot RMK stores that keys refer to: a macro, a tap pattern (morse), a fork or a tap-hold profile. Listed in the Behavior Library (ADR 0020).
+- **Label:** a behavior's name and description. The keyboard stores none (a profile's name excepted); labels live beside what you want, in the browser per keyboard and in the layout file (ADR 0020).

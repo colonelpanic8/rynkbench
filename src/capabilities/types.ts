@@ -16,15 +16,29 @@ export type CapabilityId =
   | "lighting.output"
   | "pointing"
   /** On Double Tap in the key editor; its slots are the morse table's. */
-  | "keys.doubleTap";
+  | "keys.doubleTap"
+  /** The Behavior Library's kinds (ADR 0020), each a table of numbered slots. */
+  | "behaviors.macros"
+  | "behaviors.morse"
+  | "behaviors.forks"
+  | "behaviors.profiles";
 
 /** The capabilities that are tables with a fixed number of slots. */
-export type TableCapabilityId = "lighting.scenes" | "lighting.rules" | "keys.doubleTap";
+export type TableCapabilityId =
+  | "lighting.scenes"
+  | "lighting.rules"
+  | "keys.doubleTap"
+  | "behaviors.macros"
+  | "behaviors.morse"
+  | "behaviors.forks"
+  | "behaviors.profiles";
 
 export interface Capability {
   id: CapabilityId;
   /** Slots the firmware reserves for this surface, when it has a table. */
   slots?: number;
+  /** Bytes the slots share, when they share a buffer (macros). */
+  bytes?: number;
   /** How far a change goes: live over the link, or only by rebuilding the firmware. */
   reach: "device" | "build";
   /** Whether the surface cannot be written at all. */
