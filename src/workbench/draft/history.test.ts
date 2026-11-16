@@ -84,6 +84,16 @@ describe("one history in Draft", () => {
     });
   });
 
+  it("keeps several keys written as one change (a swap) as one step", async () => {
+    await workbench(true, async ({ io, state }) => {
+      const [a, b] = state().layers[0];
+      await io.writeKeys([{ layer: 0, row: 0, col: 0, action: b }, { layer: 0, row: 0, col: 1, action: a }]);
+      expect(state().history.past).toHaveLength(1);
+      await io.travel("undo");
+      expect(state().layers[0].slice(0, 2)).toEqual([a, b]);
+    });
+  });
+
   it("is left alone by Send", async () => {
     await workbench(true, async ({ io, state }) => {
       await io.setKey(0, 0, 0, key("F13"));

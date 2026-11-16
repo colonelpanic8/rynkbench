@@ -40,11 +40,18 @@ export function keyIo(context: IoContext): KeyIo {
   return {
     setKey,
     async writeKeys(edits, options) {
+      // One change (a swap, a paste) is one step of the history, like a Paint stroke.
+      const joining = edits.length > 1 && getState().history.stroke === "none";
+      if (joining) dispatch({ type: "historyStroke", open: true });
       let first: IoWriteResult = { ok: true };
-      for (const edit of edits) {
-        const result = await setKey(edit.layer, edit.row, edit.col, edit.action);
-        options?.onWritten?.(result.ok);
-        if (first.ok && !result.ok) first = result;
+      try {
+        for (const edit of edits) {
+          const result = await setKey(edit.layer, edit.row, edit.col, edit.action);
+          options?.onWritten?.(result.ok);
+          if (first.ok && !result.ok) first = result;
+        }
+      } finally {
+        if (joining) dispatch({ type: "historyStroke", open: false });
       }
       return first;
     },

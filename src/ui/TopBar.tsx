@@ -153,7 +153,7 @@ export function TopBar({
 
       <div
         className="flex items-center gap-0.5"
-        title="Undo covers key bindings and RGB Lighting. Imports, encoders, default layers, profiles and advanced settings are not included."
+        title="Undo covers every change, in Draft and Live. Imports and transforms start it over."
       >
         <Button
           variant="ghost"
