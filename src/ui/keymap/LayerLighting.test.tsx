@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { testWorkbench } from "../../test/workbench";
+import { renderInWorkbench, testWorkbench, type TestWorkbenchParts } from "../../test/workbench";
+import { withStatusLight } from "../../model/lighting/status-light";
+import type { Selection } from "../../model/workbench-state";
 import type { LightingSceneCell } from "../../vendor/rynk-wasm/rynk_wasm";
 import { WorkbenchContext } from "../state";
 
@@ -40,6 +42,69 @@ function markup(ledId: number, writable = true): string {
     </WorkbenchContext>,
   );
 }
+
+describe("several keys selected", () => {
+  const draw = (selection: Selection) =>
+    renderInWorkbench(<LayerLighting ledId={4} />, {
+      bundle: {
+        sceneStatus: { capacity: 100 },
+        model: { keys: [{ row: 0, col: 0, ledId: 4 }, { row: 0, col: 1, ledId: 5 }, { row: 0, col: 2 }] },
+      },
+      state: { uiLayer: 0, layerMetadata: null, compiledScenes, scenes: [], layerDrafts: {}, selection },
+    });
+
+  it("says how many, how many cannot be lit, that their lights differ, and offers to clear the selection", () => {
+    const html = draw({ type: "key", row: 0, col: 0, more: [{ row: 0, col: 1 }, { row: 0, col: 2 }] });
+    expect(html).toContain("3 keys selected");
+    expect(html).toContain("1 without an LED");
+    // LED 4 has the firmware's colour, LED 5 shows the layer below.
+    expect(html).toContain("their lights differ");
+    expect(html).toContain("Clear selection");
+  });
+
+  it("says nothing of a selection for one key", () => {
+    const html = draw({ type: "key", row: 0, col: 0 });
+    expect(html).not.toContain("selected");
+    expect(html).not.toContain("Clear selection");
+  });
+
+  it("rings every selected key on the canvas, and names the selection on each", async () => {
+    const session = await mockProvider(glove80Board).connect();
+    try {
+      const bundle = await openBundle(session);
+      const [a, b, c] = bundle.model.keys;
+      const selection: Selection = { type: "key", row: c.row, col: c.col, more: [a, b].map(({ row, col }) => ({ row, col })) };
+      const html = renderInWorkbench(<KeymapCenter />, { bundle, state: { ...initialWorkbenchState(bundle), selection } });
+      // The thin ring of a key selected with others; the editor's key keeps the one ring it always had.
+      expect(html.match(/stroke-opacity="0.9"/g)).toHaveLength(2);
+      expect(html.match(/Selected with 2 more\./g)).toHaveLength(3);
+    } finally {
+      await session.close();
+    }
+  });
+});
+
+describe("clearing the layer's lights", () => {
+  const draw = (state: TestWorkbenchParts["state"]) =>
+    renderInWorkbench(<LayerLighting ledId={4} />, {
+      bundle: { sceneStatus: { capacity: 100 }, runtimeConditionalStatus: { capacity: 32 } },
+      state: { uiLayer: 0, layerMetadata: [{ occupied: true, name: "Base" }], compiledScenes, scenes: [], layerDrafts: {}, ...state },
+    });
+  const button = (html: string) => /<button[^>]*>Clear Base&#x27;s lights…<\/button>/.exec(html)?.[0];
+
+  it("is greyed out, saying why, while only the firmware lights the layer", () => {
+    expect(button(draw({}))).toContain('aria-disabled="true"');
+    expect(button(draw({}))).toContain('title="No key has a light of its own on Base"');
+    // Another layer's lights are not this layer's.
+    expect(button(draw({ scenes: [{ layer: 1, led_id: 5, effect: compiledScenes[0].effect }] }))).toContain('aria-disabled="true"');
+  });
+
+  it("is offered for a stored colour and for a key's status light", () => {
+    expect(button(draw({ scenes: [{ layer: 0, led_id: 5, effect: compiledScenes[0].effect }] }))).not.toContain('aria-disabled="true"');
+    const usb = withStatusLight([], 0, 6, { kind: "usb" });
+    expect(button(draw({ runtimeConditionalScenes: usb, runtimeConditionalDraft: usb }))).not.toContain('aria-disabled="true"');
+  });
+});
 
 describe("layer lighting summary", () => {
   // The runtime draft is empty here: reading it alone would report the key as

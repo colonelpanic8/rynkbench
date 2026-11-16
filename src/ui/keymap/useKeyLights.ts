@@ -1,7 +1,8 @@
 // Reading and writing keys' lights on the layer shown, for the RGB Lighting
 // tab and for Paint on the canvas. A light lives in the layer's scene (Off, a
 // colour, Layer below) or in the rule table (a status light); setting one is
-// the set_key_light operation (ADR 0019), one Undo step. Your colours and changing one colour
+// the set_key_light operation (ADR 0019), one Undo step; clearing the layer of
+// them all is clear_layer_lights. Your colours and changing one colour
 // everywhere work over every layer's scene and the rules you coloured.
 
 import { useMemo } from "react";
@@ -17,7 +18,7 @@ import {
   recolorRules,
   type KeyLight,
 } from "../../model/lighting/key-light";
-import { statusLightOf } from "../../model/lighting/status-light";
+import { statusLightLeds, statusLightOf } from "../../model/lighting/status-light";
 import { targetPreviewEffects } from "../../model/lighting/preview";
 import { ledNodesOf, lightingDraftFor } from "../../workbench";
 import { useWorkbench } from "../state";
@@ -52,6 +53,12 @@ export function useKeyLights() {
     /** Gives keys a light on the layer shown: one change, judged and undone as one. */
     set(light: KeyLight, leds: readonly number[]) {
       return io.apply("set_key_light", { layer, leds, light });
+    },
+    /** How many keys have a light of their own on the layer shown: a stored colour or a status light. */
+    layerLights: new Set([...Object.keys(draft).map(Number), ...statusLightLeds(rules, layer)]).size,
+    /** Removes them all, so the firmware's lights and the layers below show: one change, one Undo step. */
+    clearLayer() {
+      return io.apply("clear_layer_lights", { layer });
     },
     /** Paint: a key under the brush gets its light. A stroke is one step, and in
      *  Live it is written once the painting pauses (a scene is written whole). */

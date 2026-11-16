@@ -2,7 +2,8 @@
 // Left: which key it is and its actions as slots (On Tap; On Hold, a tap-hold;
 // On Double Tap, a morse entry of its own, written by model/key-slots' plan).
 // The tabs fill the active slot: Pick Key, Switch Layer, Lighting, and Every
-// action (the full editor, for macros, morse patterns and the rest).
+// action (the full editor, for macros, morse patterns and the rest). With
+// several keys selected it edits the last one; only RGB Lighting reaches all.
 
 import { useEffect, useMemo, useState } from "react";
 import type { Action, KeyAction } from "../../model/action-types";
@@ -13,6 +14,10 @@ import { keyAddressLabel, keyPlaceName } from "../key-address";
 import { isDrafted, keyPendingId } from "../../workbench";
 import { useWorkbench } from "../state";
 import { useCapabilities } from "../use-capabilities";
+import { selectedKeys } from "../../model/key-selection";
+import { pickPrompt } from "../../model/lighting/key-pick";
+import { layerName } from "../layer-names";
+import { useKeyPick } from "../lighting/keyPick";
 
 import { WarningIcon } from "../icons";
 import { showToast } from "../messages/store";
@@ -50,7 +55,12 @@ export function KeyEditor({ size = 310 }: { size?: number }) {
   const uses = useMemo(() => morseUses(state.layers), [state.layers]);
 
   const tabs = useEditorTabs(true);
+  const pick = useKeyPick();
 
+  // A status setup is choosing its keys: a click selects, it does not edit.
+  if (pick) {
+    return <EditorPlaceholder size={size}>↑ {pickPrompt(pick, layerName(state.layerMetadata, pick.layer))}</EditorPlaceholder>;
+  }
   if (!selection) {
     return <EditorPlaceholder size={size}>↑ Click a key on the keyboard to change what it does</EditorPlaceholder>;
   }
@@ -92,13 +102,14 @@ export function KeyEditor({ size = 310 }: { size?: number }) {
     void fill({ [kind]: target } as unknown as Action);
   };
   const glyph = keyFace(action, state.morse, faceContext);
+  const others = selectedKeys(selection).length - 1;
 
   const side = (
     <>
       <EditorHeading
         glyph={glyph}
         title={keyPlaceName(addressable)}
-        detail={`Key ${keyAddressLabel(addressable).replace("-", " ")}`}
+        detail={`Key ${keyAddressLabel(addressable).replace("-", " ")}${others > 0 ? ` · and ${others} more for RGB Lighting` : ""}`}
         onDone={() => dispatch({ type: "select", selection: null })}
         doneLabel="Done with this key"
       />
