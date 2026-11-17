@@ -1,55 +1,82 @@
 # Rynkbench
 
 A browser configurator for [RMK](https://github.com/rmk-rs/rmk) keyboards that
-speak the **Rynk** protocol. Connect over Web Serial or WebHID and edit your
-keymap and per-key lighting live — no install, nothing leaves your machine.
+speak the **Rynk** protocol (Glove80, Go60 and plain RMK boards). Connect over
+Web Serial, WebHID or Web Bluetooth and edit the keymap, behaviors, lighting
+and device settings on the keyboard, or edit a layout file without one — no
+install, nothing leaves your machine. The look and organization follow MoErgo's
+GLIDE.
 
-- **Keymap editing** — per-layer bindings, tap-hold, layer-tap, and the rest of
-  RMK's action set, rendered on the board's real geometry. Successful direct
-  key assignments can be undone and redone from the top bar or with the usual
-  Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, and Ctrl+Y shortcuts. A top-bar **batch mode**
-  stages key and encoder edits locally — dashed outlines mark staged keys —
-  and writes them all in one apply pass instead of one device write per edit.
-- **Locale & character mapping** — pick your OS keyboard layout (US, UK,
-  German QWERTZ, French AZERTY, Spanish, Swedish/Finnish) in the top bar.
-  Keycaps, pickers, and the live view then show the characters keys actually
-  type; pure Shift/AltGr combos render as the character they produce; and
-  typing a character into the key search (`ö`, `@`, `é`) finds the keystroke
-  that types it, automatically binding any Shift/AltGr it needs. The choice is
-  a browser-local display preference — nothing on the keyboard changes.
-- **Lighting** — a paint-on-the-board overlay plus on-device *layer scenes*:
-  lighting that lives on the keyboard, composites natively as layers activate,
-  and survives disconnect and reboot.
-- **Firmware lighting controls** — inspect compiled layer/battery conditions,
-  edit the firmware-advertised extension effect, palette, value, and speed,
-  bind every RMK lighting action, and see the effective
-  always-on/off/powered-only policy.
-- **Live presentation** — resolved modifiers, the complete active-layer state,
-  and conditional/status lighting are read back and reflected in the live view.
-- **Advanced config** — combos, morse (tap-dance), fork, and per-behavior tuning
-  for firmware that reports support for them.
-- **Configuration files** — open or create a Glove80 configuration workspace
-  without connecting a keyboard, then download `glove80.toml` or MoErgo JSON.
-  Connected keyboards can import the same files by writing only runtime
-  differences. A Glove80 or Go60 TOML can also be imported on the other board:
-  shared physical keys, lighting, and positional hold triggers are transferred,
-  bindings without a destination are reported, and destination-only keys are
-  preserved. Both paths use the same validation model as `moergo-control`;
-  Morse, combo, fork, macro, and profile tables travel with the keymap.
-  Keymap writes are paged for the firmware's flash queue and resent while it
-  answers `Busy`, and any request that may wait on flash gets a two-minute
-  budget, so a settings-store page migration on older firmware slows an
-  import instead of dropping the link part-way through it.
-- **Split tuning** — inspect and adjust the volatile powered/battery BLE latency
-  policy on compatible split centrals.
-- **Firmware updates and recovery** — recognized boards can map their identity
-  to a release channel and independently flashable processors. The desktop app
-  downloads the latest release, verifies its SHA-256 digest and UF2 family,
-  puts each processor into its bootloader through Rynk, and writes the mounted
-  UF2 volume. The Danger zone can also reboot into the bootloader or wipe every
-  stored setting and Bluetooth pairing before restarting on stock defaults.
-- **Simulated boards** — demo a split ergo, an ortholinear 60, and a dev stub
-  with no hardware attached, so the whole UI is explorable offline.
+## Using it
+
+- **Areas.** The top bar opens the areas the keyboard and the session offer
+  (`src/ui/areas.ts`): **Keymap** (the main screen), **Behaviors** (All your
+  behaviors, Combos, Morse, Macros, Forks, Profiles, Transforms), **Device**
+  (connected keyboards only) and **Insights** (the Live view). A section
+  shows only when the firmware has it. The **Settings** button holds
+  browser-local preferences: the theme, terminology, your computer and its
+  keyboard layout (US, UK, German, French, Spanish, Swedish/Finnish) so
+  keycaps show the characters keys type, and where the key editor and layers
+  panel sit. Nothing there changes the keyboard.
+- **Draft and Live.** The connection chip in the top bar switches between
+  **Draft**, where changes stay in Rynkbench until **Review & send**, and
+  **Live**, where each change goes to the keyboard as you make it. A keyboard
+  starts in Draft. Review & send lists the changes by area and layer, each
+  group with its own Discard, then sends only what differs from a fresh read
+  and reads it back; anything changed on the keyboard since you started is
+  shown before it is overwritten. In Live, Paint strokes, rules and pointing
+  go once you pause, and a change the keyboard made meanwhile waits for an
+  explicit Send. The draft is kept in this browser per keyboard and offered
+  back on the next connect. See `docs/sync.md`.
+- **Undo and Redo** cover every change, in Draft and Live (Ctrl/⌘+Z,
+  Ctrl/⌘+Shift+Z or Ctrl+Y); in Live the keyboard follows.
+- **Rynkbench Guard** stops or asks before a change that breaks the layout,
+  such as cutting a layer off from every key that reaches it.
+- **The key editor.** Click a key on the Keymap; the panel below the board has
+  **Pick Key**, **Switch Layer**, **RGB Lighting** (on boards with layer
+  lighting) and **Every action** (keys, modifiers, layers, tap-hold, macros,
+  morse, system and lighting actions). Keys can be dragged to swap them, and
+  copied and pasted.
+- **RGB Lighting tab.** A key's own light on the layer shown: Off, a Color
+  (steady, blink or breathe, at Fast, Normal, Slow or Custom timing), Layer
+  below, or a Status light (Caps/Num/Scroll Lock, a half's battery, a
+  Bluetooth profile, USB). **Paint** makes the choice a brush over the board,
+  one Undo step per stroke. Several keys can be selected (⌘ on a Mac or Ctrl
+  elsewhere with a click or drag, Shift with a click, or the tab's
+  **Select**) and given one light together. **Clear <layer>'s lights…**
+  empties a layer. Where the keyboard has an overlay, **Try out (not saved)**
+  puts lights on the keyboard at once without storing them; **Keep these
+  lights on <layer>** stores them.
+- **Layout properties** (top bar): **Details** (name, keyboard), **Firmware
+  options** (keyboard-wide timings), **RGB Lighting** (lights on or off,
+  brightness, background; under Advanced how layers light up, which layers
+  wake the lights, status setups, the condition rules and what the firmware
+  lights on its own) and **RGB Effects** (the firmware's effects as a gallery
+  of cards, an effect "Over it" where the firmware has one, palette, speed
+  and each effect's settings).
+- **Behaviors.** All your behaviors lists macros, tap patterns (morse), forks
+  and tap-hold profiles with filters, where each is used, Copy and Paste, and
+  deleting the unused ones. Each behavior opens in one editor with Apply and
+  Cancel. Names and descriptions are kept in the browser per keyboard and in
+  TOML files. Combos are listed in the side panel and edited on the board.
+- **Files.** The top bar's **Open** (or **Import** with a keyboard attached)
+  reads a Glove80 or Go60 TOML or MoErgo JSON file. The import is one change:
+  in Draft it waits for Send, in Live only the differences are written, and
+  one Undo takes it back. A file for the other board is converted: shared
+  physical keys, lighting and positional hold triggers transfer, bindings
+  without a destination are reported, and destination-only keys are kept.
+  **Save** writes the layout in the board's main format; its ▾ lists every
+  format. Files are parsed and validated by the same Rust code
+  `moergo-control` runs.
+- **Device.** Firmware version and build, Bluetooth profiles, split latency
+  on split boards with Bluetooth, firmware updates where the board has a
+  release channel (the desktop app downloads the release, checks its SHA-256
+  digest and UF2 family, puts each processor into its bootloader and writes
+  the mounted UF2 volume), a matrix tester, session diagnostics, and a
+  Danger zone that reboots into the bootloader or wipes every stored setting
+  and Bluetooth pairing.
+- **Simulated boards** — a split ergo, an ortholinear 60, a plain 36-key board
+  and a dev stub, so the whole UI can be explored without hardware.
 
 ### Physical key addresses
 
@@ -61,133 +88,32 @@ count outer-to-inner as `T1` onward; the Glove80 numbers its upper three-key fan
 before its lower fan, while the Go60 has one three-key fan. Hover text and the
 key inspector retain the raw matrix row and column for diagnostics.
 
-### RGB controls and painted layer colors
+### Status lights and presets
 
-In **Lighting**, **All RGB lighting** controls the composed output, including
-painted layer scenes and indicators. Change the checkbox and press its **Apply**
-button. For a keyboard shortcut, assign **Output toggle** (`BacklightToggle`)
-in Keymap. `RgbTog` toggles the background/effect source; layer scenes remain
-visible. Layers marked **MoErgo Magic Layer** can temporarily wake lighting even
-when output is off; disable that option on each wake layer for darkness on every
-layer. Turning output off preserves the stored color scheme.
-
-Background/effect hue, saturation, and speed controls do not transform painted
-layer colors. Select the layer in Lighting and use the color brush to edit its
-scene. Layer key legends follow the selected layer's bindings (including
-transparent fallthrough to the default layer); Overlay follows the live layers.
-
-## Behavior and indicator notes
-
-- **Undo/redo currently covers direct matrix-key assignments only.** Each undo
-  and redo writes the corresponding binding to the keyboard; it is not a
-  browser-only preview. Imports, guided status presets, encoder bindings,
-  default-layer changes, lighting, profiles, and advanced tables are excluded
-  until their multi-write or staged operations can be reversed atomically.
-
-- **Batch mode holds keymap writes; everything else stays live.** While it is
-  on, key and encoder edits accumulate locally until **Apply all** writes them
-  to the keyboard (a failed write stays staged for retry) or **Discard**
-  restores the device's values. Lighting, layer structure, imports, and
-  advanced tables keep their own write paths: layer operations and imports
-  refuse to run over staged edits, and leaving batch mode requires applying or
-  discarding them first. A batch apply is a bulk write, so — like an import —
-  it clears the direct-key undo history.
-
-- **A Magic Layer is a lighting convention, not a firmware layer type.** In
-  Lighting, select an ordinary layer target, paint and apply its device-backed
-  scene, then use **MoErgo Magic Layer** to keep that scene visible when the
-  normal lighting policy turns the board off. The scene and wake-layer policy
-  are stored on the keyboard and work for both Glove80 and Go60 layouts.
-- **Tap-hold profiles are live configuration.** `Save profile` writes the
-  selected slot directly to the connected keyboard; bindings that name that
-  slot use the new timings immediately, without reloading a file or flashing.
-- **Modified Morse actions are atomic actions.** In a Morse pattern's action
-  picker, open **Keys**, select the modifiers, and then select the key. For
-  example, selecting left Alt and then F4 produces one `Alt+F4` action. The
-  separate **Mods** tab remains for a held modifier by itself, such as the hold
-  side of a Delete-tap/Alt-hold binding.
-- **Combo triggers follow RMK actions, not matrix positions.** The board canvas
-  makes physical selection convenient, but the stored trigger is the resolved
-  key action on the combo's scoped layer. Position-addressed combos would need
-  a firmware and Rynk protocol addition rather than only a Rynkbench UI change.
-- **Battery indicators use conditional lighting rules.** Node 0 is the central
-  half and node 1 is the peripheral half on a split board. A bar is a set of
-  rules on three to eight chosen LEDs with increasing minimum levels; later
-  low-battery or charging rules override their colors. Two styles are offered:
-  equal bands (a five-key bar lights at 1, 21, 41, 61, and 81 percent, with the
-  lowest segments amber under 40 and red under 20) and MoErgo stock (levels
-  step 0…100 across the bar and the whole bar is green, yellow, or red). The
-  connected firmware must advertise conditional lighting and both battery
-  nodes for the complete two-half bar to work.
-- **Status setup installs those rules for you.** In Lighting, use **Select** to
-  choose one connection key or five battery-bar keys, then use **Status setup**
-  to bind the action and install the ordered indicator rules on the chosen
-  status layer (the designated Magic layer by default). A battery bar fills
-  along its longer axis—bottom-to-top for a column, left-to-right for a row—and
-  the fill direction can be overridden, including using the order the keys were
-  selected in; the panel lists the resulting 20%→100% keys before installing.
-  On a Glove80, the complete Magic-layer layout—two battery bars, four BLE
-  profile keys, and the USB key—is available as a single preset that targets
-  the chosen layer. Its bars can run up each half's outer column (five
-  segments each) or follow MoErgo's stock firmware, which draws both halves'
-  six-segment bars across the left half on rows 2 and 3. Rules already installed on
-  another layer can be re-pointed in bulk with **Move rules between layers**
-  under the Conditional rules list; key bindings stay where they are.
-- **The MoErgo stock Magic layer is a one-click template.** On a Glove80,
-  Status setup also offers **MoErgo stock Magic layer**, which rebuilds the
-  chosen layer as the factory ZMK Magic layer: Bluetooth profiles 1–4 on T4,
-  T5, T1, and T2 (RMK's slot-select actions, which also prefer Bluetooth
-  output), USB output on T6, RGB speed/saturation/hue/brightness and
-  toggle/effect keys on the Q–T and A–G rows (R is the maintenance-lock
-  toggle; the lighting toggle is the lighting
-  output toggle, which is what MoErgo's `RGB_TOG` does), bootloader and reset
-  on each half's outer keys, forget-active-pairing on F1, forget-all-pairings
-  on F10, and every other key unbound. Hold F1 with a profile key to clear and
-  activate that specific slot. Quickly double-tap a non-selected profile key
-  to keep that bonded host temporarily disconnected; a later single tap
-  reconnects it. It installs the stock indicator map from MoErgo's firmware on the
-  same layer: the left half goes dark, the number row shows in magenta which
-  layers are held alongside Magic, F3–F5 show caps, num, and scroll lock in
-  red, Magic+R shows maintenance unlocked in green or locked in red, rows 3
-  and 4 fill green/yellow/red with the left and right battery
-  (all green while charging), and the profile and USB keys show lilac
-  unpaired, red paired-but-idle, green connected, and white while carrying
-  typing. The layer is designated a Magic layer so it wakes lighting; the
-  firmware keeps the view up for 20 seconds after release. Brightness keys
-  adjust the whole output, including indicators.
-  Unchanged keys are skipped, the template's own rules and the layer's scene
-  are replaced on repeat runs, and rule and scene capacity are checked before
-  anything is written. The output-fallback indicator is not reproduced because
-  the firmware has no matching condition.
-- **Rules use the self-describing rule table.** Current Glove80 and Go60
-  firmware no longer carries the three fixed legacy conditional-scene
-  formats. Rynkbench prefers the tagged rule API and preserves unknown tags;
-  read/write fallback remains only for connecting to older firmware.
-- **Rules can watch runtime status.** Beyond the
-  single layer condition, a runtime rule can require every layer in a set to
-  be active and every layer in another set to be inactive (**Other layers**),
-  and can gate on num, caps, and scroll lock (**Lock indicators**), whether
-  maintenance writes are locked, and the automatic split selector's active
-  link or force. The preview evaluates maintenance and split conditions from
-  their live Rynk reads. Lock-indicator rules remain unsatisfiable in preview,
-  since the host does not publish that state through this session surface.
-- **Lighting control key presets pair behavior and colors.** In Keymap, select
-  a key and open the Lighting tab of its action editor. Under **Key presets**,
-  **Toggle RGB effects** installs the effects toggle and green/dim-red
-  enabled/disabled indicators; **Cycle lighting policy** installs the
-  output-mode action and green/red/blue indicators for always on/off/USB-powered
-  only. Each preset writes both the action and its conditional lighting to the
-  layer being edited; repeating one replaces the existing lighting-control
-  rules on that key and layer. Rule capacity is checked before the action is
-  written. Finish batch editing first, since these presets apply both parts
-  immediately. The indicator is layer-scoped and follows the output policy;
-  designate its layer as a **MoErgo Magic Layer** in Lighting to see it while
-  normal lighting is off.
-- **Status setup chooses its keys from the board.** The connection key and
-  battery bar presets under Lighting → Status setup have a **Choose on board**
-  button: the canvas selects instead of painting until you press Done, a
-  single-key pick replaces on every click, and the chosen keys are listed as
-  chips that highlight their key when hovered.
+- **Status lights are condition rules** in the firmware's rule table. Node 0
+  is the central half and node 1 the peripheral half on a split board. The
+  firmware must advertise condition rules (and, for a complete two-half bar,
+  both battery nodes).
+- **A connection key or a battery bar** is set up from Layout properties →
+  RGB Lighting → Advanced → Status setup: **Choose its key on the board…**
+  (or **Choose its keys…** for a bar) hides the window and a banner over the keymap says what is being picked,
+  with Cancel and Done. A battery bar takes three to eight keys in a column or
+  a row; it fills up a column or right along a row unless another order is
+  chosen, in one of two styles (equal bands, amber and red when low; or the
+  whole bar green, yellow, red). Done installs it as one change.
+- **The Glove80 Magic status cluster** puts a battery bar per half,
+  Bluetooth 1–3 and USB on the chosen layer, with the bars up each half's
+  outer column or as MoErgo's stock firmware draws them.
+- **The MoErgo stock Magic layer** (Glove80) rebuilds a layer as the factory
+  Magic layer, with its keys, its indicators and the layer set to wake the
+  lights; the panel lists what it installs. It and the **Key presets** in the
+  key editor (Every action → Lighting: Toggle RGB effects, Cycle lighting
+  policy, each binding the action and its indicator colours) are offered in
+  Live only: they write their keys and then the rule table directly.
+- **Rules can watch runtime status**: other layers on or off, lock
+  indicators, whether maintenance writes are locked, and the split link.
+  Rules already on one layer can be moved to another with **Move rules
+  between layers** in the condition rules list.
 
 Web Serial, WebHID, and Web Bluetooth need a Chromium-based browser (Chrome or
 Edge); Firefox and Safari don't implement them. Use **Web Serial** for upstream
@@ -346,10 +272,11 @@ at your option, matching the RMK ecosystem this builds on.
 ### Download a configuration for the other MoErgo board
 
 Open a configuration workspace or connect a Glove80/Go60, then choose
-**Migrate to Go60** or **Migrate to Glove80** in the top bar. Review the report
-and choose **Download migrated TOML**. This creates a standalone draft without
-writing to a keyboard or replacing the workspace. Apply or discard staged
-edits first; incomplete device reads must be resolved before migration.
+**For Go60…** or **For Glove80…** in the ▾ menu beside **Save**. Review the
+report and choose **Download migrated TOML**. This creates a standalone file
+without writing to a keyboard or replacing the workspace. Send or discard
+drafted keys, encoders, slots and pointing first; incomplete device reads must
+be resolved before migration.
 
 Migration uses the same physical mapping as cross-board import: number and
 letter rows align, lower thumb arcs transfer, and shared bottom-row finger
@@ -411,9 +338,10 @@ should show a configuration error and leave the session connected.
 A device request that receives no answer for five seconds closes the Rynk
 session to prevent a late response from being mistaken for the next request's
 answer. This does not by itself establish that the keyboard rebooted or lost
-its USB/Bluetooth connection. Imports use multiple writes; a timeout after
-writes begin can leave earlier changes applied. Reconnect and read the keyboard
-before retrying.
+its USB/Bluetooth connection. An import in Live uses multiple writes; a timeout
+after writes begin can leave earlier changes applied. The import is not lost:
+it stays in the draft, which is kept for the keyboard; after reconnecting,
+Restore it and Send writes only what is left.
 
 For a failing import, retain the TOML, firmware build, Rynkbench build, and
 transport used. After reconnecting, copy **Device → Session diagnostics**. A
