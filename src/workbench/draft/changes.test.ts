@@ -71,9 +71,11 @@ describe("the draft", () => {
     const restored = reduce({ ...now, base: { ...now.base, layers: [["No", "No"], [B, "No"]] } }, { type: "draftRestore", patch: keptPatch(kept, now.base, 2) });
     expect(restored.layers).toEqual(keys.layers);
     expect(restored.layerDrafts[1]).toEqual({ 4: cell(4) });
-    // What it was based on is the base, so Send's three-way check sees B as a change made on the keyboard.
-    expect(restored.base.layers[1][0]).toBe("No");
+    // What it was based on is kept beside the base, so Send's three-way check
+    // sees B as a change made on the keyboard, and Discard lands on B.
+    expect(draftSnapshot(restored)!.changes).toContainEqual({ item: { kind: "key", layer: 1, offset: 0 }, before: "No", after: A });
     expect(draftSize(draftGroups(restored))).toBe(4);
+    expect(reduce(restored, { type: "batchDiscard" }).layers).toEqual([["No", "No"], [B, "No"]]);
   });
 
   it("converts a draft kept in the shape before ADR 0018 once, when read", () => {

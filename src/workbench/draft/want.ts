@@ -1,7 +1,8 @@
 // The draft as a wanted image beside its base (ADR 0018). `state.base` is what
 // the keyboard (or the file) held at the last read, read-back or save; what you
 // want is what the screens show. The draft is the difference, item by item;
-// nothing is staged.
+// nothing is staged. `state.basedOn` holds what a drafted item was based on
+// where the keyboard has changed it since.
 //
 // The wanted parts still live in the fields the screens read (`layers`,
 // `encoders`, the slot tables, the layer lighting drafts, the rule draft, the
@@ -30,6 +31,7 @@ import {
 } from "../../sync";
 import type { MorseProfileEntry } from "../../model/action-types";
 import type { LightingState } from "../../vendor/rynk-wasm/rynk_wasm";
+import { sameValue } from "../../model/deep-equal";
 import { layerSceneCells } from "../lighting-drafts";
 
 /** The image a workbench shows with nothing drafted: its fields as read. */
@@ -174,24 +176,39 @@ function following(state: WorkbenchState, base: KeyboardImage): WorkbenchState {
   );
 }
 
-/** `read` with each drafted item the keyboard does not hold as you want it
- *  left as it was based on. */
-function keepingBasedOn(basedOn: KeyboardImage, read: KeyboardImage, want: KeyboardImage): KeyboardImage {
-  const moved = differences(basedOn, read).filter(({ from }) => from !== undefined);
-  if (moved.length === 0) return read;
-  const keys = (changes: readonly { item: SyncItem }[]) => new Set(changes.map(({ item }) => itemKey(item)));
-  const drafted = keys(differences(basedOn, want));
-  const unmet = keys(differences(read, want));
-  const kept = moved.filter(({ item }) => drafted.has(itemKey(item)) && unmet.has(itemKey(item)));
-  return withValues(read, kept.map(({ item, from }) => ({ item, value: from })));
+/** The workbench after a read: the base is what the keyboard holds now, and
+ *  each item you had not changed follows it. A drafted item the read finds
+ *  changed keeps, in `basedOn`, the value it was based on, so Send's three-way
+ *  check still sees the change made on the keyboard (ADR 0012). */
+export function withBase(state: WorkbenchState, read: KeyboardImage): WorkbenchState {
+  const drafted = draftOf(state).keys;
+  const known = new Set(state.basedOn.map(({ item }) => itemKey(item)));
+  const moved = differences(state.base, read).filter(
+    ({ item, from }) => from !== undefined && drafted.has(itemKey(item)) && !known.has(itemKey(item)),
+  );
+  const basedOn = [...state.basedOn, ...moved.map(({ item, from }) => ({ item, value: from }))];
+  return following({ ...state, basedOn }, read);
 }
 
-/** The workbench after a read: each item you had not changed follows the
- *  keyboard. A drafted item keeps what it was based on, so Send's three-way
- *  check still sees a change made on the keyboard since (ADR 0012); one the
- *  keyboard already holds as you want it leaves the draft. */
-export function withBase(state: WorkbenchState, read: KeyboardImage): WorkbenchState {
-  return following(state, keepingBasedOn(state.base, read, wantOf(state)));
+/** `basedOn` without what no longer applies: an item that left the draft, or
+ *  one the keyboard holds again as it was based on. */
+export function withBasisInUse(state: WorkbenchState): WorkbenchState {
+  if (state.basedOn.length === 0) return state;
+  const drafted = draftOf(state).keys;
+  const basedOn = state.basedOn.filter(
+    ({ item, value }) => drafted.has(itemKey(item)) && !sameValue(value, valueAt(state.base, item)),
+  );
+  return basedOn.length === state.basedOn.length ? state : { ...state, basedOn };
+}
+
+/** The draft with each item's `before` as what it was based on: what Send
+ *  checks against and the kept draft keeps. */
+export function draftWithBasis(state: WorkbenchState): PatchEntry[] {
+  const basis = new Map(state.basedOn.map(({ item, value }) => [itemKey(item), value]));
+  return draftOf(state).changes.map((change) => {
+    const key = itemKey(change.item);
+    return basis.has(key) ? { ...change, before: basis.get(key) } : change;
+  });
 }
 
 /** The workbench after some items were read: `withBase` for those items. */

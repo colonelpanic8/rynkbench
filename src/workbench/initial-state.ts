@@ -11,6 +11,7 @@ import { noLabels } from "../model/behavior-labels";
 export function initialWorkbenchState(bundle: ConnectedBundle): WorkbenchState {
   const applied = cellsToRecord(bundle.overlay);
   const opened: Omit<WorkbenchState, "base"> = {
+    basedOn: [],
     mode: "keymap",
     uiLayer: bundle.currentLayer,
     currentLayer: bundle.currentLayer,

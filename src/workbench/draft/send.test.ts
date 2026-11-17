@@ -168,4 +168,29 @@ describe("Send", () => {
       expect(asked).toEqual([item]);
     }, false);
   });
+
+  it("Discard after a refused Send lands on what the keyboard holds now", async () => {
+    await inDraft(async ({ session, io, state, dispatch }) => {
+      await io.setKey(0, 0, 0, key("F13"));
+      await session.keymap.setKey(0, 0, 0, key("F20")); // changed elsewhere meanwhile
+      expect(await io.applyBatch({ confirmOverwrite: async () => false })).toMatchObject({ ok: false, guarded: true });
+      dispatch({ type: "batchDiscard" });
+      expect(state().layers[0][0]).toEqual(key("F20"));
+      expect(draftOf(state()).changes).toEqual([]);
+    });
+  });
+
+  it("discarding one item the keyboard changed, after a read saw it, lands on what was read", async () => {
+    await inDraft(async ({ session, io, state, dispatch, seen }) => {
+      const held = state().lightingOutputMode!.wake_layers;
+      const [mine, theirs] = [0b10, 0b100, 0b1000].filter((layers) => layers !== held);
+      expect(await io.setWakeLayers(mine)).toEqual({ ok: true });
+      await session.lighting.setWakeLayers(theirs); // changed elsewhere meanwhile
+      io.refreshLighting();
+      await seen("lightingRefresh");
+      dispatch({ type: "draftRevert", items: [{ kind: "wakeLayers" }] });
+      expect(state().lightingOutputMode?.wake_layers).toBe(theirs);
+      expect(draftOf(state()).changes).toEqual([]);
+    });
+  });
 });

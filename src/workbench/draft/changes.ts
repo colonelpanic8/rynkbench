@@ -12,7 +12,7 @@ import type { Rules } from "../../model/lighting/rules";
 import { stagedBetween } from "../../model/lighting/compare";
 import { valueAt, type KeyboardImage, type PatchEntry, type SyncItem } from "../../sync";
 import { layerSceneCells, lightingBaseFor } from "../lighting-drafts";
-import { draftOf } from "./want";
+import { draftOf, draftWithBasis } from "./want";
 
 export type DraftArea =
   | "keys"
@@ -157,7 +157,7 @@ export type KeptDraft = StoredDraft | StoredDraftV1;
 
 export function draftSnapshot(state: WorkbenchState): StoredDraft | null {
   const size = draftSize(draftGroups(state));
-  return size === 0 ? null : { version: 2, changes: [...draftOf(state).changes], size };
+  return size === 0 ? null : { version: 2, changes: draftWithBasis(state), size };
 }
 
 /** A kept draft read back, or null when it is missing or not one. */

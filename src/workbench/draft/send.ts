@@ -19,7 +19,7 @@ import {
   type SyncItem,
 } from "../../sync";
 import { errorMessage } from "../../session/errors";
-import { draftOf } from "./want";
+import { draftWithBasis } from "./want";
 import type { WorkbenchDispatch } from "../io";
 
 export interface SendOptions {
@@ -45,7 +45,7 @@ export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Pro
   const { session, getState, dispatch, features } = deps;
   const start = getState();
   if (start.batchBusy) return { ok: false, message: "the draft is already being sent" };
-  const patch = draftOf(start).changes;
+  const patch = draftWithBasis(start);
   if (patch.length === 0) return { ok: true };
   dispatch({ type: "batchApplyStart" });
   // Read what the base holds, so the read-back can take its place.
@@ -64,6 +64,8 @@ export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Pro
       const others = clashes.filter((item) => !mine.has(itemKey(item)));
       sending = withValues(want, others.map((item) => ({ item, value: valueAt(now, item) })));
     } else if (clashes.length > 0 && options.confirmOverwrite && !(await options.confirmOverwrite(clashes))) {
+      // The read stays: Discard lands on what the keyboard holds.
+      stored(now);
       dispatch({ type: "batchApplyDone", error: null });
       return { ok: false, message: "Not sent: the keyboard keeps its own changes", guarded: true };
     }

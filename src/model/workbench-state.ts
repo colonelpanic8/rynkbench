@@ -214,6 +214,9 @@ export interface WorkbenchState {
    *  What you want is what the fields below show; the draft is the difference
    *  (ADR 0018, workbench/draft/want.ts). */
   base: KeyboardImage;
+  /** For each drafted item the keyboard changed after you did: the value your
+   *  change was based on, which Send's three-way check starts from (ADR 0012). */
+  basedOn: readonly { item: SyncItem; value: unknown }[];
   mode: Mode;
   uiLayer: number;
   /** Highest-precedence active layer, derived from `activeLayers`. */

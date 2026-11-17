@@ -8,9 +8,9 @@ import type { WorkbenchAction, WorkbenchState, WritableField } from "../model/wo
 import { selectionWith } from "../model/key-selection";
 import { draftEditCount } from "./draft/selectors";
 import { sameValue } from "../model/deep-equal";
-import { applyPatch, patchBetween, valueAt, withValues, type KeyboardImage, type SyncItem } from "../sync";
+import { applyPatch, itemKey, patchBetween, valueAt, withValues, type KeyboardImage, type SyncItem } from "../sync";
 import { recordStep, travel } from "./draft/history";
-import { atBase, wantOf, withBase, withItemsAtBase, withRead, withStored, withWant } from "./draft/want";
+import { atBase, wantOf, withBase, withBasisInUse, withItemsAtBase, withRead, withStored, withWant } from "./draft/want";
 import { encoderPendingId, keyPendingId } from "./pending";
 import { labelsFor } from "./labels";
 import { isLightingAction, reduceLighting } from "./reduce-lighting";
@@ -106,7 +106,7 @@ export function makeWorkbenchReducer(cols: number) {
     if (live) next = withLiveBase(next, live(act, state));
     const join = FAILED_WRITES.has(act.type) || (act.type === "commit" && act.join === true);
     if (COMMITS.has(act.type) || join) next = withStep(state, next, join);
-    return next;
+    return withBasisInUse(next);
   };
 
   function reduceRest(state: WorkbenchState, act: WorkbenchAction): WorkbenchState {
@@ -189,9 +189,12 @@ export function makeWorkbenchReducer(cols: number) {
       case "draftStored":
         return withBase(state, act.image);
       case "draftRestore": {
-        const base = applyPatch(state.base, act.patch, "before");
-        const restored = { ...state, base, scenes: base.scenes, runtimeConditionalScenes: base.runtimeConditionalScenes };
-        return withWant(restored, applyPatch(wantOf(restored), act.patch, "after"));
+        const restored = new Set(act.patch.map(({ item }) => itemKey(item)));
+        const basedOn = [
+          ...state.basedOn.filter(({ item }) => !restored.has(itemKey(item))),
+          ...act.patch.filter(({ before }) => before !== undefined).map(({ item, before }) => ({ item, value: before })),
+        ];
+        return withWant({ ...state, basedOn }, applyPatch(wantOf(state), act.patch, "after"));
       }
       case "batchApplyStart":
         return { ...state, batchBusy: true, batchError: null };

@@ -44,6 +44,7 @@ const LIGHTING: LightingState = {
 function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
   const { base, ...fields } = over;
   const opened: Omit<WorkbenchState, "base"> = {
+    basedOn: [],
     mode: "keymap",
     uiLayer: 0,
     currentLayer: 0,
@@ -223,14 +224,15 @@ describe("conditional rule tables", () => {
     expect(clean.runtimeConditionalScenes).toEqual(pushed);
     expect(clean.runtimeConditionalDraft).toEqual(pushed);
 
-    // Staged edits survive, still based on the table they were made from, so
-    // Send can ask before it overwrites the push.
+    // Staged edits survive: the device's table advances, and the table they
+    // were made from is kept, so Send can ask before it overwrites the push.
     const staged = [rule(1, 1), rule(9, 9)];
     const dirty = reducer(
       baseState({ runtimeConditionalScenes: stored, runtimeConditionalDraft: staged }),
       { type: "lightingRefresh", state: LIGHTING, overlay: [], runtimeConditional: pushed },
     );
-    expect(dirty.runtimeConditionalScenes).toEqual(stored);
+    expect(dirty.runtimeConditionalScenes).toEqual(pushed);
+    expect(dirty.basedOn).toEqual([{ item: { kind: "rules" }, value: stored }]);
     expect(dirty.runtimeConditionalDraft).toEqual(staged);
   });
 
