@@ -8,7 +8,7 @@ import type { ModifierCombination } from "../../model/action-types";
 import type { Os } from "../preferences";
 import type { KeyIconName } from "./keyIconData";
 
-type Modifier = "ctrl" | "alt" | "shift" | "gui";
+export type Modifier = "ctrl" | "alt" | "shift" | "gui";
 export interface ModifierLook {
   word: string;
   symbol: string;
@@ -37,15 +37,20 @@ const MODIFIERS: Record<Modifier, Record<Os, ModifierLook>> = {
     linux: { word: "Super", symbol: "❖" },
   },
 };
-const ORDER: readonly Modifier[] = ["ctrl", "alt", "shift", "gui"];
+export const MODIFIER_ORDER: readonly Modifier[] = ["ctrl", "alt", "shift", "gui"];
 const ALT_GR: ModifierLook = { word: "AltGr", symbol: "AltGr" };
 const HYPER: ModifierLook = { word: "Hyper", symbol: "Hyper" };
+
+/** How one modifier reads on a computer: its word, symbol and picture. */
+export function modifierLook(modifier: Modifier, os: Os): ModifierLook {
+  return MODIFIERS[modifier][os];
+}
 
 /** The modifiers held in `mods`, each once, in chord order. */
 export function chordLook(mods: ModifierCombination, os: Os): ModifierLook[] {
   const held = (m: Modifier) => [mods[`left_${m}`], mods[`right_${m}`]];
-  const present = ORDER.filter((m) => held(m).some(Boolean));
-  if (present.length === ORDER.length) return [HYPER];
+  const present = MODIFIER_ORDER.filter((m) => held(m).some(Boolean));
+  if (present.length === MODIFIER_ORDER.length) return [HYPER];
   return present.map((m) => {
     const [left, right] = held(m);
     return m === "alt" && right && !left && os !== "mac" ? ALT_GR : MODIFIERS[m][os];

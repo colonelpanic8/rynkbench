@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LOCALES } from "../locale";
-import { layerTiles, pickKeyGroups, searchTiles } from "./pickKey";
+import { HID_CODES, NOT_KEYS } from "../../model/hid-codes";
+import { behaviorEntries, behaviorTiles, layerTiles, narrowTo, pickKeyGroups, plainKey, searchTiles, type TileGroup } from "./pickKey";
 
 const us = LOCALES[0];
 const groups = pickKeyGroups(us, { userActions: [{ id: 3, label: "Board light toggle", hint: "" }] });
@@ -77,5 +78,61 @@ describe("pick key", () => {
     const found = layerTiles([{ index: 1, name: "Lower" }, { index: 2, name: "Magic" }], "low");
     expect(found?.tiles.map((t) => t.label)).toEqual(["While held: Lower", "Toggle Lower", "Switch to Lower"]);
     expect(layerTiles([{ index: 1, name: "Lower" }], "")).toBeNull();
+  });
+
+  it("has every key RMK has, each once, in the main groups or under All keys", () => {
+    const pressed = (list: TileGroup[]) => list.flatMap((g) => g.tiles).map(plainKey).filter(Boolean);
+    const all = [...pressed(groups.main), ...pressed(groups.more)];
+    // A character key is in the main groups by its character; every other key has its own tile.
+    expect(new Set(all)).toEqual(new Set(HID_CODES.filter((code) => !NOT_KEYS.has(code))));
+    const moreKeys = pressed(groups.more);
+    expect(new Set(moreKeys).size).toBe(moreKeys.length);
+    expect(moreKeys.filter((code) => pressed(groups.main).includes(code))).toEqual([]);
+  });
+
+  it("has the whole mouse: wheel left and right, back and forward, and speed while held", () => {
+    expect(group("mouse").tiles.map((t) => plainKey(t))).toEqual(
+      expect.arrayContaining(["MouseWheelLeft", "MouseWheelRight", "MouseBtn4", "MouseBtn5", "MouseAccel0", "MouseAccel1", "MouseAccel2"]),
+    );
+  });
+
+  it("never offers Clear EEPROM: one press wipes everything the keyboard stores", () => {
+    const all = [...groups.main, ...groups.more].flatMap((g) => g.tiles);
+    expect(all.some((t) => typeof t.action === "object" && "KeyboardControl" in t.action && t.action.KeyboardControl === "ClearEeprom")).toBe(false);
+  });
+
+  it("names the modifiers as the computer does", () => {
+    const names = (os: "mac" | "win" | "linux") => pickKeyGroups(us, { os }).main.find((g) => g.id === "modifiers")!.tiles.map((t) => t.label);
+    expect(names("mac")).toEqual(expect.arrayContaining(["Left Control", "Left Option", "Left Command"]));
+    expect(names("win")).toEqual(expect.arrayContaining(["Left Ctrl", "Left Alt", "Left Windows"]));
+    expect(names("linux")).toContain("Left Super");
+  });
+
+  it("finds your macros and tap patterns by name and by what they do", () => {
+    const entries = behaviorEntries({
+      macros: [null, "“hello”"],
+      morse: [{ profile: 0, actions: [[1, "No"]] } as never, { profile: 0, actions: [] } as never],
+      title: (kind, index) => (kind === "macros" ? `Greeting ${index}` : `Tap pattern ${index}`),
+      describe: () => "",
+    });
+    expect(entries.map((e) => `${e.kind}:${e.index}`)).toEqual(["macros:1", "morse:0"]);
+    expect(behaviorTiles(entries, "hello")?.tiles).toMatchObject([{ label: "Greeting 1", action: { TriggerMacro: 1 } }]);
+    expect(behaviorTiles(entries, "tap")?.tiles).toMatchObject([{ label: "Tap pattern 0", action: { Morse: 0 } }]);
+    expect(behaviorTiles(entries, "")).toBeNull();
+  });
+
+  it("offers a behavior's slot no tap patterns or Transparent, and a plain key only keys", () => {
+    const found = [behaviorTiles(behaviorEntries({ macros: ["x"], morse: [{ profile: 0, actions: [[1, "No"]] } as never], title: () => "pattern", describe: () => "" }), "pattern")!];
+    expect(narrowTo(found, "slot").flatMap((g) => g.tiles.map((t) => t.id))).toEqual(["macro:0"]);
+    expect(narrowTo(groups.main, "slot").flatMap((g) => g.tiles).some((t) => t.action === "Transparent")).toBe(false);
+    const keys = narrowTo(groups.main, "keycode").flatMap((g) => g.tiles);
+    expect(keys.every((t) => plainKey(t) !== null && !t.lilac)).toBe(true);
+    expect(keys.some((t) => t.label === "$")).toBe(false);
+  });
+
+  it("finds a typed character with a layout's own keys, as the old search did", () => {
+    const german = pickKeyGroups(LOCALES.find((l) => l.id === "de")!);
+    expect(searchTiles(german, "@")[0].tiles[0].action).toMatchObject({ KeyWithModifier: ["Q", { right_alt: true }] });
+    expect(searchTiles(german, "ö")[0].tiles[0].label).toBe("Ö");
   });
 });

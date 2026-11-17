@@ -16,6 +16,7 @@ import { ActionEditor } from "./ActionEditor";
 import { EditorHeading, EditorPanel } from "./EditorPanel";
 import { useEditorTabs, type EditorTab } from "./editorTabs";
 import { PickKey } from "./PickKey";
+import { isTapPattern, type Pick } from "./pickKey";
 import { SlotList } from "./SlotList";
 import { SwitchLayer, type LayerKind } from "./SwitchLayer";
 import type { ComboFocus } from "./useComboFocus";
@@ -59,8 +60,9 @@ export function ComboEditor({ focus, size }: { focus: ComboFocus; size: number }
     const [write] = planSlotWrites(output, putSlot(slots, target, value), [], new Map()) ?? [];
     if (write?.kind === "key") void focus.setOutput(write.binding);
   };
-  const fill = (value: Action | "Transparent") =>
-    value === "Transparent" ? void focus.setOutput("Transparent") : put(slot, value);
+  // "Transparent" and a tap pattern are the whole output; anything else fills the slot.
+  const fill = (value: Pick) =>
+    value === "Transparent" || isTapPattern(value) ? void focus.setOutput(value) : put(slot, value);
   const pickLayer = (kind: LayerKind, target: number) => {
     if (kind === "HoldTap") {
       put("hold", { LayerOn: target } as Action);

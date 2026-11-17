@@ -5,7 +5,7 @@ import type {
   HidKeyCode,
   PointingConfig,
   PointingMode,
-} from "../../vendor/rynk-wasm/rynk_wasm";
+} from "../../model/action-types";
 import { Button, SectionLabel, Segmented, TextInput, cx } from "../kit";
 import { NumberField } from "../lighting/EffectEditor";
 import {
@@ -34,7 +34,7 @@ import {
 import { layerName } from "../layer-names";
 import { useWorkbench } from "../state";
 import { askConfirm } from "../messages/store";
-import { KeycodeBrowser } from "./ActionEditor";
+import { PickKeycode } from "./PickKey";
 
 const BASE_MODE_KINDS: PointingModeKind[] = ["Cursor", "Scroll", "Sniper", "Caret", "Drag", "Press"];
 
@@ -117,7 +117,6 @@ type PointingKey = "keycode_up" | "keycode_down" | "keycode_left" | "keycode_rig
 
 function CaretKeyField({ label, value, onChange }: { label: string; value: HidKeyCode; onChange: (value: HidKeyCode) => void }) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
   return (
     <div>
       <button
@@ -131,15 +130,10 @@ function CaretKeyField({ label, value, onChange }: { label: string; value: HidKe
       </button>
       {open && (
         <div className="mt-2 rounded-lg border border-line-soft bg-well p-2">
-          <KeycodeBrowser
-            query={query}
-            onQuery={setQuery}
-            modifierPicks={false}
-            compact
+          <PickKeycode
             onPick={(code) => {
               onChange(code);
               setOpen(false);
-              setQuery("");
             }}
           />
         </div>

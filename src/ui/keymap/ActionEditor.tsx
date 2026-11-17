@@ -1,12 +1,10 @@
 // The binding editor shown in the inspector for a selected key or encoder
 // direction. Category tabs → pick → commit(action).
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import type { Action, HidKeyCode, KeyAction, ModifierCombination } from "../../model/action-types";
-import { searchKeycodes } from "../hid";
-import { getLocaleId, subscribeLocale } from "../locale";
-import { anyModifier, hidName, modifierSymbols } from "../labels";
+import type { Action, KeyAction, ModifierCombination } from "../../model/action-types";
+import { anyModifier, modifierSymbols } from "../labels";
 import { noModifiers } from "../../model/slots";
 import { decodeMacros, macroPreview } from "../../model/macros";
 import { DEFAULT_TAP_HOLD_PROFILE, morsePatternGlyph } from "../../model/morse";
@@ -14,8 +12,9 @@ import { useWorkbench } from "../state";
 import type { KeyView } from "../../model/keyboard";
 import { LightingKeyPresetPanel } from "../lighting/LightingKeyPresetPanel";
 import { morseProfileSummary } from "../morse-profile";
-import { Button, SectionLabel, Segmented, TextInput, cx } from "../kit";
-import { mergeModifiers, pickedHidAction } from "./actions";
+import { Button, SectionLabel, Segmented, cx } from "../kit";
+import { PickKey } from "./PickKey";
+import { isTapPattern } from "./pickKey";
 import { LIGHT_ACTIONS, SYSTEM_ACTIONS } from "./action-catalog";
 import { useKeyText } from "../useKeyText";
 
@@ -110,71 +109,6 @@ export function ModGrid({
   );
 }
 
-export function KeycodeBrowser({
-  query,
-  onQuery,
-  onPick,
-  compact,
-  modifierPicks = true,
-}: {
-  query: string;
-  onQuery: (q: string) => void;
-  onPick: (code: HidKeyCode, mods?: ModifierCombination) => void;
-  compact?: boolean;
-  /** Whether picks may carry required Shift/AltGr modifiers (character
-   *  matches). Off for single-keycode contexts like macro steps. */
-  modifierPicks?: boolean;
-}) {
-  // Subscribing keeps the catalog current when the layout selection changes;
-  // searchKeycodes caches per locale, so recomputing every render is cheap.
-  useSyncExternalStore(subscribeLocale, getLocaleId, getLocaleId);
-  const found = searchKeycodes(query);
-  const groups = modifierPicks
-    ? found
-    : found
-        .map((g) => ({ ...g, entries: g.entries.filter((e) => !e.mods) }))
-        .filter((g) => g.entries.length > 0);
-  return (
-    <div className="flex min-h-0 flex-col gap-3">
-      <TextInput
-        placeholder="Search keycodes or type a character…"
-        value={query}
-        onChange={(e) => onQuery(e.target.value)}
-      />
-      <div
-        className={cx(
-          "flex min-h-0 flex-col gap-3 overflow-y-auto pr-1",
-          compact ? "max-h-56" : "flex-1",
-        )}
-      >
-        {groups.length === 0 && (
-          <div className="py-6 text-center text-body text-faint">
-            No keycodes match “{query}”.
-          </div>
-        )}
-        {groups.map((g) => (
-          <div key={g.name}>
-            <SectionLabel>{g.name}</SectionLabel>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {g.entries.map((e) => (
-                <Keycap
-                  key={`${e.code}${e.mods ? "+mods" : ""}`}
-                  title={
-                    e.mods ? `${modifierSymbols(e.mods)} + ${hidName(e.code)}` : hidName(e.code)
-                  }
-                  onClick={() => onPick(e.code, e.mods)}
-                >
-                  {e.label}
-                </Keycap>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 type LayerKind = "LayerOn" | "LayerToggle" | "DefaultLayer" | "OneShotLayer" | "LayerToggleOnly";
 
 const LAYER_KINDS: Array<{ id: LayerKind; label: string; hint: string }> = [
@@ -235,7 +169,6 @@ export function SlotPicker({
   onPick: (action: Action) => void;
 }) {
   const [tab, setTab] = useState<"keys" | "mods" | "layers">("keys");
-  const [query, setQuery] = useState("");
   const [mods, setMods] = useState<ModifierCombination>(noModifiers);
   return (
     <div className="flex flex-col gap-2.5 rounded-lg border border-line-soft bg-well/60 p-2.5">
@@ -255,25 +188,14 @@ export function SlotPicker({
         ))}
       </div>
       {tab === "keys" && (
-        <div className="flex flex-col gap-2.5">
-          <div>
-            <div className="mb-1.5 text-small text-faint">With modifiers</div>
-            <ModGrid mods={mods} onChange={setMods} />
-            {anyModifier(mods) && (
-              <div className="mt-1.5 text-small text-accent">
-                Next key uses {modifierSymbols(mods)} + key
-              </div>
-            )}
-          </div>
-          <KeycodeBrowser
-            compact
-            query={query}
-            onQuery={setQuery}
-            onPick={(code, required) =>
-              onPick(pickedHidAction(code, mergeModifiers(mods, required)))
-            }
-          />
-        </div>
+        <PickKey
+          compact
+          scope="slot"
+          onPick={(pick) => {
+            // A slot's picker offers actions only (pickKey.ts narrowTo).
+            if (pick !== "Transparent" && !isTapPattern(pick)) onPick(pick);
+          }}
+        />
       )}
       {tab === "mods" && (
         <div className="flex flex-col gap-2.5">
@@ -509,7 +431,6 @@ export function ActionEditor({
 }) {
   const { bundle, state } = useWorkbench();
   const [tab, setTab] = useState<Tab>(() => initialTab(current));
-  const [query, setQuery] = useState("");
   const [keyMods, setKeyMods] = useState<ModifierCombination>(noModifiers);
   const [oneShot, setOneShot] = useState(false);
 
@@ -566,26 +487,9 @@ export function ActionEditor({
       />
 
       {tab === "keys" && (
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
-          <div>
-            <SectionLabel>With modifiers</SectionLabel>
-            <div className="mt-1.5">
-              <ModGrid mods={keyMods} onChange={setKeyMods} />
-            </div>
-            {anyModifier(keyMods) && (
-              <div className="mt-1.5 text-small text-accent">
-                Next key binds as {modifierSymbols(keyMods)} + key
-              </div>
-            )}
-          </div>
-          <KeycodeBrowser
-            query={query}
-            onQuery={setQuery}
-            onPick={(code, required) =>
-              onCommit({ Single: pickedHidAction(code, mergeModifiers(keyMods, required)) })
-            }
-          />
-        </div>
+        <PickKey
+          onPick={(pick) => onCommit(pick === "Transparent" || isTapPattern(pick) ? pick : { Single: pick })}
+        />
       )}
 
       {tab === "mods" && (

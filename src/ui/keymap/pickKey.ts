@@ -3,53 +3,32 @@
 // Numbers, Symbols, Navigation, Media …), and everything else under All keys.
 // Letters, Numbers and Symbols come from the OS keyboard layout, one tile per
 // character (a lilac one needs Shift or AltGr); the tile still binds the key
-// as pressed. Searching also finds layers. No React.
+// as pressed. Modifiers read as the computer names them. Every other key RMK
+// has is under All keys (pickKeyMore.ts); searching (pickSearch.ts) also finds
+// layers and your behaviors. No React.
 
 import type { Action, HidKeyCode } from "../../model/action-types";
+import {
+  DIGIT_CODES,
+  LETTER_CODES,
+  NON_US,
+  PUNCTUATION_CODES,
+  actionTile,
+  isTapPattern,
+  keyTile,
+  type Tile,
+  type TileGroup,
+} from "./pickTiles";
 import { characterFor, type KeyboardLocale } from "../locale";
-import { hidLabel } from "../labels";
+import type { Os } from "../preferences";
+import { modifierLook } from "../keyface/modifiers";
 import { noModifiers } from "../../model/slots";
 import { pickedHidAction } from "./actions";
 import { LIGHT_ACTIONS, SYSTEM_ACTIONS } from "./action-catalog";
+import { moreGroups } from "./pickKeyMore";
 
-export interface Tile {
-  /** Unique within the picker. */
-  id: string;
-  label: string;
-  /** What the tile puts in the slot; "Transparent" falls through to the layer below. */
-  action: Action | "Transparent";
-  /** More words to find it by (lowercase). */
-  search: string;
-  /** It needs Shift or AltGr to type its character. */
-  lilac?: boolean;
-  /** The small caption it sits under inside its group. */
-  cluster?: string;
-}
-
-export interface TileGroup {
-  id: string;
-  name: string;
-  /** The quick link's word, for the groups people look for first. */
-  chip?: string;
-  tiles: Tile[];
-}
-
-const LETTER_CODES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("") as HidKeyCode[];
-const DIGIT_CODES: HidKeyCode[] = ["Kc1", "Kc2", "Kc3", "Kc4", "Kc5", "Kc6", "Kc7", "Kc8", "Kc9", "Kc0"];
-const PUNCTUATION_CODES: HidKeyCode[] = [
-  "Minus",
-  "Equal",
-  "LeftBracket",
-  "RightBracket",
-  "Backslash",
-  "Semicolon",
-  "Quote",
-  "Grave",
-  "Comma",
-  "Dot",
-  "Slash",
-];
-const NON_US: HidKeyCode[] = ["NonusBackslash", "NonusHash"];
+export { isTapPattern, type Pick, type Tile, type TileGroup } from "./pickTiles";
+export { behaviorEntries, behaviorTiles, layerTiles, searchTiles, type BehaviorEntry } from "./pickSearch";
 
 // Symbols in small clusters, so the eye finds one without first deciding
 // whether it is "punctuation" or "math".
@@ -62,19 +41,6 @@ const SYMBOL_CLUSTERS: Array<[string, string]> = [
 ];
 const clusterOf = (text: string) =>
   (SYMBOL_CLUSTERS.find(([, chars]) => chars.includes(text)) ?? SYMBOL_CLUSTERS[SYMBOL_CLUSTERS.length - 1])[0];
-
-function keyTile(code: HidKeyCode, label?: string, search = ""): Tile {
-  return {
-    id: `key:${code}`,
-    label: label ?? hidLabel(code),
-    action: { Key: { Hid: code } } as Action,
-    search: `${code} ${label ?? ""} ${hidLabel(code)} ${search}`.toLowerCase(),
-  };
-}
-
-function actionTile(id: string, label: string, action: Action | "Transparent", search = ""): Tile {
-  return { id, label, action, search: `${label} ${search}`.toLowerCase() };
-}
 
 /** Every distinct character the layout types (plain, then Shift, then AltGr),
  *  as Letters, Numbers and Symbols. */
@@ -135,9 +101,11 @@ const present = (tiles: Array<Tile | null>) => tiles.filter((tile): tile is Tile
 /** The groups, in the order most people need them, then All keys. */
 export function pickKeyGroups(
   locale: KeyboardLocale,
-  board: { userActions?: readonly { id: number; label: string; hint?: string }[] } = {},
+  board: { userActions?: readonly { id: number; label: string; hint?: string }[]; os?: Os } = {},
 ): { main: TileGroup[]; more: TileGroup[] } {
   const chars = characterGroups(locale);
+  const os = board.os ?? "win";
+  const word = (modifier: "ctrl" | "alt" | "gui") => modifierLook(modifier, os).word;
   const cluster = (name: string, tiles: Tile[]) => tiles.map((tile) => ({ ...tile, cluster: name }));
   const main: TileGroup[] = [
     { id: "letters", name: "Letters", chip: "Letters", tiles: chars.letters },
@@ -161,13 +129,13 @@ export function pickKeyGroups(
       name: "Modifiers",
       tiles: [
         keyTile("LShift", "Left Shift"),
-        keyTile("LCtrl", "Left Ctrl", "control"),
-        keyTile("LAlt", "Left Alt", "option"),
-        keyTile("LGui", "Left ⌘/Win", "gui super command windows meta"),
+        keyTile("LCtrl", `Left ${word("ctrl")}`, "control"),
+        keyTile("LAlt", `Left ${word("alt")}`, "alt option"),
+        keyTile("LGui", `Left ${word("gui")}`, "gui super command windows meta"),
         keyTile("RShift", "Right Shift"),
-        keyTile("RCtrl", "Right Ctrl", "control"),
-        keyTile("RAlt", "Right Alt", "option altgr"),
-        keyTile("RGui", "Right ⌘/Win", "gui super command windows meta"),
+        keyTile("RCtrl", `Right ${word("ctrl")}`, "control"),
+        keyTile("RAlt", `Right ${word("alt")}`, "alt option altgr"),
+        keyTile("RGui", `Right ${word("gui")}`, "gui super command windows meta"),
       ],
     },
     {
@@ -222,15 +190,31 @@ export function pickKeyGroups(
       id: "mouse",
       name: "Mouse",
       tiles: [
-        keyTile("MouseUp", "Move ↑", "mouse"),
-        keyTile("MouseDown", "Move ↓", "mouse"),
-        keyTile("MouseLeft", "Move ←", "mouse"),
-        keyTile("MouseRight", "Move →", "mouse"),
-        keyTile("MouseBtn1", "Left Click", "mouse button 1"),
-        keyTile("MouseBtn2", "Right Click", "mouse button 2"),
-        keyTile("MouseBtn3", "Middle Click", "mouse button 3"),
-        keyTile("MouseWheelUp", "Scroll ↑", "mouse wheel"),
-        keyTile("MouseWheelDown", "Scroll ↓", "mouse wheel"),
+        ...cluster("Move", [
+          keyTile("MouseUp", "Move ↑", "mouse"),
+          keyTile("MouseDown", "Move ↓", "mouse"),
+          keyTile("MouseLeft", "Move ←", "mouse"),
+          keyTile("MouseRight", "Move →", "mouse"),
+        ]),
+        ...cluster("Click", [
+          keyTile("MouseBtn1", "Left Click", "mouse button 1"),
+          keyTile("MouseBtn2", "Right Click", "mouse button 2"),
+          keyTile("MouseBtn3", "Middle Click", "mouse button 3"),
+          keyTile("MouseBtn4", "Back", "mouse button 4"),
+          keyTile("MouseBtn5", "Forward", "mouse button 5"),
+        ]),
+        ...cluster("Scroll", [
+          keyTile("MouseWheelUp", "Scroll ↑", "mouse wheel"),
+          keyTile("MouseWheelDown", "Scroll ↓", "mouse wheel"),
+          keyTile("MouseWheelLeft", "Scroll ←", "mouse wheel"),
+          keyTile("MouseWheelRight", "Scroll →", "mouse wheel"),
+        ]),
+        // While held, RMK moves the pointer and wheel at this times their speed (mouse.rs).
+        ...cluster("Speed while held", [
+          keyTile("MouseAccel0", "Speed ¼×", "mouse acceleration accel0 slow"),
+          keyTile("MouseAccel1", "Speed ½×", "mouse acceleration accel1 slow"),
+          keyTile("MouseAccel2", "Speed 2×", "mouse acceleration accel2 fast"),
+        ]),
       ],
     },
     {
@@ -292,71 +276,32 @@ export function pickKeyGroups(
     },
   ].filter((group) => group.tiles.length > 0);
 
-  const more: TileGroup[] = [
-    {
-      id: "more-system",
-      name: "Power & sleep",
-      tiles: [
-        keyTile("SystemPower", "Power", "off"),
-        keyTile("SystemSleep", "Sleep", "suspend"),
-        keyTile("SystemWake", "Wake"),
-        keyTile("MissionControl", "Mission Control", "mac expose"),
-        keyTile("Launchpad", "Launchpad", "mac"),
-        keyTile("MediaEject", "Eject"),
-      ],
-    },
-    {
-      id: "more-lighting",
-      name: "More lighting",
-      tiles: LIGHT_ACTIONS.slice(7).map((item) =>
-        actionTile(`light:${item.id}`, item.label, { Light: item.id } as Action, `${item.hint} lighting rgb`),
-      ),
-    },
-    {
-      id: "more-system-controls",
-      name: "More keyboard controls",
-      tiles: SYSTEM_ACTIONS.filter(
-        (item) => !["OutputUsb", "OutputBluetooth", "CapsWordToggle", "ComboToggle", "Bootloader", "Reboot"].includes(item.id),
-      ).map((item) => actionTile(`control:${item.id}`, item.label, { KeyboardControl: item.id } as Action, item.hint)),
-    },
-    {
-      id: "more-keys",
-      name: "Other keyboard keys",
-      tiles: [...PUNCTUATION_CODES, ...NON_US].map((code) => keyTile(code, undefined, "key")),
-    },
-  ].filter((group) => group.tiles.length > 0);
-
-  return { main, more };
+  return { main, more: moreGroups(main) };
 }
 
-/** Layer tiles for a search: hold, toggle or switch to each layer whose name matches. */
-export function layerTiles(layers: Array<{ index: number; name: string }>, query: string): TileGroup | null {
-  const q = query.trim().toLowerCase();
-  if (!q) return null;
-  const tiles = layers
-    .filter((layer) => `${layer.name} layer ${layer.index}`.toLowerCase().includes(q))
-    .flatMap((layer) => [
-      actionTile(`layer-on:${layer.index}`, `While held: ${layer.name}`, { LayerOn: layer.index } as Action, ""),
-      actionTile(`layer-toggle:${layer.index}`, `Toggle ${layer.name}`, { LayerToggle: layer.index } as Action, ""),
-      actionTile(`layer-to:${layer.index}`, `Switch to ${layer.name}`, { LayerToggleOnly: layer.index } as Action, ""),
-    ]);
-  return tiles.length > 0 ? { id: "layers", name: "Layers", tiles } : null;
+/** What a picker is filling: a whole key (the key editor, a combo's output), one
+ *  slot of a behavior (a tap-hold slot, a tap pattern's action) or a plain key (a
+ *  macro step, a pointing key), which takes no modifiers, characters that need
+ *  them, layers or actions. */
+export type PickScope = "key" | "slot" | "keycode";
+
+/** The HID key a tile presses on its own, if that is all it does. */
+export function plainKey(tile: Tile): HidKeyCode | null {
+  const action = tile.action;
+  return typeof action === "object" && "Key" in action && typeof action.Key === "object" && "Hid" in action.Key
+    ? action.Key.Hid
+    : null;
 }
 
-/** The groups narrowed to a search: every word must appear; All keys results
- *  are marked as coming from there. */
-export function searchTiles(groups: { main: TileGroup[]; more: TileGroup[] }, query: string): TileGroup[] {
-  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  if (terms.length === 0) return groups.main;
-  const exact = query.trim();
-  const match = (tile: Tile) =>
-    tile.label === exact || terms.every((term) => tile.search.includes(term) || tile.label.toLowerCase().includes(term));
-  const narrowed = (list: TileGroup[]) =>
-    list.map((group) => ({ ...group, tiles: group.tiles.filter(match) })).filter((group) => group.tiles.length > 0);
-  // A typed character first: the tile that types exactly it.
-  const all = [...narrowed(groups.main), ...narrowed(groups.more).map((group) => ({ ...group, name: `All keys · ${group.name}` }))];
-  const exactTile = all.flatMap((group) => group.tiles).find((tile) => tile.label === exact);
-  return exactTile
-    ? [{ id: "exact", name: "Best match", tiles: [exactTile] }, ...all.map((g) => ({ ...g, tiles: g.tiles.filter((t) => t !== exactTile) })).filter((g) => g.tiles.length)]
-    : all;
+/** The tiles a scope offers: "Transparent" and tap patterns are a whole key's. */
+export function offeredIn(scope: PickScope): (tile: Tile) => boolean {
+  if (scope === "keycode") return (tile) => plainKey(tile) !== null;
+  if (scope === "slot") return (tile) => tile.action !== "Transparent" && !isTapPattern(tile.action);
+  return () => true;
+}
+
+/** The groups with only what a scope offers, empty groups left out. */
+export function narrowTo(groups: readonly TileGroup[], scope: PickScope): TileGroup[] {
+  const offered = offeredIn(scope);
+  return groups.map((group) => ({ ...group, tiles: group.tiles.filter(offered) })).filter((group) => group.tiles.length > 0);
 }

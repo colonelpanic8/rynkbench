@@ -33,4 +33,9 @@ export type {
   MouseButtons,
   /** The modifier, LED and mouse state a fork matches. */
   StateBits,
+  /** A pointing device's layer modes: cursor, caret keys and their settings. */
+  CaretConfig,
+  CursorConfig,
+  PointingConfig,
+  PointingMode,
 } from "../vendor/rynk-wasm/rynk_wasm";
