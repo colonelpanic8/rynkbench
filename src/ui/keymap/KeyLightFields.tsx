@@ -121,7 +121,8 @@ export function KeyLightFields({ light, lights, onChange }: {
   lights: KeyLights;
   onChange: (light: KeyLight) => void;
 }) {
-  // Custom was picked, or a number typed: the numbers stay open even while they match a named speed.
+  // Custom was picked, or a number typed, for these keys (the tab mounts the
+  // fields afresh for each): the numbers stay open even while they match a named speed.
   const [numbers, setNumbers] = useState(false);
   const color = (value: LightingRgb8 | null, pick: (next: LightingRgb8 | null) => void, darkTitle?: string) => (
     <ColorChoice

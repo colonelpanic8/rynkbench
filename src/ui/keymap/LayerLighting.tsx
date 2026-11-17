@@ -229,7 +229,7 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
             </button>
             {chosen && (choice.id === "color" || choice.id === "status") && (
               <div className="flex flex-col gap-3 px-4 pt-1 pb-4 pl-11">
-                <KeyLightFields light={shown} lights={lights} onChange={choose} />
+                <KeyLightFields key={`${layer}:${leds.join()}`} light={shown} lights={lights} onChange={choose} />
               </div>
             )}
           </div>
