@@ -169,7 +169,7 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
             className="shrink-0 cursor-pointer font-semibold text-accent hover:underline"
             onClick={() => state.selection?.type === "key" && dispatch({ type: "select", selection: { type: "key", row: state.selection.row, col: state.selection.col } })}
           >
-            Clear selection
+            Select only this key
           </button>
         </div>
       )}
