@@ -10,6 +10,8 @@ import { makeWorkbenchReducer } from "../reducer";
 import type { WorkbenchAction, WorkbenchState } from "../../model/workbench-state";
 import { mutableLighting } from "../../sync";
 import { draftOf } from "./want";
+import { liveSendDue, sendWaits } from "./selectors";
+import { UNATTENDED } from "./send";
 
 const key = (code: string) => ({ Single: { Key: { Hid: code } } }) as KeyAction;
 const light = (led_id: number) => ({ led_id, effect: { Solid: { color: { r: 255, g: 0, b: 0 } } }, ttl_ms: undefined });
@@ -236,5 +238,64 @@ describe("Send", () => {
       expect(asked).toEqual([]);
       expect(draftOf(state()).changes).toEqual([]);
     });
+  });
+});
+
+describe("Live's own send, once edits pause", () => {
+  it("leaves a drafted item the keyboard changed for Send to ask about, and waits for the next edit", async () => {
+    await inDraft(async ({ session, io, state, dispatch }) => {
+      const clash = { kind: "key" as const, layer: 1, offset: 0 };
+      const fine = { kind: "key" as const, layer: 1, offset: 1 };
+      dispatch({
+        type: "draftRestore",
+        patch: [
+          { item: clash, before: state().layers[1][0], after: key("F13") },
+          { item: fine, before: state().layers[1][1], after: key("F14") },
+        ],
+      });
+      await session.keymap.setKey(1, 0, 0, key("F20")); // changed elsewhere meanwhile
+      expect(liveSendDue(state())).toBe(true);
+      expect(await io.applyBatch(UNATTENDED)).toEqual({ ok: true });
+      expect((await session.keymap.readAll())[1].actions.slice(0, 2)).toEqual([key("F20"), key("F14")]);
+      expect(draftOf(state()).changes.map((change) => change.item)).toEqual([clash]);
+      expect(liveSendDue(state())).toBe(false);
+      expect(sendWaits(state())).toBe(true);
+
+      dispatch({ type: "paint", layer: 1, cells: [light(4)] });
+      expect(liveSendDue(state())).toBe(true);
+    }, false);
+  });
+
+  it("does not try again after a send that failed, until the next edit", async () => {
+    await inDraft(async ({ session, io, state, dispatch }) => {
+      dispatch({ type: "paint", layer: 1, cells: [light(4)] });
+      const gone = vi.spyOn(session.device, "capabilities").mockRejectedValue(new Error("Session is closed"));
+      expect(await io.applyBatch(UNATTENDED)).toMatchObject({ ok: false });
+      expect(liveSendDue(state())).toBe(false);
+      expect(sendWaits(state())).toBe(true);
+
+      gone.mockRestore();
+      dispatch({ type: "paint", layer: 1, cells: [light(5)] });
+      expect(liveSendDue(state())).toBe(true);
+      expect(await io.applyBatch(UNATTENDED)).toEqual({ ok: true });
+      expect(draftOf(state()).changes).toEqual([]);
+      expect(liveSendDue(state())).toBe(false);
+      expect(sendWaits(state())).toBe(false);
+    }, false);
+  });
+
+  it("is due again for a change made while it was sending", async () => {
+    await inDraft(async ({ session, io, state, dispatch }) => {
+      dispatch({ type: "paint", layer: 1, cells: [light(4)] });
+      const capabilities = session.device.capabilities.bind(session.device);
+      let reads = 0;
+      vi.spyOn(session.device, "capabilities").mockImplementation(() => {
+        if ((reads += 1) === 2) dispatch({ type: "paint", layer: 1, cells: [light(5)] });
+        return capabilities();
+      });
+      expect(await io.applyBatch(UNATTENDED)).toEqual({ ok: true });
+      expect(liveSendDue(state())).toBe(true);
+      expect(sendWaits(state())).toBe(false);
+    }, false);
   });
 });

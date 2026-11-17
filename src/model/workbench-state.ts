@@ -286,6 +286,8 @@ export interface WorkbenchState {
   batchMode: boolean;
   /** A batch apply is writing staged edits to the device. */
   batchBusy: boolean;
+  /** Why the last send left changes in the draft; null once it left none, and
+   *  after the next edit. */
   batchError: string | null;
   layerBusy: boolean;
   layerError: string | null;

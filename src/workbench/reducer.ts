@@ -90,7 +90,9 @@ function withStep(before: WorkbenchState, after: WorkbenchState, join: boolean):
   const changes = patchBetween(wantOf(before), wantOf(after));
   const labels = sameValue(before.labels, after.labels) ? undefined : { before: before.labels, after: after.labels };
   const history = recordStep(after.history, changes, join, labels);
-  return history === after.history ? after : { ...after, history };
+  // An edit: what the last send left behind may be tried again.
+  const batchError = changes.length > 0 ? null : after.batchError;
+  return history === after.history && batchError === after.batchError ? after : { ...after, history, batchError };
 }
 
 export function makeWorkbenchReducer(cols: number) {

@@ -20,7 +20,8 @@ import {
   type SyncItem,
 } from "../../sync";
 import { errorMessage } from "../../session/errors";
-import { draftWithBasis } from "./want";
+import { sameValue } from "../../model/deep-equal";
+import { draftOf, draftWithBasis } from "./want";
 import type { WorkbenchDispatch } from "../io";
 
 export interface SendOptions {
@@ -31,6 +32,10 @@ export interface SendOptions {
    *  in the draft, where Send asks about it. */
   settingNow?: readonly SyncItem[];
 }
+
+/** Live's own send once edits pause: nobody is there to ask, so nothing the
+ *  keyboard changed is overwritten. */
+export const UNATTENDED: SendOptions = { settingNow: [] };
 
 export interface SendDeps {
   session: RynkSession;
@@ -68,8 +73,9 @@ export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Pro
     } else if (clashes.length > 0 && options.confirmOverwrite && !(await options.confirmOverwrite(clashes))) {
       // The read stays: Discard lands on what the keyboard holds.
       stored(now);
-      dispatch({ type: "batchApplyDone", error: null });
-      return { ok: false, message: "Not sent: the keyboard keeps its own changes", guarded: true };
+      const message = "Not sent: the keyboard keeps its own changes";
+      dispatch({ type: "batchApplyDone", error: message });
+      return { ok: false, message, guarded: true };
     }
     sent = differences(now, sending).map(({ item }) => item);
     const { readback } = await syncTo(session, now, sending, reading);
@@ -77,7 +83,7 @@ export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Pro
     if (patch.some(({ item }) => item.kind === "lighting" || item.kind === "rules")) {
       dispatch({ type: "lightingStateSet", state: await session.lighting.state() });
     }
-    dispatch({ type: "batchApplyDone", error: null });
+    dispatch({ type: "batchApplyDone", error: leftBehind() });
     return { ok: true };
   } catch (error) {
     const message = errorMessage(error);
@@ -91,6 +97,13 @@ export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Pro
     }
     dispatch({ type: "batchApplyDone", error: message });
     return unread ? { ok: false, message, unread } : { ok: false, message };
+  }
+
+  /** Why changes this send held are still in the draft as they were; null when none are. */
+  function leftBehind(): string | null {
+    const drafted = new Map(draftOf(getState()).changes.map(({ item, after }) => [itemKey(item), after]));
+    const left = patch.filter(({ item, after }) => drafted.has(itemKey(item)) && sameValue(drafted.get(itemKey(item)), after)).length;
+    return left === 0 ? null : `${left} ${left === 1 ? "change waits" : "changes wait"} for Send: the keyboard holds something else there`;
   }
 
   /** The keyboard now holds what was read: what reached it is no longer in the

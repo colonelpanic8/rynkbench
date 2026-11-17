@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { readSetting, SETTING_KEYS, writeSetting } from "../settings";
 import { useWorkbench } from "../state";
 import { draftSnapshot, parseStoredDraft } from "../../workbench/draft/changes";
+import { liveSendDue } from "../../workbench/draft/selectors";
 import { earlierDraft, setEarlier } from "./earlier";
 import { useDraft } from "./useDraft";
 import { useLink } from "./link";
@@ -71,12 +72,13 @@ export function DraftKeeper() {
   }, [draft.offline, draft.size]);
 
   // Live: what waits (lighting, lock and battery lights) goes once the painting
-  // pauses, and at once when the page is hidden or closed (ADR 0012).
-  const waiting = draft.live && !draft.offline ? draft.size : 0;
+  // pauses, and at once when the page is hidden or closed (ADR 0012). What a
+  // send left behind is not sent again until the next edit.
+  const due = !draft.offline && liveSendDue(state);
   const flush = useRef(draft.flush);
   flush.current = draft.flush;
   useEffect(() => {
-    if (waiting === 0 || draft.sending) return;
+    if (!due) return;
     const timer = setTimeout(() => void flush.current(), LIVE_PAUSE_MS);
     const leave = () => {
       if (document.visibilityState === "hidden") void flush.current();
@@ -88,7 +90,7 @@ export function DraftKeeper() {
       document.removeEventListener("visibilitychange", leave);
       window.removeEventListener("pagehide", leave);
     };
-  }, [waiting, draft.sending, state.layerDrafts, state.runtimeConditionalDraft]);
+  }, [due, draft.size, state.layerDrafts, state.runtimeConditionalDraft]);
 
   return null;
 }

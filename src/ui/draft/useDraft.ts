@@ -7,6 +7,8 @@ import { useMemo, useRef } from "react";
 import { askConfirm, showToast } from "../messages/store";
 import { useWorkbench } from "../state";
 import { draftGroups, draftSize, groupItems, type DraftGroup } from "../../workbench/draft/changes";
+import { liveSendDue, sendWaits } from "../../workbench/draft/selectors";
+import { UNATTENDED } from "../../workbench/draft/send";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -42,9 +44,13 @@ export function useDraft() {
       return false;
     },
 
-    /** Live: what is waiting (lighting, lock and battery lights) goes through the same path as Send. */
+    /** Live: changes a send left behind, which wait for Review & send. */
+    waiting: size > 0 && sendWaits(state),
+
+    /** Live: what is waiting (lighting, lock and battery lights) goes through the
+     *  same path as Send, when it is due and without asking anything. */
     async flush(): Promise<void> {
-      if (!sending && size > 0) await io.applyBatch();
+      if (liveSendDue(latest.current)) await io.applyBatch(UNATTENDED);
     },
 
     async discard() {

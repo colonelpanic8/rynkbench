@@ -2,7 +2,8 @@
 // - which keyboard is connected and how (a green dot), or that this is a file;
 // - Draft or Live, switched from the chip's menu;
 // - in Draft, how many changes are not on the keyboard yet, with Review & send
-//   and Discard, or "Up to date"; while sending, how many are left;
+//   and Discard, or "Up to date"; while sending, how many are left; in Live the
+//   same once a send left changes behind;
 // - a draft kept from an earlier visit, to restore or forget.
 
 import { useState } from "react";
@@ -150,7 +151,7 @@ export function ConnectionChip() {
         <span role="status" className="flex items-center gap-1.5 text-body text-accent">
           <SpinnerIcon size={13} /> Sending… {draft.size} left
         </span>
-      ) : draft.live ? null : draft.size === 0 ? (
+      ) : draft.live && !draft.waiting ? null : draft.size === 0 ? (
         <span className="text-body text-mute max-md:hidden">Up to date</span>
       ) : (
         <>
