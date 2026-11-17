@@ -274,6 +274,8 @@ export function KeymapCenter() {
           }}
           onBackgroundPointerDown={() => {
             moves.cancelKeyboardMove();
+            // A Paint drag can start off the keys too: it is still one stroke.
+            if (light.brush) beginStroke(dispatch);
             dispatch({ type: "select", selection: null });
           }}
         />
