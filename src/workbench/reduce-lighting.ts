@@ -1,20 +1,21 @@
-// The reducer's lighting part: the device's lighting state, the overlay and
-// layer drafts, scenes, rules, the extension effect. Its cases are the
-// reducer's own, moved here unchanged (ADR 0017).
+// The reducer's lighting part: the device's lighting state, the try-out
+// lights (the overlay), layer drafts, scenes, rules, the extension effect.
 
 import type { WorkbenchAction, WorkbenchState } from "../model/workbench-state";
-import { overlaysEqual } from "../model/lighting/compare";
+import { sameOverlayLights } from "../model/lighting/compare";
 import { wantOf, withLightingRead, withRead, withWant, withWritten } from "./draft/want";
-import { cellsToRecord, layerSceneCells, lightingDraftFor, setTargetDraft } from "./lighting-drafts";
+import { cellsToRecord, layerSceneCells, lightingDraftFor, withLayerDraft } from "./lighting-drafts";
 
 const LIGHTING_ACTION_TYPES = [
   "lightingRefresh",
-  "lightingTarget",
   "paint",
   "erase",
   "draftReset",
   "lightingBusy",
-  "overlayApplied",
+  "tryOutSet",
+  "tryOutSent",
+  "tryOutCleared",
+  "tryOutFailed",
   "scenesApplied",
   "conditionalDraft",
   "conditionalDraftReset",
@@ -39,7 +40,7 @@ export function reduceLighting(state: WorkbenchState, act: LightingAction): Work
   switch (act.type) {
     case "lightingRefresh": {
       const applied = cellsToRecord(act.overlay);
-      const draftWasClean = overlaysEqual(state.draft, state.applied);
+      const nothingWaits = sameOverlayLights(state.tryOut, state.applied);
       // The counters and names are the keyboard's; what it stores is read, and
       // drafts you had not changed follow it, changed ones stay (ADR 0018).
       const counted = {
@@ -58,62 +59,39 @@ export function reduceLighting(state: WorkbenchState, act: LightingAction): Work
       return {
         ...withLightingRead(stored, act.state),
         applied,
-        draft: draftWasClean ? { ...applied } : state.draft,
+        tryOut: nothingWaits ? { ...applied } : state.tryOut,
       };
     }
-    case "lightingTarget":
-      return {
-        ...state,
-        lightingTarget: act.target,
-        ...(act.target !== "overlay" && state.layerDrafts[act.target] === undefined
-          ? {
-              layerDrafts: {
-                ...state.layerDrafts,
-                [act.target]: layerSceneCells(state.scenes, act.target),
-              },
-            }
-          : {}),
-      };
     case "paint": {
-      const target = act.target ?? state.lightingTarget;
-      const draft = { ...lightingDraftFor(state, target) };
+      const draft = { ...lightingDraftFor(state, act.layer) };
       for (const cell of act.cells) draft[cell.led_id] = cell;
-      return { ...state, ...setTargetDraft(state, target, draft), lightingError: null };
+      return { ...state, ...withLayerDraft(state, act.layer, draft), lightingError: null };
     }
     case "erase": {
-      const target = act.target ?? state.lightingTarget;
-      const draft = { ...lightingDraftFor(state, target) };
+      const draft = { ...lightingDraftFor(state, act.layer) };
       for (const id of act.ledIds) delete draft[id];
-      return { ...state, ...setTargetDraft(state, target, draft) };
+      return { ...state, ...withLayerDraft(state, act.layer, draft) };
     }
-    case "draftReset": {
-      const target = act.target ?? state.lightingTarget;
-      const reset =
-        target === "overlay"
-          ? { ...state.applied }
-          : layerSceneCells(state.scenes, target);
-      return {
-        ...state,
-        ...setTargetDraft(state, target, reset),
-        lightingError: null,
-      };
-    }
+    case "draftReset":
+      return { ...state, ...withLayerDraft(state, act.layer, layerSceneCells(state.scenes, act.layer)), lightingError: null };
     case "lightingBusy":
       return {
         ...state,
         lightingBusy: act.busy,
         lightingError: act.error === undefined ? state.lightingError : act.error,
       };
-    case "overlayApplied": {
-      const applied = cellsToRecord(act.cells);
-      return {
-        ...withLightingRead(state, act.state),
-        applied,
-        draft: { ...applied },
-        lightingBusy: false,
-        lightingError: null,
-      };
+    case "tryOutSet": {
+      const tryOut = { ...state.tryOut };
+      for (const led of act.erase) delete tryOut[led];
+      for (const cell of act.cells) tryOut[cell.led_id] = cell;
+      return { ...state, tryOut, lightingError: null };
     }
+    case "tryOutSent":
+      return { ...withLightingRead(state, act.state), applied: cellsToRecord(act.cells), lightingError: null };
+    case "tryOutCleared":
+      return { ...withLightingRead(state, act.state), applied: {}, tryOut: {}, lightingError: null };
+    case "tryOutFailed":
+      return { ...state, lightingError: act.error };
     case "scenesApplied":
       return {
         ...withLightingRead(withWritten(state, { scenes: act.cells }), act.state),

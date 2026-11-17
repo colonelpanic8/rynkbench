@@ -152,6 +152,17 @@ describe("lighting", () => {
     expect(result.image.scenes).toEqual([]);
     expect(result.image.runtimeConditionalScenes.length).toBeGreaterThan(0);
   });
+
+  it("gives keys each their own effect, in place of their cells and status lights there", () => {
+    const usb = run("set_key_light", { layer: 1, leds: [1], light: { kind: "usb" } });
+    if (!usb.ok) throw new Error(usb.message);
+    const red = { Solid: { color: { r: 255, g: 0, b: 0 } } };
+    const blue = { Breathe: { color: { r: 0, g: 0, b: 255 }, period_ms: 1000, step_ms: 10 } };
+    const result = run("set_key_effects", { layer: 1, cells: [{ led: 0, effect: red }, { led: 1, effect: blue }] }, usb.image);
+    if (!result.ok) throw new Error(result.message);
+    expect(result.image.scenes).toEqual([{ layer: 1, led_id: 0, effect: red }, { layer: 1, led_id: 1, effect: blue }]);
+    expect(result.image.runtimeConditionalScenes).toEqual([]);
+  });
 });
 
 describe("transforms", () => {

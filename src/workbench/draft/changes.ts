@@ -199,8 +199,8 @@ export function keptPatch(kept: KeptDraft, base: KeyboardImage, cols: number): P
 export function layerLightingActions(state: WorkbenchState, layer: number, cells: readonly LightingOverlayCell[]): WorkbenchAction[] {
   const keep = new Set(cells.map((cell) => cell.led_id));
   const gone = Object.keys(lightingBaseFor(state, layer)).map(Number).filter((led) => !keep.has(led));
-  const actions: WorkbenchAction[] = [{ type: "draftReset", target: layer }];
-  if (cells.length) actions.push({ type: "paint", cells: [...cells], target: layer });
-  if (gone.length) actions.push({ type: "erase", ledIds: gone, target: layer });
+  const actions: WorkbenchAction[] = [{ type: "draftReset", layer }];
+  if (cells.length) actions.push({ type: "paint", cells: [...cells], layer });
+  if (gone.length) actions.push({ type: "erase", ledIds: gone, layer });
   return actions;
 }

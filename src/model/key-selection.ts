@@ -65,15 +65,24 @@ export function selectionShowing(selection: Selection | null, key: KeyPlace): Se
   return among(chosen, key) ? selectionOf([...chosen.filter((each) => !same(each, key)), key]) : selectionOf([key]);
 }
 
+/** Held keys and, for a press, the button. */
+export type Held = { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean };
+
+/** The key that adds or removes a key: ⌘ on Apple computers, where Ctrl with
+ *  a click is the secondary click, and Ctrl elsewhere. */
+export const togglesSelection = (held: Held, apple: boolean): boolean => (apple ? held.metaKey : held.ctrlKey);
+
+/** A press that opens the quick menu rather than selecting: any button but the
+ *  first, and on Apple computers Ctrl with a click. */
+export const secondaryPress = (press: Held & { button: number }, apple: boolean): boolean =>
+  press.button !== 0 || (apple && press.ctrlKey);
+
 /** What a press on a key, or Enter or Space on it, does to the selection.
  *  `choosing`: the canvas is collecting keys, one (each press replaces it) or
- *  many (a press adds or removes). Without it Ctrl or ⌘ adds or removes and
- *  Shift extends; null is an ordinary press. */
-export function selectGesture(
-  choosing: "one" | "many" | null,
-  held: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean },
-): "only" | "toggle" | "extend" | null {
+ *  many (a press adds or removes). Without it the toggle key (above) adds or
+ *  removes and Shift extends; null is an ordinary press. */
+export function selectGesture(choosing: "one" | "many" | null, held: Held, apple: boolean): "only" | "toggle" | "extend" | null {
   if (choosing === "one") return "only";
-  if (choosing === "many" || held.ctrlKey || held.metaKey) return "toggle";
+  if (choosing === "many" || togglesSelection(held, apple)) return "toggle";
   return held.shiftKey ? "extend" : null;
 }

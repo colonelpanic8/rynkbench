@@ -1,9 +1,9 @@
-// The lighting drafts the workbench keeps: the overlay's, and one per layer
-// seeded from the stored scene table: which draft a target edits and what it
-// is staged against. How they follow the keyboard is in draft/want.ts.
+// The lighting drafts the workbench keeps, one per layer seeded from the
+// stored scene table: which draft a layer edits and what it is staged against.
+// How they follow the keyboard is in draft/want.ts.
 
 import type { LightingOverlayCell, LightingSceneCell } from "../vendor/rynk-wasm/rynk_wasm";
-import type { LightingTarget, WorkbenchState } from "../model/workbench-state";
+import type { WorkbenchState } from "../model/workbench-state";
 
 /** The effects whose parameters are in play, base first and deduplicated —
  *  both slots may point at the same effect, which has one parameter set. */
@@ -31,46 +31,22 @@ export function layerSceneCells(
   return out;
 }
 
-/** The draft the given target edits, seeding a layer draft from `scenes` when
- *  the target has not been touched yet. */
-function targetDraft(
-  state: WorkbenchState,
-  target: LightingTarget,
-): Record<number, LightingOverlayCell> {
-  if (target === "overlay") return state.draft;
-  return state.layerDrafts[target] ?? layerSceneCells(state.scenes, target);
+/** The draft a layer's lights are edited in, seeded from `scenes` until the
+ *  layer is first touched. */
+export function lightingDraftFor(state: WorkbenchState, layer: number): Record<number, LightingOverlayCell> {
+  return state.layerDrafts[layer] ?? layerSceneCells(state.scenes, layer);
 }
 
-/** Write a target's draft back, into `draft` or the right `layerDrafts` slot. */
-export function setTargetDraft(
+/** A layer's draft written back into `layerDrafts`. */
+export function withLayerDraft(
   state: WorkbenchState,
-  target: LightingTarget,
+  layer: number,
   draft: Record<number, LightingOverlayCell>,
 ): Partial<WorkbenchState> {
-  return target === "overlay"
-    ? { draft }
-    : { layerDrafts: { ...state.layerDrafts, [target]: draft } };
+  return { layerDrafts: { ...state.layerDrafts, [layer]: draft } };
 }
 
-/** The draft a given target edits (overlay draft, or that layer's). */
-export const lightingDraftFor = targetDraft;
-
-/** The baseline a given target stages against: the on-device overlay, or that
- *  layer's stored scene cells. */
-export function lightingBaseFor(
-  state: WorkbenchState,
-  target: LightingTarget,
-): Record<number, LightingOverlayCell> {
-  return target === "overlay" ? state.applied : layerSceneCells(state.scenes, target);
-}
-
-/** The draft the active target edits (overlay draft, or the selected layer's). */
-export function activeLightingDraft(state: WorkbenchState): Record<number, LightingOverlayCell> {
-  return lightingDraftFor(state, state.lightingTarget);
-}
-
-/** The baseline the active target stages against: the on-device overlay, or
- *  the selected layer's stored scene cells. */
-export function activeLightingBase(state: WorkbenchState): Record<number, LightingOverlayCell> {
-  return lightingBaseFor(state, state.lightingTarget);
+/** What a layer's draft is staged against: its stored scene cells. */
+export function lightingBaseFor(state: WorkbenchState, layer: number): Record<number, LightingOverlayCell> {
+  return layerSceneCells(state.scenes, layer);
 }

@@ -14,6 +14,8 @@ export type CapabilityId =
   | "lighting.compiled"
   | "lighting.extension"
   | "lighting.output"
+  /** Lights put on the keyboard at once and never stored (the overlay). */
+  | "lighting.overlay"
   | "pointing"
   /** On Double Tap in the key editor; its slots are the morse table's. */
   | "keys.doubleTap"

@@ -11,6 +11,9 @@ import type { FirmwareLightingPreview } from "./firmware-rules";
 import { firmwarePreviewCells } from "./firmware-rules";
 import { maskHasLayer } from "./wake-layers";
 
+/** The keyboard as it is now: its active layers over the default one. */
+export const LIVE_VIEW: LightingTarget = "overlay";
+
 /** Black, the only way to hide a compiled cell: dropping the runtime cell that
  *  covers it would reveal the firmware default instead of turning the key off. */
 export const BLACK_EFFECT: LightingEffect = { Solid: { color: { r: 0, g: 0, b: 0 } } };

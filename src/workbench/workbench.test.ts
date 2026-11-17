@@ -1,6 +1,5 @@
-// Reducer coverage for per-target lighting drafts: the overlay draft and each
-// layer's scene draft are staged independently and stage against different
-// baselines (applied overlay vs. that layer's stored scene cells).
+// Reducer coverage: layer lighting drafts against their stored cells, the
+// try-out lights against the overlay the keyboard holds, and the rest below.
 
 import { describe, expect, it, vi } from "vitest";
 import type {
@@ -16,7 +15,7 @@ import type {
 } from "../vendor/rynk-wasm/rynk_wasm";
 import type { RynkSession } from "../session/types";
 import { conditionalTablesEqual, stagedBetween } from "../model/lighting/compare";
-import { activeLightingBase, activeLightingDraft } from "./lighting-drafts";
+import { lightingBaseFor, lightingDraftFor } from "./lighting-drafts";
 import { canTravel, draftEditCount, pointingDraftDirty } from "./draft/selectors";
 import { emptyHistory } from "./draft/history";
 import { noLabels } from "../model/behavior-labels";
@@ -66,8 +65,7 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     lightingState: LIGHTING,
     lightingOutputMode: null,
     applied: {},
-    draft: {},
-    lightingTarget: "overlay",
+    tryOut: {},
     layerDrafts: {},
     scenes: [],
     compiledScenes: [],
@@ -111,114 +109,74 @@ function baseState(over: Partial<WorkbenchState> = {}): WorkbenchState {
   return { ...opened, base: base ?? storedImage(opened) };
 }
 
-describe("per-target lighting drafts", () => {
-  it("seeds a layer draft from that layer's stored scene cells on first select", () => {
+describe("layer lighting drafts", () => {
+  const cell = (led: number, r: number) => ({ led_id: led, effect: solid(r), ttl_ms: undefined });
+
+  it("start as the layer's stored cells and stage only what changes", () => {
     const scenes: LightingSceneCell[] = [
       { layer: 1, led_id: 5, effect: solid(9) },
       { layer: 0, led_id: 2, effect: solid(3) },
     ];
-    const s = reducer(baseState({ scenes }), { type: "lightingTarget", target: 1 });
-    expect(s.lightingTarget).toBe(1);
-    // Only layer 1's cell, as an overlay-shaped (ttl-less) draft.
-    expect(activeLightingDraft(s)).toEqual({ 5: { led_id: 5, effect: solid(9), ttl_ms: undefined } });
-    expect(activeLightingDraft(s)).toEqual(activeLightingBase(s));
-    expect(stagedBetween(activeLightingDraft(s), activeLightingBase(s)).size).toBe(0);
+    const s = reducer(baseState({ scenes }), { type: "paint", cells: [cell(7, 7)], layer: 1 });
+    expect(s.layerDrafts[1]).toEqual({ 5: cell(5, 9), 7: cell(7, 7) });
+    expect(stagedBetween(lightingDraftFor(s, 1), lightingBaseFor(s, 1))).toEqual(new Set([7]));
+    expect(s.layerDrafts[0]).toBeUndefined();
   });
 
-  it("routes paint/erase to the active target and leaves other targets untouched", () => {
-    let s = baseState({ scenes: [{ layer: 1, led_id: 5, effect: solid(9) }] });
-    // Paint the overlay.
-    s = reducer(s, { type: "paint", cells: [{ led_id: 1, effect: solid(1), ttl_ms: undefined }] });
-    // Switch to layer 1 and paint there.
-    s = reducer(s, { type: "lightingTarget", target: 1 });
-    s = reducer(s, { type: "paint", cells: [{ led_id: 7, effect: solid(7), ttl_ms: undefined }] });
-
-    expect(s.draft).toEqual({ 1: { led_id: 1, effect: solid(1), ttl_ms: undefined } });
-    expect(s.layerDrafts[1]).toEqual({
-      5: { led_id: 5, effect: solid(9), ttl_ms: undefined },
-      7: { led_id: 7, effect: solid(7), ttl_ms: undefined },
-    });
-    // Layer 1 now has one staged edit (led 7) over its stored baseline.
-    expect(stagedBetween(activeLightingDraft(s), activeLightingBase(s))).toEqual(new Set([7]));
+  it("go back to what the layer stores on draftReset", () => {
+    let s = baseState({ scenes: [{ layer: 0, led_id: 2, effect: solid(3) }] });
+    s = reducer(s, { type: "erase", ledIds: [2], layer: 0 });
+    expect(stagedBetween(lightingDraftFor(s, 0), lightingBaseFor(s, 0))).toEqual(new Set([2]));
+    s = reducer(s, { type: "draftReset", layer: 0 });
+    expect(lightingDraftFor(s, 0)).toEqual({ 2: cell(2, 3) });
   });
 
-  it("preserves each target's staged edits across tab switches", () => {
+  it("follow a new stored table where unchanged and keep their changes elsewhere", () => {
+    let s = baseState({ scenes: [{ layer: 0, led_id: 2, effect: solid(3) }] });
+    // Layer 0 touched but unchanged; layer 1 changed.
+    s = reducer(s, { type: "paint", cells: [cell(9, 9)], layer: 0 });
+    s = reducer(s, { type: "erase", ledIds: [9], layer: 0 });
+    s = reducer(s, { type: "paint", cells: [cell(8, 8)], layer: 1 });
+
+    s = reducer(s, { type: "scenesApplied", state: LIGHTING, cells: [{ layer: 0, led_id: 4, effect: solid(4) }] });
+
+    expect(s.layerDrafts[0]).toEqual({ 4: cell(4, 4) });
+    expect(s.layerDrafts[1]).toEqual({ 8: cell(8, 8) });
+  });
+});
+
+describe("try-out lights", () => {
+  const lit = (led: number, r: number, ttl?: number) => ({ led_id: led, effect: solid(r), ttl_ms: ttl });
+
+  it("change only the try-out lights: never the draft, what you want or the history", () => {
+    const before = baseState({ applied: { 1: lit(1, 1) }, tryOut: { 1: lit(1, 1) } });
+    const s = reducer(before, { type: "tryOutSet", cells: [lit(2, 2, 5000)], erase: [1] });
+    expect(s.tryOut).toEqual({ 2: lit(2, 2, 5000) });
+    expect(s.applied).toBe(before.applied);
+    expect(wantOf(s)).toEqual(wantOf(before));
+    expect(draftEditCount(s)).toBe(0);
+    expect(s.history).toBe(before.history);
+  });
+
+  it("follow the keyboard while nothing waits to be sent, whatever time a light has left", () => {
+    let s = baseState({ applied: { 1: lit(1, 1, 5000) }, tryOut: { 1: lit(1, 1, 5000) } });
+    s = reducer(s, { type: "lightingRefresh", state: LIGHTING, overlay: [lit(1, 1, 3200)] });
+    expect(s.tryOut).toEqual({ 1: lit(1, 1, 3200) });
+    // The light ran out on the keyboard.
+    s = reducer(s, { type: "lightingRefresh", state: LIGHTING, overlay: [] });
+    expect(s.tryOut).toEqual({});
+  });
+
+  it("keep a change still waiting to be sent through a read of the keyboard", () => {
     let s = baseState();
-    s = reducer(s, { type: "paint", cells: [{ led_id: 1, effect: solid(1), ttl_ms: undefined }] });
-    s = reducer(s, { type: "lightingTarget", target: 0 });
-    s = reducer(s, { type: "paint", cells: [{ led_id: 2, effect: solid(2), ttl_ms: undefined }] });
-    // Bounce back to overlay, then to the layer again.
-    s = reducer(s, { type: "lightingTarget", target: "overlay" });
-    expect(activeLightingDraft(s)).toEqual({ 1: { led_id: 1, effect: solid(1), ttl_ms: undefined } });
-    s = reducer(s, { type: "lightingTarget", target: 0 });
-    expect(activeLightingDraft(s)).toEqual({ 2: { led_id: 2, effect: solid(2), ttl_ms: undefined } });
-  });
-
-  it("draftReset returns the active layer draft to its stored scene baseline", () => {
-    let s = baseState({ scenes: [{ layer: 0, led_id: 2, effect: solid(3) }] });
-    s = reducer(s, { type: "lightingTarget", target: 0 });
-    s = reducer(s, { type: "erase", ledIds: [2] });
-    expect(stagedBetween(activeLightingDraft(s), activeLightingBase(s))).toEqual(new Set([2]));
-    s = reducer(s, { type: "draftReset" });
-    expect(activeLightingDraft(s)).toEqual({ 2: { led_id: 2, effect: solid(3), ttl_ms: undefined } });
-    expect(stagedBetween(activeLightingDraft(s), activeLightingBase(s)).size).toBe(0);
-  });
-
-  it("an explicit target edits that layer without moving the selected target", () => {
-    // The key's RGB Lighting tab edits the layer the Keymap shows, and must
-    // not move the selected target along with it.
-    let s = baseState({ scenes: [{ layer: 1, led_id: 5, effect: solid(9) }] });
-    s = reducer(s, {
-      type: "paint",
-      cells: [{ led_id: 7, effect: solid(7), ttl_ms: undefined }],
-      target: 1,
-    });
-
-    expect(s.lightingTarget).toBe("overlay");
-    expect(s.draft).toEqual({});
-    expect(s.layerDrafts[1]).toEqual({
-      5: { led_id: 5, effect: solid(9), ttl_ms: undefined },
-      7: { led_id: 7, effect: solid(7), ttl_ms: undefined },
-    });
-
-    s = reducer(s, { type: "erase", ledIds: [5], target: 1 });
-    expect(s.layerDrafts[1]).toEqual({ 7: { led_id: 7, effect: solid(7), ttl_ms: undefined } });
-    expect(s.lightingTarget).toBe("overlay");
-
-    s = reducer(s, { type: "draftReset", target: 1 });
-    expect(s.layerDrafts[1]).toEqual({ 5: { led_id: 5, effect: solid(9), ttl_ms: undefined } });
-    expect(s.lightingTarget).toBe("overlay");
-    // The overlay draft never moved while all of that happened.
-    expect(s.draft).toEqual({});
-  });
-
-  it("scenesApplied re-syncs clean layer drafts but keeps dirty ones", () => {
-    let s = baseState({ scenes: [{ layer: 0, led_id: 2, effect: solid(3) }] });
-    // Seed layer 0 (clean) and layer 1 (dirty).
-    s = reducer(s, { type: "lightingTarget", target: 0 });
-    s = reducer(s, { type: "lightingTarget", target: 1 });
-    s = reducer(s, { type: "paint", cells: [{ led_id: 8, effect: solid(8), ttl_ms: undefined }] });
-
-    const newScenes: LightingSceneCell[] = [{ layer: 0, led_id: 4, effect: solid(4) }];
-    s = reducer(s, { type: "scenesApplied", state: LIGHTING, cells: newScenes });
-
-    // Layer 0 was clean → re-synced to the new stored table.
-    expect(s.layerDrafts[0]).toEqual({ 4: { led_id: 4, effect: solid(4), ttl_ms: undefined } });
-    // Layer 1 had a staged edit → untouched.
-    expect(s.layerDrafts[1]).toEqual({ 8: { led_id: 8, effect: solid(8), ttl_ms: undefined } });
-  });
-
-  it("overlay draft still stages against the applied overlay", () => {
-    const overlay = { 1: { led_id: 1, effect: solid(1), ttl_ms: undefined } };
-    const s = baseState({ applied: overlay, draft: { ...overlay } });
-    expect(activeLightingBase(s)).toBe(s.applied);
-    const painted = reducer(s, {
-      type: "paint",
-      cells: [{ led_id: 2, effect: solid(2), ttl_ms: undefined }],
-    });
-    expect(stagedBetween(activeLightingDraft(painted), activeLightingBase(painted))).toEqual(
-      new Set([2]),
-    );
+    s = reducer(s, { type: "tryOutSet", cells: [lit(2, 2)], erase: [] });
+    s = reducer(s, { type: "lightingRefresh", state: LIGHTING, overlay: [] });
+    expect(s.tryOut).toEqual({ 2: lit(2, 2) });
+    s = reducer(s, { type: "tryOutSent", state: LIGHTING, cells: [lit(2, 2)] });
+    expect(s.applied).toEqual(s.tryOut);
+    s = reducer(s, { type: "tryOutCleared", state: LIGHTING });
+    expect(s.applied).toEqual({});
+    expect(s.tryOut).toEqual({});
   });
 });
 

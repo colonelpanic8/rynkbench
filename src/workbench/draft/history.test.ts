@@ -120,8 +120,8 @@ describe("one history in Live", () => {
       const original = state().layers[0][0];
       await io.setKey(0, 0, 0, key("F13"));
       dispatch({ type: "historyStroke", open: true });
-      dispatch({ type: "paint", cells: [{ led_id: 3, effect: RED, ttl_ms: undefined }], target: 1 });
-      dispatch({ type: "paint", cells: [{ led_id: 4, effect: RED, ttl_ms: undefined }], target: 1 });
+      dispatch({ type: "paint", cells: [{ led_id: 3, effect: RED, ttl_ms: undefined }], layer: 1 });
+      dispatch({ type: "paint", cells: [{ led_id: 4, effect: RED, ttl_ms: undefined }], layer: 1 });
       dispatch({ type: "historyStroke", open: false });
       expect(state().history.past).toHaveLength(2);
 

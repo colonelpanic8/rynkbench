@@ -19,6 +19,16 @@ export function overlaysEqual(
   return true;
 }
 
+/** Whether two overlays light the same keys the same way, whatever time each
+ *  light has left: the keyboard reports a light's remaining lifetime. */
+export function sameOverlayLights(
+  a: Record<number, LightingOverlayCell>,
+  b: Record<number, LightingOverlayCell>,
+): boolean {
+  const ak = Object.keys(a);
+  return ak.length === Object.keys(b).length && ak.every((k) => Number(k) in b && same(a[Number(k)].effect, b[Number(k)].effect));
+}
+
 /** Whether two conditional tables are the same *table*. Order-sensitive by
  *  design: these rules compose in table order and a later rule wins a shared
  *  slot, so permuting them is a real change the device must be told about. */

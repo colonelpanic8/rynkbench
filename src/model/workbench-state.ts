@@ -72,8 +72,8 @@ export type Mode =
   | "usage"
   | "live";
 
-/** Which lighting surface the canvas edits: the transient overlay, or one
- *  layer's durable scene table. Only ever a number when scenes are supported. */
+/** Which lights a preview shows: the keyboard as it is now (its active layers
+ *  and the overlay), or one layer's scene table. */
 export type LightingTarget = "overlay" | number;
 
 export type Selection =
@@ -236,12 +236,12 @@ export interface WorkbenchState {
   splitTransport: SplitTransportState | null;
   lightingState: LightingState | null;
   lightingOutputMode: LightingOutputModeState | null;
-  /** Overlay as last known on-device, keyed by LED id. */
+  /** The overlay as last known on the keyboard, keyed by LED id. */
   applied: Record<number, LightingOverlayCell>;
-  /** Overlay as the user wants it (staged), keyed by LED id. */
-  draft: Record<number, LightingOverlayCell>;
-  /** Which surface the canvas edits: "overlay" or a layer index. */
-  lightingTarget: LightingTarget;
+  /** Try-out lights as wanted, keyed by LED id: the overlay, never stored and
+   *  outside the draft and the history; `io` sends them after a short pause.
+   *  Follows `applied` while nothing waits to be sent. */
+  tryOut: Record<number, LightingOverlayCell>;
   /** Per-layer staged scene edits: layer → (led id → cell). A layer's full
    *  desired table, seeded from `scenes` on first edit; staged = its diff. */
   layerDrafts: Record<number, Record<number, LightingOverlayCell>>;
@@ -400,13 +400,16 @@ export type WorkbenchAction =
       /** Present only when the device has a mutable conditional table. */
       runtimeConditional?: RuntimeLightingRule[];
     }
-  | { type: "lightingTarget"; target: LightingTarget }
-  /** `target` edits a specific layer's draft; omitted, the current target's. */
-  | { type: "paint"; cells: LightingOverlayCell[]; target?: LightingTarget }
-  | { type: "erase"; ledIds: number[]; target?: LightingTarget }
-  | { type: "draftReset"; target?: LightingTarget }
+  /** A layer's lighting draft: cells painted, LEDs erased, or back to what it stores. */
+  | { type: "paint"; cells: LightingOverlayCell[]; layer: number }
+  | { type: "erase"; ledIds: number[]; layer: number }
+  | { type: "draftReset"; layer: number }
   | { type: "lightingBusy"; busy: boolean; error?: string | null }
-  | { type: "overlayApplied"; state: LightingState; cells: LightingOverlayCell[] }
+  /** Try-out lights: changed here, sent (the overlay now holds `cells`), cleared, or not sent. */
+  | { type: "tryOutSet"; cells: LightingOverlayCell[]; erase: number[] }
+  | { type: "tryOutSent"; state: LightingState; cells: LightingOverlayCell[] }
+  | { type: "tryOutCleared"; state: LightingState }
+  | { type: "tryOutFailed"; error: string }
   | { type: "scenesApplied"; state: LightingState; cells: LightingSceneCell[] }
   | { type: "conditionalDraft"; cells: RuntimeLightingRule[] }
   | { type: "conditionalDraftReset" }
