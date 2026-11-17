@@ -153,7 +153,7 @@ export function TopBar({
 
       <div
         className="flex items-center gap-0.5"
-        title="Undo covers every change, in Draft and Live. Imports and transforms start it over."
+        title="Undo covers every change, in Draft and Live."
       >
         <Button
           variant="ghost"

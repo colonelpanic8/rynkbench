@@ -98,7 +98,7 @@ export function ReviewWindow({ onClose }: { onClose: () => void }) {
         )}
 
         <p className="text-small text-faint">
-          Combos, macros and settings go to the keyboard as you change them; Draft holds keys, encoders and lighting.
+          Apply rules, the lighting presets and the Device screen write to the keyboard at once; everything else waits for Send.
         </p>
 
         <div className="flex items-center justify-end gap-2">
