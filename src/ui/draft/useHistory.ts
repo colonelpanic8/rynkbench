@@ -28,17 +28,16 @@ export function stepLabel(step: HistoryStep, state: WorkbenchState): string {
   return plural(step.changes.length, "change");
 }
 
-/** A Paint stroke starts: until the pointer is let go, its changes are one step. */
+/** A Paint stroke starts: until the pointer is let go or the window loses it, its changes are one step. */
 export function beginStroke(dispatch: (action: WorkbenchAction) => void) {
   dispatch({ type: "historyStroke", open: true });
+  const ends = ["pointerup", "pointercancel", "blur"] as const;
   const end = () => {
-    window.removeEventListener("pointerup", end);
-    window.removeEventListener("pointercancel", end);
+    for (const event of ends) window.removeEventListener(event, end);
     // A moment after, so the last key's change still joins the stroke.
     setTimeout(() => dispatch({ type: "historyStroke", open: false }), 0);
   };
-  window.addEventListener("pointerup", end);
-  window.addEventListener("pointercancel", end);
+  for (const event of ends) window.addEventListener(event, end);
 }
 
 export function useHistory(state: WorkbenchState, io: WorkbenchIo, dispatch: (action: WorkbenchAction) => void): WorkbenchContextValue["history"] {
