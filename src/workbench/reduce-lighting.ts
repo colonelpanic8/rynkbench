@@ -3,7 +3,7 @@
 
 import type { WorkbenchAction, WorkbenchState } from "../model/workbench-state";
 import { sameOverlayLights } from "../model/lighting/compare";
-import { wantOf, withLightingRead, withRead, withWant, withWritten } from "./draft/want";
+import { wantOf, withLightingRead, withRead, withWant } from "./draft/want";
 import { cellsToRecord, layerSceneCells, lightingDraftFor, withLayerDraft } from "./lighting-drafts";
 
 const LIGHTING_ACTION_TYPES = [
@@ -94,7 +94,7 @@ export function reduceLighting(state: WorkbenchState, act: LightingAction): Work
       return { ...state, lightingError: act.error };
     case "scenesApplied":
       return {
-        ...withLightingRead(withWritten(state, { scenes: act.cells }), act.state),
+        ...withLightingRead(withRead(state, { scenes: act.cells }), act.state),
         lightingBusy: false,
         lightingError: null,
       };
@@ -109,7 +109,7 @@ export function reduceLighting(state: WorkbenchState, act: LightingAction): Work
     case "conditionalApplied":
       return {
         ...withLightingRead(
-          withWant(withWritten(state, { runtimeConditionalScenes: act.cells }), { ...wantOf(state), runtimeConditionalScenes: act.cells }),
+          withWant(withRead(state, { runtimeConditionalScenes: act.cells }), { ...wantOf(state), runtimeConditionalScenes: act.cells }),
           act.state,
         ),
         lightingBusy: false,
@@ -117,13 +117,13 @@ export function reduceLighting(state: WorkbenchState, act: LightingAction): Work
       };
     case "scenePolicySet":
       return {
-        ...withLightingRead(withWritten({ ...state, scenePolicy: state.scenePolicy ?? act.policy }, { layerPolicy: act.policy }), act.state),
+        ...withLightingRead(withRead({ ...state, scenePolicy: state.scenePolicy ?? act.policy }, { layerPolicy: act.policy }), act.state),
         lightingBusy: false,
         lightingError: null,
       };
     case "wakeLayersSet":
       return {
-        ...withWritten(
+        ...withRead(
           { ...state, lightingOutputMode: { ...act.outputMode, wake_layers: state.lightingOutputMode?.wake_layers ?? state.base.wakeLayers } },
           { wakeLayers: act.outputMode.wake_layers },
         ),
@@ -133,7 +133,7 @@ export function reduceLighting(state: WorkbenchState, act: LightingAction): Work
     case "extensionStateSet":
       return {
         ...withLightingRead(
-          withWritten(
+          withRead(
             {
               ...state,
               lightingExtension: state.lightingExtension && { ...state.lightingExtension, revision: act.state.revision },
@@ -168,6 +168,6 @@ export function reduceLighting(state: WorkbenchState, act: LightingAction): Work
     case "hoverLeds":
       return { ...state, hoverLeds: act.leds };
     case "lightingStateSet":
-      return { ...withLightingRead(state, act.state, true), lightingBusy: false, lightingError: null };
+      return { ...withLightingRead(state, act.state), lightingBusy: false, lightingError: null };
   }
 }

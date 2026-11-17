@@ -34,6 +34,12 @@ describe("the connection chip", () => {
     expect(html).not.toContain("Review");
   });
 
+  it("in Live, offers Review & send for changes a send left behind", () => {
+    const html = renderInWorkbench(<ConnectionChip />, { bundle: keyboard, state: { batchMode: false, batchError: "1 change waits", ...drafted } });
+    expect(html).toMatch(/Review &amp; send<span[^>]*>1<\/span>/);
+    expect(html).toContain("Discard the changes not on the keyboard");
+  });
+
   it("says when the keyboard cannot be reached, keeps the changes and offers Reconnect", () => {
     setLink({ lost: true, reconnect: () => {} });
     try {

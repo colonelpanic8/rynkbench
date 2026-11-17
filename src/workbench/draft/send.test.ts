@@ -8,9 +8,13 @@ import { initialWorkbenchState } from "../initial-state";
 import { ioFeaturesFor, makeIo } from "../io";
 import { makeWorkbenchReducer } from "../reducer";
 import type { WorkbenchAction, WorkbenchState } from "../../model/workbench-state";
+import { mutableLighting } from "../../sync";
 import { draftOf } from "./want";
+import { liveSendDue, sendWaits } from "./selectors";
+import { UNATTENDED } from "./send";
 
 const key = (code: string) => ({ Single: { Key: { Hid: code } } }) as KeyAction;
+const light = (led_id: number) => ({ led_id, effect: { Solid: { color: { r: 255, g: 0, b: 0 } } }, ttl_ms: undefined });
 
 interface Harness {
   session: RynkSession;
@@ -156,6 +160,7 @@ describe("Send", () => {
   it("in Live: a change made now does not take along a drafted item the keyboard changed meanwhile", async () => {
     await inDraft(async ({ session, io, state, dispatch }) => {
       const item = { kind: "key" as const, layer: 1, offset: 0 };
+      const first = state().layers[0][0];
       dispatch({ type: "draftRestore", patch: [{ item, before: state().layers[1][0], after: key("F13") }] });
       await session.keymap.setKey(1, 0, 0, key("F20")); // changed elsewhere meanwhile
       expect(await io.writeKeys([{ layer: 0, row: 0, col: 0, action: key("F14") }])).toEqual({ ok: true });
@@ -163,9 +168,134 @@ describe("Send", () => {
       expect(layers[0].actions[0]).toEqual(key("F14"));
       expect(layers[1].actions[0]).toEqual(key("F20"));
       expect(draftOf(state()).changes.map((change) => change.item)).toEqual([item]);
+      // Undo writes only what it sets, too.
+      expect(await io.travel("undo")).toEqual({ ok: true });
+      const undone = await session.keymap.readAll();
+      expect(undone[0].actions[0]).toEqual(first);
+      expect(undone[1].actions[0]).toEqual(key("F20"));
+      expect(draftOf(state()).changes.map((change) => change.item)).toEqual([item]);
       let asked: unknown[] = [];
       await io.applyBatch({ confirmOverwrite: async (items) => { asked = items; return false; } });
       expect(asked).toEqual([item]);
+    }, false);
+  });
+
+  it("Discard after a refused Send lands on what the keyboard holds now", async () => {
+    await inDraft(async ({ session, io, state, dispatch }) => {
+      await io.setKey(0, 0, 0, key("F13"));
+      await session.keymap.setKey(0, 0, 0, key("F20")); // changed elsewhere meanwhile
+      expect(await io.applyBatch({ confirmOverwrite: async () => false })).toMatchObject({ ok: false, guarded: true });
+      dispatch({ type: "batchDiscard" });
+      expect(state().layers[0][0]).toEqual(key("F20"));
+      expect(draftOf(state()).changes).toEqual([]);
+    });
+  });
+
+  it("discarding one item the keyboard changed, after a read saw it, lands on what was read", async () => {
+    await inDraft(async ({ session, io, state, dispatch, seen }) => {
+      const held = state().lightingOutputMode!.wake_layers;
+      const [mine, theirs] = [0b10, 0b100, 0b1000].filter((layers) => layers !== held);
+      expect(await io.setWakeLayers(mine)).toEqual({ ok: true });
+      await session.lighting.setWakeLayers(theirs); // changed elsewhere meanwhile
+      io.refreshLighting();
+      await seen("lightingRefresh");
+      dispatch({ type: "draftRevert", items: [{ kind: "wakeLayers" }] });
+      expect(state().lightingOutputMode?.wake_layers).toBe(theirs);
+      expect(draftOf(state()).changes).toEqual([]);
+    });
+  });
+
+  it("a held-back lighting control still has what it was based on after a send that wrote lights", async () => {
+    await inDraft(async ({ session, io, state, dispatch }) => {
+      const held = mutableLighting(state().lightingState!);
+      const item = { kind: "lightingState" as const };
+      dispatch({ type: "draftRestore", patch: [{ item, before: held, after: { ...held, output_brightness: held.output_brightness === 40 ? 41 : 40 } }] });
+      await session.lighting.setState({ ...held, output_brightness: held.output_brightness === 60 ? 61 : 60 }); // changed elsewhere meanwhile
+      dispatch({ type: "paint", layer: 1, cells: [light(4)] });
+      expect(await io.applyBatch({ settingNow: [] })).toEqual({ ok: true });
+      expect(draftOf(state()).changes.map((change) => change.item)).toEqual([item]);
+      let asked: unknown[] = [];
+      await io.applyBatch({ confirmOverwrite: async (items) => { asked = items; return false; } });
+      expect(asked).toEqual([item]);
+    }, false);
+  });
+
+  it("a change made while its item is being sent is not taken for a change on the keyboard", async () => {
+    await inDraft(async ({ session, io, state, dispatch }) => {
+      dispatch({ type: "paint", layer: 1, cells: [light(4)] });
+      const capabilities = session.device.capabilities.bind(session.device);
+      let reads = 0;
+      // Painted on while the send reads back what it wrote.
+      const reading = vi.spyOn(session.device, "capabilities").mockImplementation(() => {
+        if ((reads += 1) === 2) dispatch({ type: "paint", layer: 1, cells: [light(5)] });
+        return capabilities();
+      });
+      expect(await io.applyBatch()).toEqual({ ok: true });
+      reading.mockRestore();
+      expect(draftOf(state()).changes.map((change) => change.item)).toEqual([{ kind: "lighting", layer: 1 }]);
+      let asked: unknown[] = [];
+      expect(await io.applyBatch({ confirmOverwrite: async (items) => { asked = items; return false; } })).toEqual({ ok: true });
+      expect(asked).toEqual([]);
+      expect(draftOf(state()).changes).toEqual([]);
+    });
+  });
+});
+
+describe("Live's own send, once edits pause", () => {
+  it("leaves a drafted item the keyboard changed for Send to ask about, and waits for the next edit", async () => {
+    await inDraft(async ({ session, io, state, dispatch }) => {
+      const clash = { kind: "key" as const, layer: 1, offset: 0 };
+      const fine = { kind: "key" as const, layer: 1, offset: 1 };
+      dispatch({
+        type: "draftRestore",
+        patch: [
+          { item: clash, before: state().layers[1][0], after: key("F13") },
+          { item: fine, before: state().layers[1][1], after: key("F14") },
+        ],
+      });
+      await session.keymap.setKey(1, 0, 0, key("F20")); // changed elsewhere meanwhile
+      expect(liveSendDue(state())).toBe(true);
+      expect(await io.applyBatch(UNATTENDED)).toEqual({ ok: true });
+      expect((await session.keymap.readAll())[1].actions.slice(0, 2)).toEqual([key("F20"), key("F14")]);
+      expect(draftOf(state()).changes.map((change) => change.item)).toEqual([clash]);
+      expect(liveSendDue(state())).toBe(false);
+      expect(sendWaits(state())).toBe(true);
+
+      dispatch({ type: "paint", layer: 1, cells: [light(4)] });
+      expect(liveSendDue(state())).toBe(true);
+    }, false);
+  });
+
+  it("does not try again after a send that failed, until the next edit", async () => {
+    await inDraft(async ({ session, io, state, dispatch }) => {
+      dispatch({ type: "paint", layer: 1, cells: [light(4)] });
+      const gone = vi.spyOn(session.device, "capabilities").mockRejectedValue(new Error("Session is closed"));
+      expect(await io.applyBatch(UNATTENDED)).toMatchObject({ ok: false });
+      expect(liveSendDue(state())).toBe(false);
+      expect(sendWaits(state())).toBe(true);
+
+      gone.mockRestore();
+      dispatch({ type: "paint", layer: 1, cells: [light(5)] });
+      expect(liveSendDue(state())).toBe(true);
+      expect(await io.applyBatch(UNATTENDED)).toEqual({ ok: true });
+      expect(draftOf(state()).changes).toEqual([]);
+      expect(liveSendDue(state())).toBe(false);
+      expect(sendWaits(state())).toBe(false);
+    }, false);
+  });
+
+  it("is due again for a change made while it was sending", async () => {
+    await inDraft(async ({ session, io, state, dispatch }) => {
+      dispatch({ type: "paint", layer: 1, cells: [light(4)] });
+      const capabilities = session.device.capabilities.bind(session.device);
+      let reads = 0;
+      vi.spyOn(session.device, "capabilities").mockImplementation(() => {
+        if ((reads += 1) === 2) dispatch({ type: "paint", layer: 1, cells: [light(5)] });
+        return capabilities();
+      });
+      expect(await io.applyBatch(UNATTENDED)).toEqual({ ok: true });
+      expect(liveSendDue(state())).toBe(true);
+      expect(sendWaits(state())).toBe(false);
     }, false);
   });
 });

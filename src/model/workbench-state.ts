@@ -214,6 +214,9 @@ export interface WorkbenchState {
    *  What you want is what the fields below show; the draft is the difference
    *  (ADR 0018, workbench/draft/want.ts). */
   base: KeyboardImage;
+  /** For each drafted item the keyboard changed after you did: the value your
+   *  change was based on, which Send's three-way check starts from (ADR 0012). */
+  basedOn: readonly { item: SyncItem; value: unknown }[];
   mode: Mode;
   uiLayer: number;
   /** Highest-precedence active layer, derived from `activeLayers`. */
@@ -283,6 +286,8 @@ export interface WorkbenchState {
   batchMode: boolean;
   /** A batch apply is writing staged edits to the device. */
   batchBusy: boolean;
+  /** Why the last send left changes in the draft; null once it left none, and
+   *  after the next edit. */
   batchError: string | null;
   layerBusy: boolean;
   layerError: string | null;
@@ -358,8 +363,9 @@ export type WorkbenchAction =
   /** Labels kept for this keyboard or read from a file (ADR 0020), without those
    *  on empty slots: no step. */
   | { type: "labelsLoaded"; labels: BehaviorLabels }
-  /** The keyboard was read (Send's read-back): the base is this image. */
-  | { type: "draftStored"; image: KeyboardImage }
+  /** The keyboard was read (Send's read-back): the base is this image. `wrote`:
+   *  the items the send wrote before it, now based on what was read. */
+  | { type: "draftStored"; image: KeyboardImage; wrote?: SyncItem[] }
   /** A kept draft put back: each item based on `before`, wanted as `after`. */
   | { type: "draftRestore"; patch: PatchEntry[] }
   | { type: "batchApplyStart" }
