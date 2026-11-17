@@ -28,6 +28,13 @@ GLIDE.
   go once you pause, and a change the keyboard made meanwhile waits for an
   explicit Send. The draft is kept in this browser per keyboard and offered
   back on the next connect. See `docs/sync.md`.
+- **Flash memory is spent only on purpose.** The keyboard keeps its layout in
+  flash, which lasts for a limited number of writes. Rynkbench writes only
+  what changed, once: in Live a key change is written as you make it, and
+  painted lights and other waiting changes go together once you pause; RGB
+  Lighting and RGB Effects wait for Apply, so dragging a slider writes
+  nothing. The pinned firmware also skips a key row equal to the stored one.
+  Planning many changes? Stay in Draft: Send writes them all in one go.
 - **Undo and Redo** cover every change, in Draft and Live (Ctrl/⌘+Z,
   Ctrl/⌘+Shift+Z or Ctrl+Y); in Live the keyboard follows.
 - **Rynkbench Guard** stops or asks before a change that breaks the layout,

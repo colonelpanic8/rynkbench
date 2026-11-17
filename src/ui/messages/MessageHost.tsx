@@ -54,7 +54,7 @@ function ConfirmDialog({ request }: { request: PendingConfirm }) {
               {request.title}
             </h2>
             {request.body && (
-              <p id={`confirm-${request.id}-body`} className="text-body leading-relaxed text-mute">
+              <p id={`confirm-${request.id}-body`} className="whitespace-pre-line text-body leading-relaxed text-mute">
                 {request.body}
               </p>
             )}
