@@ -38,6 +38,7 @@ import { useEditorTabs, type EditorTab } from "./editorTabs";
 import { LayerLighting } from "./LayerLighting";
 
 import { PickKey } from "./PickKey";
+import { isTapPattern, type Pick } from "./pickKey";
 import { SlotList } from "./SlotList";
 import { SwitchLayer, type LayerKind } from "./SwitchLayer";
 import { useKeyText } from "../useKeyText";
@@ -91,7 +92,9 @@ export function KeyEditor({ size = 310 }: { size?: number }) {
     }
   };
   const put = (target: Slot, value: Action | null) => apply(putSlot(slots, target, value));
-  const fill = (value: Action | "Transparent") => (value === "Transparent" ? apply("Transparent") : put(slot, value));
+  // A tap pattern is the whole key; anything else fills the slot being picked.
+  const fill = (value: Pick) =>
+    value === "Transparent" ? apply("Transparent") : isTapPattern(value) ? commit(value) : put(slot, value);
   const pickLayer = (kind: LayerKind, target: number) => {
     if (kind === "HoldTap") {
       void put("hold", { LayerOn: target } as Action);

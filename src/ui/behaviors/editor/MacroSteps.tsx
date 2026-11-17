@@ -2,11 +2,10 @@
 // card, and the editor of one step (its kind, its text, key or delay, and its
 // place in the macro).
 
-import { useState } from "react";
 import type { MacroStep } from "../../../model/macros";
 import { clampDelay } from "../../../model/macros";
 import { hidLabel } from "../../labels";
-import { KeycodeBrowser } from "../../keymap/ActionEditor";
+import { PickKeycode } from "../../keymap/PickKey";
 import { Button, Segmented, TextInput } from "../../kit";
 
 export function stepSummary(step: MacroStep): { tag: string; body: string } {
@@ -56,7 +55,6 @@ export function StepEditor({
   onChange: (next: MacroStep) => void;
   onMove: (by: -1 | 1) => void;
 }) {
-  const [query, setQuery] = useState("");
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
@@ -78,7 +76,7 @@ export function StepEditor({
       {(step.kind === "tap" || step.kind === "press" || step.kind === "release") && (
         <>
           <span className="font-mono text-body text-ink">{hidLabel(step.code)}</span>
-          <KeycodeBrowser compact modifierPicks={false} query={query} onQuery={setQuery} onPick={(code) => onChange({ kind: step.kind, code })} />
+          <PickKeycode onPick={(code) => onChange({ kind: step.kind, code })} />
         </>
       )}
       {step.kind === "delay" && (
