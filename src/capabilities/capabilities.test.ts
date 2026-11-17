@@ -9,6 +9,7 @@ const none: FactSource = {
   pointingConfig: null,
   lightingState: null,
   lightingOutputMode: null,
+  overlayReadSupported: false,
   caps: { max_morse: 0, max_patterns_per_key: 0, max_macros: 0, macro_space_size: 0, macros_writable: false, max_forks: 0 },
   morseProfileCapacity: 0,
 };
@@ -23,6 +24,7 @@ describe("firmwareFactsOf", () => {
       extensionEffects: false,
       pointing: false,
       outputMode: false,
+      overlay: false,
       morseSlots: 0,
       morsePatterns: 0,
       macroSlots: 0,
@@ -53,6 +55,12 @@ describe("firmwareFactsOf", () => {
     expect(firmwareFactsOf({ ...none, lightingOutputMode: {} }).outputMode).toBe(false);
     expect(firmwareFactsOf({ ...none, lightingState: {}, lightingOutputMode: {} }).outputMode).toBe(true);
   });
+
+  it("offers the overlay only when the lighting subsystem answered its read", () => {
+    expect(firmwareFactsOf({ ...none, lightingState: {}, overlayReadSupported: true }).overlay).toBe(true);
+    expect(firmwareFactsOf({ ...none, lightingState: {} }).overlay).toBe(false);
+    expect(firmwareFactsOf({ ...none, overlayReadSupported: true }).overlay).toBe(false);
+  });
 });
 
 describe("resolveCapabilities", () => {
@@ -72,6 +80,7 @@ describe("resolveCapabilities", () => {
       extensionEffects: true,
       pointing: true,
       outputMode: true,
+      overlay: true,
       morseSlots: 32,
       morsePatterns: 8,
       macroSlots: 0,
@@ -86,10 +95,11 @@ describe("resolveCapabilities", () => {
     expect(set.get("lighting.state")).toEqual({ id: "lighting.state", reach: "device", readOnly: false });
     expect(set.has("lighting.extension")).toBe(true);
     expect(set.has("lighting.output")).toBe(true);
+    expect(set.get("lighting.overlay")).toEqual({ id: "lighting.overlay", reach: "device", readOnly: false });
     expect(set.has("pointing")).toBe(true);
     expect(set.get("keys.doubleTap")).toEqual({ id: "keys.doubleTap", slots: 32, reach: "device", readOnly: false });
     expect(set.get("behaviors.morse")).toEqual({ id: "behaviors.morse", slots: 32, reach: "device", readOnly: false });
-    expect(set.list()).toHaveLength(9);
+    expect(set.list()).toHaveLength(10);
   });
 
   it("offers a double tap only when a morse entry fits tap, hold and tap-tap", () => {

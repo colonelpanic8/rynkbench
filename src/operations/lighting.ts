@@ -1,9 +1,9 @@
 // Lighting: a key's light on a layer (its scene cell or its status rules),
-// clearing a layer of them, the status setups that take their keys from the
+// keys each given their own effect, clearing a layer of them, the status setups that take their keys from the
 // board (a connection key, a battery bar), and the capacity checks every
 // lighting operation shares. Pure.
 
-import type { LightingSceneCell } from "../vendor/rynk-wasm/rynk_wasm";
+import type { LightingEffect, LightingSceneCell } from "../vendor/rynk-wasm/rynk_wasm";
 import type { KeyboardImage } from "../sync/image";
 import { planLight, type KeyLight } from "../model/lighting/key-light";
 import type { Rules } from "../model/lighting/rules";
@@ -53,6 +53,24 @@ export const setKeyLight: Operation<{ layer: number; leds: readonly number[]; li
     const painted = plan.paint.map((cell): LightingSceneCell => ({ layer, led_id: cell.led_id, effect: cell.effect }));
     const scenes = kept.length === image.scenes.length && painted.length === 0 ? image.scenes : [...kept, ...painted];
     return withLighting(image, facts, { scenes, rules: plan.rules ?? undefined });
+  },
+};
+
+export const setKeyEffects: Operation<{ layer: number; cells: ReadonlyArray<{ led: number; effect: LightingEffect }> }> = {
+  name: "set_key_effects",
+  description: "Gives keys on a layer each its own colour and effect, in place of the light each had there, status lights included.",
+  inputs: [
+    { name: "layer", kind: "integer", min: 0, description: "The layer the keys light on." },
+    { name: "cells", kind: "value", list: true, description: "{ led, effect } for each key." },
+  ],
+  run(image, { layer, cells }, facts) {
+    if (!image.layers[layer]) return failed(`Layer ${layer} does not exist`);
+    const leds = new Set(cells.map((cell) => cell.led));
+    const kept = image.scenes.filter((cell) => cell.layer !== layer || !leds.has(cell.led_id));
+    const painted = cells.map((cell): LightingSceneCell => ({ layer, led_id: cell.led, effect: cell.effect }));
+    const rules = [...leds].reduce((table, led) => withStatusLight(table, layer, led, null), image.runtimeConditionalScenes);
+    const rulesChanged = rules.length !== image.runtimeConditionalScenes.length;
+    return withLighting(image, facts, { scenes: [...kept, ...painted], rules: rulesChanged ? rules : undefined });
   },
 };
 

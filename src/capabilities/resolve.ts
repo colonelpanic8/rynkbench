@@ -19,6 +19,8 @@ export interface FirmwareFacts {
   pointing: boolean;
   /** The three-state lighting output policy and its live state. */
   outputMode: boolean;
+  /** Lights that are shown and never stored: the overlay. */
+  overlay: boolean;
   /** Entries in the morse (tap-dance) table; 0 when the firmware has none. */
   morseSlots: number;
   /** Patterns one morse entry can hold. */
@@ -43,6 +45,8 @@ export interface FactSource {
   pointingConfig: unknown;
   lightingState: unknown;
   lightingOutputMode: unknown;
+  /** Whether the firmware answered the overlay read. */
+  overlayReadSupported: boolean;
   caps: {
     max_morse: number;
     max_patterns_per_key: number;
@@ -64,6 +68,7 @@ export function firmwareFactsOf(source: FactSource): FirmwareFacts {
     extensionEffects: source.lightingExtension !== null,
     pointing: source.pointingConfig !== null,
     outputMode: source.lightingState !== null && source.lightingOutputMode !== null,
+    overlay: source.lightingState !== null && source.overlayReadSupported,
     morseSlots: source.caps.max_morse,
     morsePatterns: source.caps.max_patterns_per_key,
     macroSlots: source.caps.macro_space_size > 0 ? source.caps.max_macros : 0,
@@ -95,6 +100,9 @@ export function resolveCapabilities(facts: FirmwareFacts): CapabilitySet {
   }
   if (facts.outputMode) {
     add({ id: "lighting.output", reach: "device", readOnly: false });
+  }
+  if (facts.overlay) {
+    add({ id: "lighting.overlay", reach: "device", readOnly: false });
   }
   // A double tap is a morse entry of tap, hold and tap-tap: three patterns.
   if (facts.morseSlots > 0 && facts.morsePatterns >= 3) {
