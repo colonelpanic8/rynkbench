@@ -165,7 +165,6 @@ export function KeyLightFields({ light, lights, onChange, onTyping }: {
                 <EffectTimingFields
                   kind={light.effect}
                   timing={light.timing}
-                  clamp
                   onTiming={(timing) => {
                     setNumbers(true);
                     return onChange({ ...light, timing });

@@ -8,7 +8,7 @@ import { Segmented, TextInput } from "../kit";
 import { rgbToHsv, hsvToRgb } from "../../model/lighting/color";
 import { ColorPicker } from "./ColorPicker";
 import type { EffectKind, EffectTiming } from "../../model/lighting/effect";
-import { buildEffect, effectKind, effectRgb, effectTiming, timingBounds } from "../../model/lighting/effect";
+import { blinkDuty, buildEffect, effectKind, effectRgb, effectTiming, timingBounds } from "../../model/lighting/effect";
 import { numberEntry, type NumberEntryOptions } from "./numberEntry";
 
 export function NumberField({
@@ -68,35 +68,35 @@ export function NumberField({
 const KINDS: EffectKind[] = ["Solid", "Blink", "Breathe"];
 
 /** The numbers behind a blink or a breathe: its period, what the kind adds
- *  (a blink's duty, a breathe's step) and its phase. */
+ *  (a blink's duty, a breathe's step) and its phase, each kept to what the
+ *  firmware takes (see NumberField's `clamp`). */
 export function EffectTimingFields({
   kind,
   timing,
   onTiming,
   onTyping,
-  clamp,
 }: {
   kind: EffectKind;
   timing: EffectTiming;
-  /** The timing with a field's number changed: with `clamp`, once the number settles. */
+  /** The timing with a field's number changed, once the number settles. */
   onTiming: (timing: EffectTiming) => unknown;
-  /** With `clamp`: the timing as each number is typed. */
+  /** The timing as each number is typed. */
   onTyping?: (timing: EffectTiming) => void;
-  /** Keeps every field to what the firmware takes (see NumberField). */
-  clamp?: boolean;
 }) {
   if (kind === "Solid") return null;
-  const bounds = timingBounds(kind, timing);
+  // A blink stored above 100 percent shows, and is written on a change, as the 100 it runs at.
+  const shown = { ...timing, duty: blinkDuty(timing.duty) };
+  const bounds = timingBounds(kind, shown);
   const field = (name: keyof EffectTiming, label: string, unit: string) => (
     <NumberField
       label={label}
       unit={unit}
       min={bounds[name].min}
       max={bounds[name].max}
-      clamp={clamp}
-      value={timing[name]}
-      onChange={(value) => onTiming({ ...timing, [name]: value })}
-      onInput={onTyping && ((value) => onTyping({ ...timing, [name]: value }))}
+      clamp
+      value={shown[name]}
+      onChange={(value) => onTiming({ ...shown, [name]: value })}
+      onInput={onTyping && ((value) => onTyping({ ...shown, [name]: value }))}
     />
   );
   return (

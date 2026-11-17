@@ -25,6 +25,7 @@ import { boardForMatrixCells } from "../model/boards/transfer";
 import type { LightingTopology, RynkSession } from "../session/types";
 import { ruleToWire } from "../session/lighting-rules";
 import { normalizePointingConfig } from "../model/pointing";
+import { withBlinkDuties } from "../model/lighting/effect";
 import type { WorkbenchState } from "../model/workbench-state";
 import { initWasm as initRynkWasm } from "../session/wasm";
 
@@ -82,10 +83,11 @@ export function snapshotFromState(
   }
   const lightingState = state.lightingState;
   const wakeMask = state.lightingOutputMode?.wake_layers ?? state.lightingControls.wake_layers;
+  // A file holds each blink at the duty it runs at (a stored 128 is 100).
   const lighting =
     lightingState === null || state.scenePolicy === null
       ? undefined
-      : {
+      : withBlinkDuties({
           brightness: lightingState.output_brightness,
           output_mode: state.lightingOutputMode?.mode ?? "AlwaysOn",
           wake_layers: state.layers.flatMap((_, layer) =>
@@ -103,7 +105,7 @@ export function snapshotFromState(
           // Distinguish "no such table in this firmware" from an empty one; a
           // file naming rules conflicts with the former and not the latter.
           conditional_scenes: state.runtimeConditionalScenes.map(ruleToWire),
-        };
+        });
   return {
     // The device reports no BLE advertising name and the renderer does not fall
     // back to the file being replaced, so a round-trip only keeps one a caller

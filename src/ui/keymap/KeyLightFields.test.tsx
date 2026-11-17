@@ -13,13 +13,15 @@ const RED = { r: 255, g: 0, b: 0 };
 const OWN: LightingEffect = { Blink: { color: RED, period_ms: 750, phase_ms: 120, duty: 30 } };
 const FAST: LightingEffect = { Blink: { color: RED, period_ms: 500, phase_ms: 0, duty: 50 } };
 const STEADY: LightingEffect = { Solid: { color: RED } };
+/** A duty an older Rynkbench stored out of 255: the keyboard lights it throughout. */
+const OLD: LightingEffect = { Blink: { color: RED, period_ms: 500, phase_ms: 0, duty: 128 } };
 
 const draw = (ledId: number) =>
   renderInWorkbench(<LayerLighting ledId={ledId} />, {
     bundle: { sceneStatus: { capacity: 100 } },
     state: {
       uiLayer: 0,
-      compiledScenes: [OWN, FAST, STEADY].map((effect, led_id) => ({ layer: 0, led_id, effect })),
+      compiledScenes: [OWN, FAST, STEADY, OLD].map((effect, led_id) => ({ layer: 0, led_id, effect })),
     },
   });
 
@@ -46,6 +48,12 @@ describe("a light's speed in the RGB Lighting tab", () => {
 
   it("offers no speed for a steady light", () => {
     expect(speed(draw(2))).toBeUndefined();
+  });
+
+  it("shows a duty stored above 100 percent as the 100 it runs at", () => {
+    const html = draw(3);
+    expect(speed(html)).toBe("Custom");
+    expect(numbers(html)).toEqual({ Period: 500, Duty: 100, Phase: 0 });
   });
 
   it("shows the Paint brush's own timing, whatever key is shown", () => {

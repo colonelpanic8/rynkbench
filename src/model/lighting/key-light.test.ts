@@ -16,7 +16,7 @@ describe("a key's light", () => {
     expect(keyLightOf(undefined)).toEqual({ kind: "below" });
     expect(keyLightOf(BLACK_EFFECT)).toEqual({ kind: "off" });
     expect(keyLightOf(solid())).toMatchObject({ kind: "color", color: RED, effect: "Solid" });
-    expect(keyLightOf({ Blink: { color: RED, period_ms: 500, phase_ms: 0, duty: 128 } })).toMatchObject({
+    expect(keyLightOf({ Blink: { color: RED, period_ms: 500, phase_ms: 0, duty: 50 } })).toMatchObject({
       effect: "Blink",
       timing: { periodMs: 500 },
     });
