@@ -116,10 +116,13 @@ function Segments<T extends string | number>({ options, value, onPick }: {
   );
 }
 
-export function KeyLightFields({ light, lights, onChange }: {
+export function KeyLightFields({ light, lights, onChange, onTyping }: {
   light: KeyLight;
   lights: KeyLights;
-  onChange: (light: KeyLight) => void;
+  /** Gives the keys `light`; false, or a promise of false, when that was refused. */
+  onChange: (light: KeyLight) => unknown;
+  /** A timing number as it is typed, before it settles. */
+  onTyping?: (light: KeyLight) => void;
 }) {
   // Custom was picked, or a number typed, for these keys (the tab mounts the
   // fields afresh for each): the numbers stay open even while they match a named speed.
@@ -165,7 +168,11 @@ export function KeyLightFields({ light, lights, onChange }: {
                   clamp
                   onTiming={(timing) => {
                     setNumbers(true);
-                    onChange({ ...light, timing });
+                    return onChange({ ...light, timing });
+                  }}
+                  onTyping={(timing) => {
+                    setNumbers(true);
+                    onTyping?.({ ...light, timing });
                   }}
                 />
               </div>
