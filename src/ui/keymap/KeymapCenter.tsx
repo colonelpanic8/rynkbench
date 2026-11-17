@@ -23,7 +23,6 @@ import { stagedBetween } from "../../model/lighting/compare";
 
 import { effectAnim, effectColor } from "../lighting/decor";
 import { isDark } from "../../model/lighting/effect";
-import { targetPreviewEffects } from "../../model/lighting/preview";
 import { RowMenu, type MenuEntry } from "../RowMenu";
 import { KeyHoverCard } from "./KeyHoverCard";
 import { CanvasPill } from "./CanvasPill";
@@ -97,20 +96,9 @@ export function KeymapCenter() {
   const lights = useKeyLights();
   // The lit board shows the layer's lighting whatever the switch says.
   const lit = light.open || (layerLightingAvailable && showLighting);
-  // The compiled firmware cells are part of what the layer shows, so the
-  // canvas previews the same composition the keyboard shows.
-  const sceneEffects = useMemo(
-    () =>
-      lit
-        ? targetPreviewEffects(
-            state.uiLayer,
-            lightingDraftFor(state, state.uiLayer),
-            state.compiledScenes,
-          )
-        : null,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lit, state.compiledScenes, state.layerDrafts, state.scenes, state.uiLayer],
-  );
+  // The layer's lights with the firmware's compiled cells under them, as the
+  // keyboard shows them, and while trying out the try-out lights over them.
+  const sceneEffects = lit ? lights.shown : null;
   const sceneStaged = useMemo(
     () =>
       lit ? stagedBetween(lightingDraftFor(state, state.uiLayer), lightingBaseFor(state, state.uiLayer)) : null,
@@ -180,12 +168,13 @@ export function KeymapCenter() {
     if (key.ledId !== undefined) lights.paint(brush, key.ledId);
   };
 
-  /** A key on the lit board: its LED's colour (a lock light lit, a battery above its level) and effect. */
+  /** A key on the lit board: its LED's colour (a lock light lit, a battery above its level) and
+   *  effect; while trying out, its try-out light over its stored one. */
   function litKey(key: KeyView): KeyDecor["lit"] {
     if (key.ledId === undefined) return {};
-    const shown = lights.lightOf(key.ledId);
+    const shown = lights.shownOf(key.ledId);
     const color = shownColor(shown);
-    const effect = lights.preview.get(key.ledId);
+    const effect = lights.shown.get(key.ledId);
     return { led: color ? cssEmissiveRgb(color) : undefined, anim: shown.kind === "color" && effect ? effectAnim(effect) : undefined };
   }
 

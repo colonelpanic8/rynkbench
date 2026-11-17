@@ -5,7 +5,7 @@ import { WorkbenchContext } from "../state";
 import { FirmwareRulesPanel } from "./FirmwareRulesPanel";
 
 describe("firmware rule legends", () => {
-  it("uses the selected layer's binding instead of the default or stock legend", () => {
+  it("uses the binding of the top layer on now instead of the default or stock legend", () => {
     const value = testWorkbench({
       bundle: {
         caps: { num_cols: 1, num_layers: 2 },
@@ -13,9 +13,8 @@ describe("firmware rule legends", () => {
       },
       state: {
         layers: [[{ Single: { Key: { Hid: "A" } } }], [{ Single: { Key: { Hid: "B" } } }]],
-        lightingTarget: 0,
         activeLayers: [1],
-        defaultLayer: 1,
+        defaultLayer: 0,
         compiledScenes: [{ layer: 0, led_id: 4, effect: { Solid: { color: { r: 255, g: 0, b: 0 } } } }],
         conditionalScenes: [],
         battery: "Unavailable",
@@ -30,8 +29,8 @@ describe("firmware rule legends", () => {
       <WorkbenchContext value={value}><FirmwareRulesPanel /></WorkbenchContext>,
     );
 
-    expect(html).toContain("LH1 · A");
-    expect(html).not.toContain("LH1 · B");
+    expect(html).toContain("LH1 · B");
+    expect(html).not.toContain("LH1 · A");
     expect(html).not.toContain("LH1 · Esc");
   });
 });

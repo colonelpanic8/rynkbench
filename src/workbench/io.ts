@@ -7,6 +7,7 @@ import type {
   BehaviorConfig,
   EncoderAction,
   KeyAction,
+  LightingOverlayCell,
   LightingExtensionState,
   LightingLayerPolicy,
   LightingMutableState,
@@ -34,6 +35,7 @@ import { importLayout, type LayoutImported } from "./io-import";
 import { keyIo } from "./io-keys";
 import { layerIo } from "./io-layers";
 import { lightingIo } from "./io-lighting";
+import { tryOutIo } from "./io-try-out";
 import { settingsIo } from "./io-settings";
 
 /** How the workbench narrates a change: React's dispatch has this type, and so
@@ -87,6 +89,13 @@ export interface WorkbenchIo {
   /** Read one effect's generic parameter list. Firmware without the parameter
    *  surface records an empty list, which renders as no parameter controls. */
   loadExtensionParams(effect: number): void;
+  /** Try-out lights (the overlay): never stored, outside the draft and Undo.
+   *  Changes reach the keyboard after a short pause, so a Paint stroke is one write. */
+  tryOut(cells: LightingOverlayCell[], erase: number[]): void;
+  /** Takes every try-out light off the keyboard. */
+  clearTryOut(): Promise<IoWriteResult>;
+  /** Stores the try-out lights on `layer` as one change and one Undo step, then clears them. */
+  keepTryOut(layer: number): Promise<IoWriteResult>;
   /** Optimistic single-value writes. Each resolves once the device has
    *  answered; the reducer already reflects the outcome by then. */
   setSlot<K extends SlotKind>(kind: K, index: number, value: SlotValueOf<K>): Promise<IoWriteResult>;
@@ -202,6 +211,7 @@ export function makeIo(
     ...keyIo(context),
     ...layerIo(context),
     ...lightingIo(context),
+    ...tryOutIo(context),
     ...settingsIo(context),
     disconnect() {
       onDisconnect();

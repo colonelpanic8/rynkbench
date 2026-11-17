@@ -8,7 +8,7 @@ import { useWorkbench } from "../state";
 import { SectionLabel } from "../kit";
 import { effectColor } from "./decor";
 import { firmwareRuleGroups } from "../../model/lighting/firmware-rules";
-import { previewActiveLayers } from "../../model/lighting/preview";
+import { LIVE_VIEW, previewActiveLayers } from "../../model/lighting/preview";
 import { layersInMask } from "../../model/lighting/wake-layers";
 import { lightingKeyLegend } from "./keyLegend";
 import { useLayerNames } from "../layer-names";
@@ -18,8 +18,8 @@ export function FirmwareRulesPanel() {
   const layerNames = useLayerNames();
   const total = state.compiledScenes.length + state.conditionalScenes.length;
   const activeLayers = useMemo(
-    () => previewActiveLayers(state.lightingTarget, state.activeLayers, state.defaultLayer),
-    [state.activeLayers, state.defaultLayer, state.lightingTarget],
+    () => previewActiveLayers(LIVE_VIEW, state.activeLayers, state.defaultLayer),
+    [state.activeLayers, state.defaultLayer],
   );
   const batteries = useMemo(
     () => new Map([[0, state.battery], [1, state.peripheralBattery]]),
@@ -31,13 +31,13 @@ export function FirmwareRulesPanel() {
       if (key.ledId !== undefined) {
         const label = lightingKeyLegend(
           layerNames, key, state.layers, bundle.caps.num_cols,
-          state.lightingTarget, state.activeLayers, state.defaultLayer,
+          LIVE_VIEW, state.activeLayers, state.defaultLayer,
         );
         result.set(key.ledId, keyAddressWithLegend({ ...key, label }));
       }
     }
     return result;
-  }, [bundle.model, bundle.caps.num_cols, state.layers, state.lightingTarget, state.activeLayers, state.defaultLayer, layerNames]);
+  }, [bundle.model, bundle.caps.num_cols, state.layers, state.activeLayers, state.defaultLayer, layerNames]);
   const nameOf = useCallback(
     (layer: number) => layerName(state.layerMetadata, layer),
     [state.layerMetadata],

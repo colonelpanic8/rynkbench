@@ -7,6 +7,7 @@ import type { LightingSceneCell } from "../../vendor/rynk-wasm/rynk_wasm";
 import { WorkbenchContext } from "../state";
 
 import { LayerLighting } from "./LayerLighting";
+import { lightView } from "./lightView";
 import { KeymapCenter } from "./KeymapCenter";
 import { openBundle } from "../bundle";
 import { initialWorkbenchState } from "../../workbench";
@@ -143,6 +144,39 @@ describe("layer lighting summary", () => {
       expect(html).toContain('aria-label="Lights"');
     } finally {
       await session.close();
+    }
+  });
+});
+
+describe("try out (not saved)", () => {
+  const lighting = { revision: 1, output_enabled: true, output_brightness: 200, background: { enabled: false, hue: 0, saturation: 0, value: 0, speed: 0, mode: "Solid" as const }, overlay_len: 0 };
+  const draw = (bundle: TestWorkbenchParts["bundle"]) =>
+    renderInWorkbench(<LayerLighting ledId={4} />, {
+      bundle: { sceneStatus: { capacity: 100 }, runtimeConditionalStatus: { capacity: 32 }, lightingState: lighting, ...bundle },
+      state: { uiLayer: 0, layerMetadata: [{ occupied: true, name: "Base" }], compiledScenes, scenes: [], layerDrafts: {}, lightingState: lighting },
+    });
+  const keyboard = { session: { kind: "webhid" as const }, overlayReadSupported: true };
+  const choice = (html: string, title: string) => new RegExp(`<button[^>]*role="radio"[^>]*>(?:(?!</button>).)*${title}`).exec(html)?.[0] ?? "";
+
+  it("is offered for a connected keyboard with an overlay, never without one or in a file", () => {
+    expect(draw(keyboard)).toContain("Try out (not saved)");
+    expect(draw({ ...keyboard, overlayReadSupported: false })).not.toContain("Try out (not saved)");
+    expect(draw({ ...keyboard, session: { kind: "offline" } })).not.toContain("Try out (not saved)");
+  });
+
+  it("while on, says the lights are not saved and offers only a colour or none", () => {
+    lightView.setTryingOut(true);
+    try {
+      const html = draw(keyboard);
+      expect(html).toContain("Not saved: these lights vanish when the keyboard restarts.");
+      expect(choice(html, "Layer below")).toContain('disabled=""');
+      expect(choice(html, "Status light")).toContain('disabled=""');
+      expect(choice(html, "Color")).not.toContain('disabled=""');
+      // The tab edits the key's try-out light, which it has none of yet.
+      expect(choice(html, "Off")).toContain('aria-checked="true"');
+      expect(html).not.toContain("Clear Base&#x27;s lights");
+    } finally {
+      lightView.setTryingOut(false);
     }
   });
 });

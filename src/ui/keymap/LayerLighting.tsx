@@ -7,7 +7,9 @@
 // While the tab is open the canvas shows the board under its lights. At the
 // foot, the whole layer's lights can be cleared, after a question.
 // Changes join the draft (sent with Review & send; in Live, once painting
-// pauses). The lights as a whole are in Layout properties (RGB settings…).
+// pauses). With "Try out (not saved)" on, the choice, the selection and Paint
+// give try-out lights instead: a colour, or Off for none (TryOut.tsx).
+// The lights as a whole are in Layout properties (RGB settings…).
 
 import { useEffect, useState } from "react";
 import { openProperties } from "../properties/store";
@@ -26,6 +28,8 @@ import { KeyLightFields } from "./KeyLightFields";
 import { lightView, useLightView } from "./lightView";
 import { useKeyLights } from "./useKeyLights";
 import { onApple } from "./useKeySelection";
+import { useTryOut } from "./useTryOut";
+import { TryOutPanel, TryOutSwitch } from "./TryOut";
 
 const [RED] = LED_PRESETS;
 
@@ -35,16 +39,17 @@ const choiceOf = (light: KeyLight): Choice =>
   light.kind === "off" || light.kind === "color" || light.kind === "below" ? light.kind : "status";
 
 /** Each choice, with what it starts as when picked. */
-const CHOICES: Array<{ id: Choice; start: KeyLight; title: string; text: string; needsRules?: boolean }> = [
+const CHOICES: Array<{ id: Choice; start: KeyLight; title: string; text: string; needsRules?: boolean; stored?: boolean }> = [
   { id: "off", start: { kind: "off" }, title: "Off", text: "The LED stays dark." },
   { id: "color", start: { kind: "color", color: RED, effect: "Solid", timing: DEFAULT_TIMING }, title: "Color", text: "One color you pick." },
-  { id: "below", start: { kind: "below" }, title: "Layer below", text: "Shows what the layer below lights." },
+  { id: "below", start: { kind: "below" }, title: "Layer below", text: "Shows what the layer below lights.", stored: true },
   {
     id: "status",
     start: { kind: "lock", lock: "caps_lock", on: RED, off: null },
     title: "Status light",
     text: "Shows a lock, the battery or the connection.",
     needsRules: true,
+    stored: true,
   },
 ];
 
@@ -72,6 +77,7 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
   const { bundle, state, dispatch } = useWorkbench();
   const view = useLightView();
   const lights = useKeyLights();
+  const tryOut = useTryOut();
   const layer = state.uiLayer;
 
   useEffect(() => {
@@ -125,7 +131,7 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <h3 className="mr-auto text-small font-semibold tracking-widest text-mute uppercase">
-          RGB Lighting · {name}
+          RGB Lighting · {tryOut.on ? "Try out" : name}
         </h3>
         <button
           type="button"
@@ -145,6 +151,8 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
           <BrushIcon size={13} /> Paint
         </button>
       </div>
+      {tryOut.offered && <TryOutSwitch tryOut={tryOut} />}
+      {tryOut.on && <TryOutPanel tryOut={tryOut} layer={layer} name={name} />}
       {view.brush && <p className="text-small text-accent">Click or drag over keys to give them this lighting.</p>}
       {view.selecting && (
         <p className="text-small text-accent">Click or drag over keys to select them; start on a selected key to take keys out.</p>
@@ -186,20 +194,23 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
 
       {CHOICES.filter((choice) => !choice.needsRules || lights.statusLights).map((choice) => {
         const chosen = choiceOf(shown) === choice.id;
+        const notTried = tryOut.on && choice.stored === true;
+        const text = notTried ? "Not for a try-out: it is saved on the layer." : tryOut.on && choice.id === "off" ? "No try-out light: the saved one shows." : choice.text;
         return (
           <div
             key={choice.id}
             className={cx(
               "rounded-xl border transition-colors",
               chosen ? "border-accent bg-accent-dim" : "border-line-strong hover:border-mute",
-              unusable && "opacity-50",
+              (unusable || notTried) && "opacity-50",
             )}
           >
             <button
               type="button"
               role="radio"
               aria-checked={chosen}
-              disabled={unusable}
+              disabled={unusable || notTried}
+              title={notTried ? "Try-out lights are a color or none" : undefined}
               onClick={() => choose(kept[choice.id] ?? choice.start)}
               className="flex w-full cursor-pointer items-start gap-3 px-4 py-2.5 text-left disabled:cursor-not-allowed"
             >
@@ -213,7 +224,7 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
               </span>
               <span>
                 <span className="block text-ui font-semibold text-ink">{choice.title}</span>
-                <span className="block text-small text-mute">{choice.text}</span>
+                <span className="block text-small text-mute">{text}</span>
               </span>
             </button>
             {chosen && (choice.id === "color" || choice.id === "status") && (
@@ -233,15 +244,17 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
         >
           RGB settings…
         </button>
-        <Button
-          variant="danger"
-          className="px-2.5 py-1 text-small"
-          disabled={lights.layerLights === 0}
-          reason={`No key has a light of its own on ${name}`}
-          onClick={() => void clearLayer()}
-        >
-          Clear {name}'s lights…
-        </Button>
+        {!tryOut.on && (
+          <Button
+            variant="danger"
+            className="px-2.5 py-1 text-small"
+            disabled={lights.layerLights === 0}
+            reason={`No key has a light of its own on ${name}`}
+            onClick={() => void clearLayer()}
+          >
+            Clear {name}'s lights…
+          </Button>
+        )}
       </div>
     </div>
   );
