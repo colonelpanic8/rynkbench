@@ -42,11 +42,6 @@ In this order; decisions in ADR 0017 and an update of ADR 0002.
 25. **Screen tests that interact.** Every screen test renders static markup; none clicks. Send, drag-swap, the selection gestures and the pick flow are untested at screen level.
 26. **`DraftKeeper`'s effect** (Live's own send, the kept draft's flush) is untested; only its gate (`liveSendDue`) is.
 
-## Firmware (outside Rynkbench)
-
-27. **Keep the lights as they were left:** wanted in the firmware. Until then a restart brings back full brightness and the compiled background.
-28. **Skip an unchanged row segment** when it is written: wanted in the firmware; offer upstream.
-
 ## Done recently
 
 - Keys written by whole rows (ADR 0021); the base is the last read, what a draft was based on, Live's own send (ADR 0022); a file import is a commit (ADR 0023); lighting tools on the keymap, including several keys selected (ADR 0024).

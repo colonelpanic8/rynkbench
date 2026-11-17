@@ -15,7 +15,7 @@ What is efficient is decided by the firmware. Read in RMK (`colonelpanic8/rmk`):
 | Keymap writes have no transaction. | | A dropped link can leave a change half-done; it must be resumable. |
 | A key is only applied once it is written; there is no "try it in RAM". | | Live must write keys at once to let you try them. |
 
-Other firmware: QMK compares before every EEPROM write (`eeprom_update_*`) and its wear-leveling layer skips unchanged writes; ZMK delays settings writes (60 s by default) and ZMK Studio holds keymap changes in RAM until Save. Rynkbench does the comparing and the gathering on the browser side. Skipping an unchanged segment in the firmware itself is still wanted.
+Other firmware: QMK compares before every EEPROM write (`eeprom_update_*`) and its wear-leveling layer skips unchanged writes; ZMK delays settings writes (60 s by default) and ZMK Studio holds keymap changes in RAM until Save. Rynkbench does the comparing and the gathering on the browser side. The pinned firmware also skips a row segment equal to the stored one.
 
 Firmware that stores one item per key still works: it gets every cell of a changed row written. No capability tells the two storage models apart.
 

@@ -18,4 +18,4 @@ ADR 0012 planned keys as runs of neighbouring changed cells and wrote them in pa
 - Moving a layer with three keys on one row stores two segments: the row it leaves and the row it arrives on (`io-layers.test.ts`).
 - A Live edit of one key (`io.setKey`) still sends one cell; the firmware stores its segment.
 - Firmware that still stores one item per key gets every cell of a changed row written, so a scattered change costs more there than before. No capability tells the two storage models apart; Rynkbench assumes row segments.
-- The firmware still does not skip a segment equal to the stored one. Rynkbench's comparing stays the only guard against storing an unchanged row.
+- The pinned firmware skips a segment equal to the stored one, so a resent row costs no flash there. Rynkbench still compares first: older firmware stores whatever it is sent, and an unsent row costs no round trip.
