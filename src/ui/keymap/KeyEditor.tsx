@@ -59,7 +59,7 @@ export function KeyEditor({ size = 310 }: { size?: number }) {
 
   // A status setup is choosing its keys: a click selects, it does not edit.
   if (pick) {
-    return <EditorPlaceholder size={size}>↑ {pickPrompt(pick, layerName(state.layerMetadata, pick.layer))}</EditorPlaceholder>;
+    return <EditorPlaceholder size={size}>↑ {pickPrompt(pick, layerName(state.layerMetadata, state.uiLayer))}</EditorPlaceholder>;
   }
   if (!selection) {
     return <EditorPlaceholder size={size}>↑ Click a key on the keyboard to change what it does</EditorPlaceholder>;

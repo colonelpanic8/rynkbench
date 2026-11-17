@@ -1,6 +1,7 @@
 // Picking keys on the board for a status setup: who steps aside, what the
 // canvas says and collects, and what ends the pick.
 
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 import type { KeyPick } from "../../model/lighting/key-pick";
 import type { Selection } from "../../model/workbench-state";
@@ -14,6 +15,13 @@ import { KeymapCenter } from "../keymap/KeymapCenter";
 import { PickBanner } from "../keymap/PickBanner";
 import { openProperties, closeProperties } from "../properties/store";
 import { keyPick } from "./keyPick";
+import { lightView } from "../keymap/lightView";
+import { endWorkbench } from "../workbench-end";
+import { usePropertiesTab } from "../properties/store";
+
+function PropertiesTab() {
+  return usePropertiesTab() ?? "closed";
+}
 
 const bar: KeyPick = { kind: "battery", layer: 2, node: 0, order: "auto", style: "bands" };
 const usb: KeyPick = { kind: "connection", layer: 2, connection: { type: "usb" } };
@@ -35,10 +43,10 @@ describe("a pick of keys on the board", () => {
   });
 
   const keys = [0, 1, 2].map((col) => ({ row: 0, col, ledId: col, shape: { rect: { x: col, y: 0 } } }));
-  const banner = (pick: KeyPick, selection: Selection | null) =>
+  const banner = (pick: KeyPick, selection: Selection | null, uiLayer = pick.layer) =>
     renderInWorkbench(<PickBanner pick={pick} />, {
       bundle: { caps: { num_layers: 3 }, model: { keys: [...keys, { row: 1, col: 0, shape: { rect: { x: 0, y: 1 } } }] } },
-      state: { layerMetadata: [{ occupied: true, name: "Base" }, { occupied: true, name: "Lower" }, { occupied: true, name: "Magic" }], selection },
+      state: { layerMetadata: [{ occupied: true, name: "Base" }, { occupied: true, name: "Lower" }, { occupied: true, name: "Magic" }], selection, uiLayer },
     });
   const done = (html: string) => /<button[^>]*>Done<\/button>/.exec(html)![0];
 
@@ -59,12 +67,26 @@ describe("a pick of keys on the board", () => {
     expect(done(banner(usb, { type: "key", row: 0, col: 0 }))).not.toContain('aria-disabled="true"');
   });
 
+  it("is for the layer shown, when another is shown during the pick", () => {
+    expect(banner(bar, null, 1)).toContain("Click or drag over the keys for the battery bar on Lower");
+  });
+
+  it("ends with the workbench, with trying out and Layout properties", () => {
+    lightView.setTryingOut(true);
+    openProperties("lighting");
+    keyPick.start(usb);
+    endWorkbench();
+    expect(keyPick.get()).toBeNull();
+    expect(lightView.get().tryingOut).toBe(false);
+    expect(renderToStaticMarkup(<PropertiesTab />)).toBe("closed");
+  });
+
   it("turns the keymap into the picker: its banner over the canvas, and no key editor", async () => {
     const session = await mockProvider(glove80Board).connect();
     try {
       const bundle = await openBundle(session);
       const [key] = bundle.model.keys;
-      const parts = { bundle, state: { ...initialWorkbenchState(bundle), selection: { type: "key" as const, row: key.row, col: key.col } } };
+      const parts = { bundle, state: { ...initialWorkbenchState(bundle), uiLayer: bar.layer, selection: { type: "key" as const, row: key.row, col: key.col } } };
       expect(renderInWorkbench(<KeymapCenter />, parts)).toContain("Drag to swap");
       expect(renderInWorkbench(<KeyEditor />, parts)).toContain("Pick Key");
 

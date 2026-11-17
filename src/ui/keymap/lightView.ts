@@ -3,8 +3,8 @@
 // keys gives them the tab's light; with Select on, it selects them, so one
 // choice in the tab reaches them all. While trying out, the tab, Paint and
 // the selection give keys try-out lights (useTryOut.ts); trying out outlasts
-// the tab, as the lights it put on the keyboard do. The tab and the canvas
-// share this.
+// the tab, as the lights it put on the keyboard do, but not the workbench
+// (ui/workbench-end.ts). The tab and the canvas share this.
 
 import { useSyncExternalStore } from "react";
 import type { KeyLight } from "../../model/lighting/key-light";
@@ -43,6 +43,8 @@ export const lightView = {
   setLifetime: (lifetimeMs: number | null) => set({ ...view, lifetimeMs }),
   setBrush: (brush: KeyLight | null) => set({ ...view, brush, selecting: brush ? false : view.selecting }),
   setSelecting: (selecting: boolean) => set({ ...view, selecting, brush: selecting ? null : view.brush }),
+  /** The workbench went away: the next keyboard starts with trying out off. */
+  end: () => set(CLOSED),
 };
 
 export function useLightView(): LightView {

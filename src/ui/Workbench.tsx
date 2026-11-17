@@ -41,6 +41,7 @@ import { useTerms } from "./terms";
 import { getLocaleId, subscribeLocale } from "./locale";
 import { areaOfSection, areasFor, sectionTerm, type Area, type AreaId, type SectionId } from "./areas";
 import { DocumentTransferContext, useDocumentTransfer } from "./transfer-actions";
+import { endWorkbench } from "./workbench-end";
 /** The sections of the current area, when it has more than one. */
 function SectionTabs({
   sections,
@@ -234,6 +235,8 @@ export function Workbench({
   useEffect(() => {
     historyRef.current = history;
   });
+
+  useEffect(() => endWorkbench, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
