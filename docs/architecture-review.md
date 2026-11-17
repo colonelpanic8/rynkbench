@@ -54,7 +54,7 @@ Against growth:
 - **`ui/state.tsx` does three jobs** (state, `io`, context) in 1,594 lines, on the exemption list.
 - **The workbench context is one large object** every screen takes whole.
 - **Module-level state** in the draft history leaks between tests and between windows.
-- **Bulk changes bypass the one write path.** `CLAUDE.md` says a bulk change becomes a wanted image and goes through `syncTo`; transforms write their keys as one guarded batch, then each combo, morse and fork slot and the macros separately, through `io` (`ui/advanced/TransformsTab.tsx`). So do the rule panels and some presets (todo items 5 and 6).
+- **Bulk changes bypass the one write path.** `AGENTS.md` says a bulk change becomes a wanted image and goes through `syncTo`; transforms write their keys as one guarded batch, then each combo, morse and fork slot and the macros separately, through `io` (`ui/advanced/TransformsTab.tsx`). So do the rule panels and some presets (todo items 5 and 6).
 
 ### 5. Ready for Flows: the substrate is, the path is not
 
