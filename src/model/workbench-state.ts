@@ -434,6 +434,8 @@ export type WorkbenchAction =
   | { type: "extensionParamsLoaded"; effect: number; items: LightingExtensionParam[] }
   | { type: "hoverLeds"; leds: number[] | null }
   | { type: "lightingStateSet"; state: LightingState }
+  /** A realtime lighting write read back (ADR 0019): the keyboard holds these parts now; no step. */
+  | { type: "realtimeStored"; parts: Partial<KeyboardImage>; lighting?: LightingState }
   | { type: "wakeLayersSet"; outputMode: LightingOutputModeState }
   | { type: "pointingDraftSet"; config: PointingConfig }
   | { type: "pointingDraftReset" }

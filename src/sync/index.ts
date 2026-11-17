@@ -8,6 +8,6 @@ export type { Patch, PatchEntry } from "./patch";
 export { applyPatch, invertPatch, joinPatches, patchBetween, rebase } from "./patch";
 export { conflicts } from "./conflicts";
 export type { ImageFeatures, ReadImage } from "./read";
-export { mutableLighting, partsOf, profileSlots, readImage } from "./read";
+export { mutableLighting, partsOf, profileSlots, readImage, readSettings } from "./read";
 export type { SyncResult } from "./write";
 export { SyncStopped, syncTo, writePlan } from "./write";

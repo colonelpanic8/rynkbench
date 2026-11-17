@@ -26,6 +26,7 @@ const LIGHTING_ACTION_TYPES = [
   "extensionParamsLoaded",
   "hoverLeds",
   "lightingStateSet",
+  "realtimeStored",
 ] as const;
 
 export type LightingAction = Extract<WorkbenchAction, { type: (typeof LIGHTING_ACTION_TYPES)[number] }>;
@@ -169,5 +170,10 @@ export function reduceLighting(state: WorkbenchState, act: LightingAction): Work
       return { ...state, hoverLeds: act.leds };
     case "lightingStateSet":
       return { ...withLightingRead(state, act.state), lightingBusy: false, lightingError: null };
+    case "realtimeStored": {
+      const parts = act.parts.effectParams ? { ...act.parts, effectParams: { ...state.base.effectParams, ...act.parts.effectParams } } : act.parts;
+      const read = withRead(state, parts);
+      return { ...(act.lighting ? withLightingRead(read, act.lighting) : read), lightingError: null };
+    }
   }
 }

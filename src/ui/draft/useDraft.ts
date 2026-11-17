@@ -74,8 +74,9 @@ export function useDraft() {
       const yes = await askConfirm({
         title: "Send each change to the keyboard at once?",
         body:
-          "In Live mode every change is written to the keyboard's memory as you make it, which wears it a little with each write. " +
-          "Planning several changes? Stay in Draft and send them once.",
+          "Your keyboard keeps its layout in flash memory, which lasts for a limited number of writes.\n\n" +
+          "In Live, a key change is written as you make it: once, and only what changed. Painted lights and other waiting changes are sent together after a short pause. Lights, brightness and effects wait for Apply, so dragging a slider writes nothing.\n\n" +
+          "Planning many changes? Stay in Draft: Send writes them all in one go.",
         confirmLabel: "Turn on Live",
       });
       if (yes) dispatch({ type: "batchMode", enabled: false });

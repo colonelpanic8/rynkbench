@@ -34,6 +34,8 @@ Adapted from GLIDE, which proves them for ZMK.
 
 Organize by what the person is trying to do, not by protocol area. Today’s seven modes fold into six areas.
 
+The top bar has buttons only for the areas that open over the keymap (Device, Insights); clicking the open one goes back. The keymap is home, and the side panel's Behavior Library opens Behaviors; every other screen has "‹ Keymap" above its sections.
+
 | Area | Holds today’s | Needs (capabilities) | Appears for |
 | --- | --- | --- | --- |
 | Layout | Keymap, layers, encoders | keymap | every board |

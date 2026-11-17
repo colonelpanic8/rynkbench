@@ -229,6 +229,18 @@ export function SettingsBody() {
           </select>
         </Setting>
       </Section>
+      <Section title="Keyboard">
+        <Setting label="RGB Apply" info="Where Apply sends lights, brightness and effects: straight to the keyboard, in Draft too, or into the draft for Send.">
+          <PreferenceChoices
+            label="RGB Apply"
+            setting={PREFERENCES.realtimeLighting}
+            options={[
+              { value: true, label: "Keyboard" },
+              { value: false, label: "Draft" },
+            ]}
+          />
+        </Setting>
+      </Section>
       <Section title="Screen">
         <Setting label="Key editor">
           <PreferenceChoices

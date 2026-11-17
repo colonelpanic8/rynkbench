@@ -2,6 +2,8 @@
 // the firmware has a second slot), palette, value and speed, and each staged
 // effect's own parameters. Staged locally and applied in one go with
 // io.setExtensionState; the keyboard's returned state is the source of truth.
+// Apply writes to the keyboard at once or to the draft, as Settings' "RGB
+// Apply" says (ADR 0019); nothing is written before Apply.
 // Effects are on while their value is above zero: that is what the firmware's
 // RGB toggle flips. For Layout properties' RGB Effects tab (EffectsSection).
 // Names and ranges all come from the connected firmware.
@@ -112,6 +114,7 @@ export function useEffectsDraft() {
     ),
   );
   const effects = bundle.extensionEffectNames;
+  const dirty = selectionDirty || overlayDirty || paramWrites.length > 0;
 
   return {
     /** Null when the firmware has no effects. */
@@ -136,7 +139,7 @@ export function useEffectsDraft() {
         return { ...current, [effect]: values.map((v, i) => (i === index ? value : v)) };
       }),
     defaults: (block: ParamBlock) => setParamDrafts((current) => ({ ...current, [block.effect]: block.items.map((param) => param.default) })),
-    dirty: selectionDirty || overlayDirty || paramWrites.length > 0,
+    dirty,
     busy: state.lightingBusy,
     error: state.lightingError,
     apply: () => draft && io.setExtensionState({ ...draft }, paramWrites, overlayDraft),

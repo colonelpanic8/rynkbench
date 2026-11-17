@@ -20,6 +20,7 @@ export const SETTING_KEYS = {
   shiftedCharacters: "rynk:shifted-characters",
   keyEditorSide: "rynk:key-editor-side",
   sidePanelSide: "rynk:side-panel-side",
+  realtimeLighting: "rynk:realtime-lighting",
   /** Changes not yet sent to a keyboard, kept per device (ADR 0010). */
   draft: (serial: string) => `rynk:draft:${serial || "unknown"}`,
   /** Behavior names and descriptions, per device (ADR 0020). */

@@ -53,14 +53,22 @@ function SectionTabs({
   onSection: (section: SectionId) => void;
 }) {
   const term = useTerms();
-  if (sections.length < 2) return null;
+  // Off the keymap there is always a way back to it (the top bar has no Keymap button).
+  if (current === "keymap") return null;
   return (
     <div
       role="tablist"
       aria-label="Sections"
       className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line-soft bg-bg px-4"
     >
-      {sections.map((section) => {
+      <button
+        type="button"
+        onClick={() => onSection("keymap")}
+        className="mr-2 shrink-0 cursor-pointer whitespace-nowrap py-2.5 pr-2 text-ui font-medium text-accent hover:underline"
+      >
+        ‹ {term("area.layout")}
+      </button>
+      {sections.length > 1 && sections.map((section) => {
         const active = section === current;
         return (
           <button
@@ -222,6 +230,7 @@ export function Workbench({
           features: ioFeaturesFor(bundle),
           judge: guardJudge(bundle),
           ledNodes: ledNodesOf(bundle),
+          realtimeLighting: () => PREFERENCES.realtimeLighting.get(),
         }),
         bundle,
         () => stateRef.current,
@@ -304,9 +313,10 @@ export function Workbench({
           </div>
         )}
         <TopBar
-          areas={areas}
+          // The keymap is home and the Behavior Library opens the Behaviors area: neither needs a button.
+          areas={areas.filter((one) => one.id !== "layout" && one.id !== "behaviors")}
           current={area.id}
-          onArea={showArea}
+          onArea={(next) => (next.id === area.id ? dispatch({ type: "mode", mode: "keymap" }) : showArea(next))}
           onDrawer={section === "keymap" ? () => setDrawer(true) : undefined}
         />
         <div className="flex min-h-0 flex-1">

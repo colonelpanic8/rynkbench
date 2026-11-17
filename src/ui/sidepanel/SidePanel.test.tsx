@@ -50,7 +50,8 @@ describe("side panel", () => {
     const html = panel();
     expect(html).toMatch(/aria-current="true"[^>]*>.*?Lower/);
     expect(html).toContain("Active on the keyboard now");
-    expect(html).toContain("The layer the keyboard starts on");
+    // Which layer the keyboard starts on is not shown or changed here.
+    expect(html).not.toContain("The layer the keyboard starts on");
   });
 
   it("shows a layer error under the list", () => {

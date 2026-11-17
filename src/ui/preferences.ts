@@ -1,6 +1,6 @@
 // The preferences that change how Rynkbench looks and reads, as GLIDE's
-// Settings has them (ui/settingsPanel.jsx there): browser-local, never written
-// to the keyboard. Theme and wording have their own homes (theme/, terms.ts);
+// Settings has them (ui/settingsPanel.jsx there), and whether lighting goes to
+// the keyboard at once: browser-local, never written to the keyboard. Theme and wording have their own homes (theme/, terms.ts);
 // the rest live here, each a small store with a hook (ADR 0014).
 
 import { useSyncExternalStore } from "react";
@@ -38,6 +38,7 @@ const DEFAULTS = {
   shiftedCharacters: "base",
   keyEditorSide: "bottom",
   sidePanelSide: "left",
+  realtimeLighting: true,
 } as const;
 
 export const PREFERENCES = {
@@ -50,6 +51,8 @@ export const PREFERENCES = {
   keyEditorSide: createSetting(SETTING_KEYS.keyEditorSide, oneOf(["bottom", "right"] as const, DEFAULTS.keyEditorSide)),
   /** Which side the Layers panel is on. */
   sidePanelSide: createSetting(SETTING_KEYS.sidePanelSide, oneOf(["left", "right"] as const, DEFAULTS.sidePanelSide)),
+  /** Apply sends lights, brightness and effects straight to the keyboard, in Draft too (ADR 0019). */
+  realtimeLighting: createSetting(SETTING_KEYS.realtimeLighting, onOff(DEFAULTS.realtimeLighting)),
 } as const;
 
 export function usePreference<T>(setting: Setting<T>): T {

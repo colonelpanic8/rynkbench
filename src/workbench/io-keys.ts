@@ -12,7 +12,11 @@ type KeyIo = Pick<WorkbenchIo, "setKey" | "writeKeys" | "travel" | "applyBatch" 
 
 export function keyIo(context: IoContext): KeyIo {
   const { session, getState, dispatch, cols, features } = context;
-  const send = (options?: Parameters<WorkbenchIo["applyBatch"]>[0]) => sendStaged({ session, getState, dispatch, features }, options);
+  // A send waits for an RGB Apply still being written, so the two never write the same item.
+  const send = async (options?: Parameters<WorkbenchIo["applyBatch"]>[0]) => {
+    await context.realtime.settled();
+    return sendStaged({ session, getState, dispatch, features }, options);
+  };
 
   const setKey = (layer: number, row: number, col: number, action: KeyAction): Promise<IoWriteResult> => {
     const staging = getState();
@@ -51,7 +55,10 @@ export function keyIo(context: IoContext): KeyIo {
       const { changes } = (direction === "undo" ? state.history.past : state.history.future).at(-1)!;
       dispatch({ type: "historyTravel", direction });
       // Live: the keyboard follows through the one write path (ADR 0018).
-      return state.batchMode ? { ok: true } : send({ settingNow: changes.map(({ item }) => item) });
+      if (!state.batchMode) return send({ settingNow: changes.map(({ item }) => item) });
+      // Draft: RGB settings the step changed go to the keyboard at once (ADR 0019).
+      if (context.realtime.enabled()) context.realtime.schedule();
+      return { ok: true };
     },
     applyBatch(options) {
       return send(options);
