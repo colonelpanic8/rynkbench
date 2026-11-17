@@ -361,8 +361,9 @@ export type WorkbenchAction =
   /** Labels kept for this keyboard or read from a file (ADR 0020), without those
    *  on empty slots: no step. */
   | { type: "labelsLoaded"; labels: BehaviorLabels }
-  /** The keyboard was read (Send's read-back): the base is this image. */
-  | { type: "draftStored"; image: KeyboardImage }
+  /** The keyboard was read (Send's read-back): the base is this image. `wrote`:
+   *  the items the send wrote before it, now based on what was read. */
+  | { type: "draftStored"; image: KeyboardImage; wrote?: SyncItem[] }
   /** A kept draft put back: each item based on `before`, wanted as `after`. */
   | { type: "draftRestore"; patch: PatchEntry[] }
   | { type: "batchApplyStart" }

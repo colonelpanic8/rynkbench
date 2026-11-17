@@ -8,6 +8,7 @@ import type { RynkSession } from "../../session/types";
 import {
   applyPatch,
   conflicts,
+  differences,
   itemKey,
   partsOf,
   readImage,
@@ -50,6 +51,7 @@ export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Pro
   dispatch({ type: "batchApplyStart" });
   // Read what the base holds, so the read-back can take its place.
   const reading = { ...features, ...partsOf(start.base) };
+  let sent: SyncItem[] = [];
   try {
     // The draft on top of what the keyboard holds now; what you started from is
     // the same with each drafted item as it was based on (an item never read,
@@ -69,8 +71,9 @@ export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Pro
       dispatch({ type: "batchApplyDone", error: null });
       return { ok: false, message: "Not sent: the keyboard keeps its own changes", guarded: true };
     }
+    sent = differences(now, sending).map(({ item }) => item);
     const { readback } = await syncTo(session, now, sending, reading);
-    stored(readback);
+    stored(readback, sent);
     if (patch.some(({ item }) => item.kind === "lighting" || item.kind === "rules")) {
       dispatch({ type: "lightingStateSet", state: await session.lighting.state() });
     }
@@ -81,7 +84,7 @@ export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Pro
     // Whatever reached the keyboard leaves the draft; the rest is sent next time.
     let unread = false;
     try {
-      stored(await readImage(session, reading));
+      stored(await readImage(session, reading), sent);
     } catch {
       // The keyboard cannot be read now: everything stays in the draft.
       unread = true;
@@ -90,8 +93,9 @@ export async function sendStaged(deps: SendDeps, options: SendOptions = {}): Pro
     return unread ? { ok: false, message, unread } : { ok: false, message };
   }
 
-  /** The keyboard now holds what was read: what reached it is no longer in the draft. */
-  function stored({ activeLayers: _layers, layerStateComplete: _complete, ...image }: ReadImage) {
-    dispatch({ type: "draftStored", image });
+  /** The keyboard now holds what was read: what reached it is no longer in the
+   *  draft, and what this send wrote (`wrote`) is based on it. */
+  function stored({ activeLayers: _layers, layerStateComplete: _complete, ...image }: ReadImage, wrote: SyncItem[] = []) {
+    dispatch({ type: "draftStored", image, wrote });
   }
 }

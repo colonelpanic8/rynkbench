@@ -8,9 +8,11 @@ import { initialWorkbenchState } from "../initial-state";
 import { ioFeaturesFor, makeIo } from "../io";
 import { makeWorkbenchReducer } from "../reducer";
 import type { WorkbenchAction, WorkbenchState } from "../../model/workbench-state";
+import { mutableLighting } from "../../sync";
 import { draftOf } from "./want";
 
 const key = (code: string) => ({ Single: { Key: { Hid: code } } }) as KeyAction;
+const light = (led_id: number) => ({ led_id, effect: { Solid: { color: { r: 255, g: 0, b: 0 } } }, ttl_ms: undefined });
 
 interface Harness {
   session: RynkSession;
@@ -156,12 +158,19 @@ describe("Send", () => {
   it("in Live: a change made now does not take along a drafted item the keyboard changed meanwhile", async () => {
     await inDraft(async ({ session, io, state, dispatch }) => {
       const item = { kind: "key" as const, layer: 1, offset: 0 };
+      const first = state().layers[0][0];
       dispatch({ type: "draftRestore", patch: [{ item, before: state().layers[1][0], after: key("F13") }] });
       await session.keymap.setKey(1, 0, 0, key("F20")); // changed elsewhere meanwhile
       expect(await io.writeKeys([{ layer: 0, row: 0, col: 0, action: key("F14") }])).toEqual({ ok: true });
       const layers = await session.keymap.readAll();
       expect(layers[0].actions[0]).toEqual(key("F14"));
       expect(layers[1].actions[0]).toEqual(key("F20"));
+      expect(draftOf(state()).changes.map((change) => change.item)).toEqual([item]);
+      // Undo writes only what it sets, too.
+      expect(await io.travel("undo")).toEqual({ ok: true });
+      const undone = await session.keymap.readAll();
+      expect(undone[0].actions[0]).toEqual(first);
+      expect(undone[1].actions[0]).toEqual(key("F20"));
       expect(draftOf(state()).changes.map((change) => change.item)).toEqual([item]);
       let asked: unknown[] = [];
       await io.applyBatch({ confirmOverwrite: async (items) => { asked = items; return false; } });
@@ -190,6 +199,41 @@ describe("Send", () => {
       await seen("lightingRefresh");
       dispatch({ type: "draftRevert", items: [{ kind: "wakeLayers" }] });
       expect(state().lightingOutputMode?.wake_layers).toBe(theirs);
+      expect(draftOf(state()).changes).toEqual([]);
+    });
+  });
+
+  it("a held-back lighting control still has what it was based on after a send that wrote lights", async () => {
+    await inDraft(async ({ session, io, state, dispatch }) => {
+      const held = mutableLighting(state().lightingState!);
+      const item = { kind: "lightingState" as const };
+      dispatch({ type: "draftRestore", patch: [{ item, before: held, after: { ...held, output_brightness: held.output_brightness === 40 ? 41 : 40 } }] });
+      await session.lighting.setState({ ...held, output_brightness: held.output_brightness === 60 ? 61 : 60 }); // changed elsewhere meanwhile
+      dispatch({ type: "paint", layer: 1, cells: [light(4)] });
+      expect(await io.applyBatch({ settingNow: [] })).toEqual({ ok: true });
+      expect(draftOf(state()).changes.map((change) => change.item)).toEqual([item]);
+      let asked: unknown[] = [];
+      await io.applyBatch({ confirmOverwrite: async (items) => { asked = items; return false; } });
+      expect(asked).toEqual([item]);
+    }, false);
+  });
+
+  it("a change made while its item is being sent is not taken for a change on the keyboard", async () => {
+    await inDraft(async ({ session, io, state, dispatch }) => {
+      dispatch({ type: "paint", layer: 1, cells: [light(4)] });
+      const capabilities = session.device.capabilities.bind(session.device);
+      let reads = 0;
+      // Painted on while the send reads back what it wrote.
+      const reading = vi.spyOn(session.device, "capabilities").mockImplementation(() => {
+        if ((reads += 1) === 2) dispatch({ type: "paint", layer: 1, cells: [light(5)] });
+        return capabilities();
+      });
+      expect(await io.applyBatch()).toEqual({ ok: true });
+      reading.mockRestore();
+      expect(draftOf(state()).changes.map((change) => change.item)).toEqual([{ kind: "lighting", layer: 1 }]);
+      let asked: unknown[] = [];
+      expect(await io.applyBatch({ confirmOverwrite: async (items) => { asked = items; return false; } })).toEqual({ ok: true });
+      expect(asked).toEqual([]);
       expect(draftOf(state()).changes).toEqual([]);
     });
   });

@@ -187,7 +187,7 @@ export function makeWorkbenchReducer(cols: number) {
         return act.layerOrder ? { ...next, uiLayer: movedLayer(state.uiLayer, act.layerOrder), selection: null } : next;
       }
       case "draftStored":
-        return withBase(state, act.image);
+        return withBase(state, act.image, act.wrote);
       case "draftRestore": {
         const restored = new Set(act.patch.map(({ item }) => itemKey(item)));
         const basedOn = [
