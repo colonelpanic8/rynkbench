@@ -13,7 +13,6 @@ import {
   BatteryGlyph,
   CombinatorIcon,
   DeviceIcon,
-  InsightsIcon,
   KeymapIcon,
   MenuIcon,
   PowerIcon,
@@ -53,7 +52,6 @@ const AREA_ICON: Record<AreaId, typeof KeymapIcon> = {
   layout: KeymapIcon,
   behaviors: CombinatorIcon,
   device: DeviceIcon,
-  insights: InsightsIcon,
 };
 
 /** The keymap and the screens that open over it. */

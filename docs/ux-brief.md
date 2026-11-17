@@ -1,6 +1,6 @@
 # Rynkbench UX Redesign Brief
 
-> This is the brief the design started from, not a description of the app. Where it and the app or the ADRs differ, the app and the ADRs win. Not built: a Library area (files are the top bar's Open and Save), a health check in Insights, a command palette, and the `useQuery` / `useCommand` hooks. The app has four areas (`src/ui/areas.ts`), and the Lighting and Effects screens it observes are gone (ADR 0016).
+> This is the brief the design started from, not a description of the app. Where it and the app or the ADRs differ, the app and the ADRs win. Not built: a Library area (files are the top bar's Open and Save), a health check in Insights, a command palette, and the `useQuery` / `useCommand` hooks. The app has three areas (`src/ui/areas.ts`); the Lighting and Effects screens it observes are gone (ADR 0016), and Insights is a tab of Layout properties.
 
 *Track U0 of the foundation plan: information architecture, design tokens and component inventory. Prepared November 11, 2026 from a read of the Rynkbench code and the GLIDE reference.*
 

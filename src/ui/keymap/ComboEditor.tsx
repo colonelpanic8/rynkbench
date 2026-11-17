@@ -3,7 +3,7 @@
 // on; the tabs fill the active slot. Its keys are picked on the canvas.
 
 import { useEffect, useState } from "react";
-import type { Action, KeyAction } from "../../model/action-types";
+import type { Action } from "../../model/action-types";
 import { comboLayer, comboOutput } from "../../model/combos";
 import { planSlotWrites, putSlot, slotsOf, swapSlots, withProfile, type Slot } from "../../model/key-slots";
 
@@ -12,7 +12,7 @@ import { SectionLabel } from "../kit";
 import { useWorkbench } from "../state";
 import { keyFace } from "../keyface/keyFace";
 import { useFaceContext } from "../keyface/useFaceContext";
-import { ActionEditor } from "./ActionEditor";
+import { OtherBehaviors } from "./OtherBehaviors";
 import { EditorHeading, EditorPanel } from "./EditorPanel";
 import { useEditorTabs, type EditorTab } from "./editorTabs";
 import { PickKey } from "./PickKey";
@@ -46,7 +46,7 @@ function LayerChoice({ focus }: { focus: ComboFocus }) {
 
 export function ComboEditor({ focus, size }: { focus: ComboFocus; size: number }) {
   const keyText = useKeyText();
-  const { bundle, state } = useWorkbench();
+  const { state } = useWorkbench();
   const faceContext = useFaceContext();
   const tabs = useEditorTabs(false);
   const [tab, setTab] = useState<EditorTab>("pick");
@@ -113,13 +113,7 @@ export function ComboEditor({ focus, size }: { focus: ComboFocus; size: number }
     <EditorPanel size={size} side={side} tabs={tabs} tab={tab} onTab={setTab}>
       {tab === "pick" && <PickKey onPick={fill} disabled={false} />}
       {tab === "layer" && <SwitchLayer onPick={pickLayer} disabled={false} />}
-      {tab === "all" && (
-        <ActionEditor
-          current={output}
-          numLayers={bundle.caps.num_layers}
-          onCommit={(next: KeyAction) => void focus.setOutput(next)}
-        />
-      )}
+      {tab === "behaviors" && <OtherBehaviors onPick={fill} current={output} />}
     </EditorPanel>
   );
 }

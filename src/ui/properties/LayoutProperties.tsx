@@ -1,8 +1,8 @@
 // Layout properties, as GLIDE's (ui/layoutProperties.jsx there): one large
 // window with its parts as tabs on the left. Rynkbench's parts: Details (name,
 // keyboard, what it holds), Firmware options (keyboard-wide timings), RGB
-// Lighting (the lights as a whole; Advanced: status setups and rules) and RGB
-// Effects (ADR 0016). Each part saves the way it does elsewhere (the draft, or
+// Lighting (the lights as a whole; Advanced: status setups and rules), RGB
+// Effects (ADR 0016) and, with a keyboard attached, Insights (what it does now). Each part saves the way it does elsewhere (the draft, or
 // the keyboard); opened from the sliders by the name. While a status setup
 // picks its keys on the keymap the window steps aside: it stays as it was,
 // out of sight, and is back when the pick ends or the keymap is left.
@@ -18,6 +18,7 @@ import { DetailsSection } from "./DetailsSection";
 import { EffectsSection } from "./EffectsSection";
 import { LightingSection } from "./LightingSection";
 import { FirmwareOptions } from "./FirmwareOptions";
+import { LiveMode } from "../live/LiveMode";
 import { keyPick, useKeyPick } from "../lighting/keyPick";
 import { closeProperties, openProperties, usePropertiesTab, type PropertiesTab } from "./store";
 
@@ -34,6 +35,7 @@ const TABS: { id: PropertiesTab; name: string; help: string }[] = [
     help: "The lights as a whole. Each key's own light is set on the key.",
   },
   { id: "effects", name: "RGB Effects", help: "The firmware's effects across the whole keyboard." },
+  { id: "insights", name: "Insights", help: "What the keyboard is doing now: its active layers, lights and keys, as it reports them." },
 ];
 
 export function LayoutProperties() {
@@ -52,6 +54,7 @@ export function LayoutProperties() {
     options: true,
     lighting: capabilities.has("lighting.state"),
     effects: capabilities.has("lighting.extension"),
+    insights: bundle.session.kind !== "offline",
   };
   const tabs = TABS.filter((entry) => offered[entry.id]);
 
@@ -125,6 +128,11 @@ export function LayoutProperties() {
               )}
             </div>
             {current.id === "details" && <DetailsSection />}
+            {current.id === "insights" && (
+              <div className="flex min-h-[480px] flex-1 gap-4 max-lg:flex-col">
+                <LiveMode />
+              </div>
+            )}
             {current.id === "options" && (
               <div className="max-w-xl">
                 <FirmwareOptions />

@@ -22,6 +22,8 @@ export interface FaceContext {
   userIcons?: ReadonlyMap<number, KeyIconName>;
   /** The layout's layer names: layer keys read as them. */
   layerNames?: LayerNames;
+  /** The name someone gave a macro or tap pattern (Behavior Library); a key bound to it reads as it. */
+  behaviorName?: (kind: "macros" | "morse", slot: number) => string | undefined;
 }
 
 /** A key to the layer named Magic shows the MoErgo picture, as GLIDE's Magic key does. */
@@ -141,7 +143,10 @@ function modifiersOf(action: Action | undefined): ModifierCombination | undefine
 
 /** keyActionGlyph, with the pictures and per-OS modifiers the canvas draws. */
 export function keyFace(action: KeyAction, morse: readonly Morse[], ctx: FaceContext): KeyGlyph {
-  const glyph = keyActionGlyph(action, morse, ctx.layerNames);
+  // A tap pattern with a name reads as its name, not as its slots.
+  const patternName = typeof action === "object" && "Morse" in action ? ctx.behaviorName?.("morse", action.Morse) : undefined;
+  if (patternName) return { text: patternName };
+  const glyph = withMacroNames(keyActionGlyph(action, morse, ctx.layerNames), action, ctx);
   // A key that does nothing: GLIDE's faint slash.
   if (action === "No") return { ...glyph, none: true };
   if (typeof action !== "object") return glyph;
@@ -170,6 +175,18 @@ export function keyFace(action: KeyAction, morse: readonly Morse[], ctx: FaceCon
   }
   if (!out.subFace && glyph.subLayer && glyph.sub) out.subFace = [icon("layers"), text(glyph.sub)];
   return out;
+}
+
+/** A tap or hold that runs a named macro reads as the macro's name, not its number. */
+function withMacroNames(glyph: KeyGlyph, action: KeyAction, ctx: FaceContext): KeyGlyph {
+  if (typeof action !== "object" || !ctx.behaviorName) return glyph;
+  const named = (slot: Action | undefined) =>
+    typeof slot === "object" && "TriggerMacro" in slot ? ctx.behaviorName!("macros", slot.TriggerMacro) : undefined;
+  const tap = "Single" in action ? action.Single : "Tap" in action ? action.Tap : "TapHold" in action ? action.TapHold[0] : undefined;
+  const hold = "TapHold" in action ? action.TapHold[1] : undefined;
+  const text = named(tap);
+  const sub = named(hold);
+  return { ...glyph, ...(text && { text }), ...(sub && { sub }) };
 }
 
 /** "Highlight special keys", by GLIDE's rule (core/keycodes/keyIcons.js

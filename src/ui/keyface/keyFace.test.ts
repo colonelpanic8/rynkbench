@@ -140,4 +140,12 @@ describe("layer keys", () => {
     const lt = { TapHold: [{ Key: { Hid: "Space" } }, { LayerOn: 1 }, 0] } as KeyAction;
     expect(keyFace(lt, [], named).subFace).toEqual([{ icon: "layers" }, { text: "Lower" }]);
   });
+
+  it("read as the name given to a macro or tap pattern, and as its number without one", () => {
+    const names: FaceContext = { ...mac, behaviorName: (kind, slot) => (kind === "macros" && slot === 2 ? "Email sign-off" : kind === "morse" && slot === 0 ? "Shift or Caps" : undefined) };
+    expect(keyFace(single({ TriggerMacro: 2 }), [], names).text).toBe("Email sign-off");
+    expect(keyFace(single({ TriggerMacro: 3 }), [], names).text).toBe("M3");
+    expect(keyFace({ TapHold: [{ Key: { Hid: "A" } }, { TriggerMacro: 2 }, 0] } as KeyAction, [], names).sub).toBe("Email sign-off");
+    expect(keyFace({ Morse: 0 } as KeyAction, [], names)).toEqual({ text: "Shift or Caps" });
+  });
 });

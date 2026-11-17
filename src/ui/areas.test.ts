@@ -22,7 +22,7 @@ const ids = (facts: AreaFacts) => areasFor(facts).map((area) => area.id);
 
 describe("areas", () => {
   it("shows a plain RMK board every area; lighting lives on the keys and in Layout properties (ADR 0016)", () => {
-    expect(ids(plainRmk)).toEqual(["layout", "behaviors", "device", "insights"]);
+    expect(ids(plainRmk)).toEqual(["layout", "behaviors", "device"]);
     expect(areasFor(plainRmk).find((a) => a.id === "behaviors")?.sections).toEqual(["transforms"]);
   });
 

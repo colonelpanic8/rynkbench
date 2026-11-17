@@ -79,18 +79,7 @@ export function FileConfigIcon(props: IconProps) {
   );
 }
 
-/** Insights: what is used and how the keyboard is doing. */
-export function InsightsIcon(props: IconProps) {
-  return (
-    <svg {...base(props)}>
-      <path d="M2 13.8h12" />
-      <path d="M4 11.2V8.6M7 11.2V4.6M10 11.2V6.8M13 11.2V2.6" />
-    </svg>
-  );
-}
-
-/** Settings: a slider pair. */
-/** GLIDE's sliders: Layout properties (and the key editor's Every action). */
+/** GLIDE's sliders: Layout properties (and the key editor's Other Behaviors). */
 export function SlidersIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

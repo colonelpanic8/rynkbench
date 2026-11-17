@@ -1,5 +1,6 @@
 // Layout properties' RGB Effects tab (ADR 0016): the firmware's effects across
-// the keyboard. One big Effects switch first, then the effect (and the effect
+// the keyboard. The keyboard's Lights switch first (as in RGB Lighting), then
+// one big Effects switch, then the effect (and the effect
 // over it, where the firmware has a second slot) picked from a gallery of
 // cards, then palette, brightness, speed and the picked effects' own settings.
 // Applied to the keyboard in one go.
@@ -7,6 +8,7 @@
 import { ApplyBar, Button, ErrorBanner, cx } from "../kit";
 import { Slider } from "../lighting/BackgroundPanel";
 import { BigSwitch } from "./BigSwitch";
+import { LightsSwitch } from "../lighting/LightsSwitch";
 import { EffectGallery } from "./EffectGallery";
 import { useEffectsDraft } from "./useEffectsDraft";
 
@@ -41,6 +43,7 @@ export function EffectsSection() {
 
   return (
     <div className="flex flex-col gap-4">
+      <LightsSwitch />
       <BigSwitch name="Effects" state={fx.on ? fx.effectName(draft.effect) : "Off"} on={fx.on} onChange={fx.setOn} />
 
       <fieldset disabled={!fx.on} className={cx("flex min-w-0 flex-col gap-3", !fx.on && "opacity-50")}>

@@ -36,6 +36,8 @@ In this order; decisions in ADR 0017 and an update of ADR 0002.
 22. **Paste keeps references between pasted behaviors.** A copied tap pattern that runs a copied macro still names the macro's old slot after Paste.
 23. **Touch has no drag-select.** Selecting by dragging relies on `pointerenter` while a button is held, which a touch pointer, captured by the key it started on, does not give other keys. With Select on, touch can still select one tap at a time. Not tried on a device.
 
+27. **Discarding a layer change in Review & send** reverts the layers and the keys, encoders and lights of the layers that moved, but not other references the change rewrote (combos, tap patterns, settings that name a layer), which stay in their own groups. Fold those in too, or discard them with it.
+
 ## Tests and trying it
 
 24. **Try this branch in a browser and on a keyboard.** Several keys selected, picking keys, the effects gallery, exact timing, Try out, whole-row writes, imports as commits and Live's own send have only been tested in the simulated boards; none has been tried in a browser or on a keyboard.
@@ -44,6 +46,7 @@ In this order; decisions in ADR 0017 and an update of ADR 0002.
 
 ## Done recently
 
+- The key editor's tabs as GLIDE's: Pick Key, Switch Layer, Other Behaviors (your macros and tap patterns, one-shot modifiers), Key Lighting (with the lighting keys that show their state); Every action is gone from the key and combo editors. Keys read as the name given to their macro or tap pattern. A layer delete, add or move is one entry in Review & send (`model/layer-structure.ts`). Insights is a tab of Layout properties; RGB Effects has the Lights switch.
 - One key picker everywhere: Pick Key, compact, fills tap-hold slots, tap patterns' actions, macro steps and pointing keys; every key RMK has (`model/hid-codes.ts`) is in it, All keys counted; modifiers named for the computer; search finds your macros and tap patterns.
 - Keys written by whole rows (ADR 0021); the base is the last read, what a draft was based on, Live's own send (ADR 0022); a file import is a commit (ADR 0023); lighting tools on the keymap, including several keys selected (ADR 0024).
 - ADR 0016, RGB lighting the GLIDE way, stages 1–4 (`0cfd81e` … `ab6296d`).

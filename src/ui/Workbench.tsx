@@ -27,7 +27,6 @@ import { useComboFocus } from "./keymap/useComboFocus";
 import { KeyEditor } from "./keymap/KeyEditor";
 import { useEditorBeside } from "./keymap/EditorPanel";
 import { PREFERENCES, usePreference } from "./preferences";
-import { LiveMode } from "./live/LiveMode";
 import { AdvancedSection } from "./advanced/AdvancedMode";
 import { ProfilesMode } from "./ProfilesMode";
 import { DeviceMode } from "./device/DeviceMode";
@@ -137,8 +136,6 @@ function SectionView({ section }: { section: SectionId }) {
       return <ProfilesMode />;
     case "device":
       return <DeviceMode />;
-    case "live":
-      return <LiveMode />;
   }
 }
 

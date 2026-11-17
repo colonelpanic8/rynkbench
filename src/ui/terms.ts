@@ -23,7 +23,6 @@ export const TERMS = {
   "area.layout": { technical: "Keymap", friendly: "Layout" },
   "area.behaviors": { technical: "Behaviors", friendly: "Behaviors" },
   "area.device": { technical: "Device", friendly: "Keyboard" },
-  "area.insights": { technical: "Insights", friendly: "Insights" },
   "section.keymap": { technical: "Keymap", friendly: "Keys" },
   "section.combos": { technical: "Combos", friendly: "Combos" },
   "section.morse": { technical: "Morse", friendly: "Tap patterns" },

@@ -6,7 +6,7 @@
 import { useSyncExternalStore } from "react";
 import { keyPick } from "../lighting/keyPick";
 
-export type PropertiesTab = "details" | "options" | "lighting" | "effects";
+export type PropertiesTab = "details" | "options" | "lighting" | "effects" | "insights";
 
 let shown: PropertiesTab | null = null;
 const listeners = new Set<() => void>();

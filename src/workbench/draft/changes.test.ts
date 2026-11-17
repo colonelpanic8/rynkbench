@@ -46,6 +46,24 @@ describe("the draft", () => {
     expect(draftGroups(reduce(back, { type: "batchDiscard" }))).toEqual([]);
   });
 
+  it("shows a deleted layer as one change, with the keys of the layers that moved down, discarded whole", () => {
+    const meta = (...names: Array<string | null>) => names.map((name) => ({ occupied: name !== null, name: name ?? "" }));
+    const three = [[A, A], [B, B], [A, B]] as KeyAction[][];
+    const deleted = testWorkbench({
+      bundle: { caps: { num_layers: 3, num_cols: 2 } },
+      state: {
+        layers: [[A, A], [A, B], ["No", "No"]] as KeyAction[][],
+        layerMetadata: meta("Base", "Games", null),
+        base: { layers: three, metadata: meta("Base", "Lower", "Games") },
+      },
+    }).state;
+    const groups = draftGroups(deleted);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ area: "layers", structure: { deleted: ["Lower"], moved: 1 }, folded: [{ area: "keys", layer: 1 }, { area: "keys", layer: 2 }] });
+    const back = reduce(deleted, { type: "draftRevert", items: groupItems(deleted, groups[0]) });
+    expect(draftGroups(back)).toEqual([]);
+  });
+
   it("holds nothing a Live write already put on the keyboard, and keeps nothing it failed to", () => {
     let live = state({ batchMode: false });
     live = reduce(live, { type: "keyWriteStart", layer: 0, row: 0, col: 1, action: A });

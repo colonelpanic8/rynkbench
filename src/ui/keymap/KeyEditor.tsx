@@ -1,9 +1,10 @@
 // The key editor, below the keyboard, as in GLIDE (in EditorPanel's frame).
 // Left: which key it is and its actions as slots (On Tap; On Hold, a tap-hold;
 // On Double Tap, a morse entry of its own, written by model/key-slots' plan).
-// The tabs fill the active slot: Pick Key, Switch Layer, Lighting, and Every
-// action (the full editor, for macros, morse patterns and the rest). With
-// several keys selected it edits the last one; only RGB Lighting reaches all.
+// The tabs fill the active slot: Pick Key, Switch Layer, Other Behaviors (your
+// macros and tap patterns, one-shot modifiers), and Key Lighting, with the
+// lighting keys that show their own state at its foot. With several keys
+// selected it edits the last one; only Key Lighting reaches all.
 
 import { useEffect, useMemo, useState } from "react";
 import type { Action, KeyAction } from "../../model/action-types";
@@ -32,7 +33,8 @@ import {
   type SlotValues,
 } from "../../model/key-slots";
 
-import { ActionEditor } from "./ActionEditor";
+import { OtherBehaviors } from "./OtherBehaviors";
+import { LightingKeyPresetPanel } from "../lighting/LightingKeyPresetPanel";
 import { EditorHeading, EditorPanel, EditorPlaceholder } from "./EditorPanel";
 import { useEditorTabs, type EditorTab } from "./editorTabs";
 import { LayerLighting } from "./LayerLighting";
@@ -181,14 +183,11 @@ export function KeyEditor({ size = 310 }: { size?: number }) {
     <EditorPanel size={size} side={side} tabs={tabs} tab={tab} onTab={setTab}>
       {tab === "pick" && <PickKey onPick={fill} disabled={false} />}
       {tab === "layer" && <SwitchLayer onPick={pickLayer} disabled={false} />}
-      {tab === "lighting" && <LayerLighting ledId={key?.ledId} />}
-      {tab === "all" && (
-        <ActionEditor
-          current={action}
-          numLayers={bundle.caps.num_layers}
-          onCommit={commit}
-          lightingKey={key && { layer, key }}
-        />
+      {tab === "behaviors" && <OtherBehaviors onPick={fill} current={action} />}
+      {tab === "lighting" && (
+        <LayerLighting ledId={key?.ledId}>
+          {key && <LightingKeyPresetPanel layer={layer} target={key} current={action} />}
+        </LayerLighting>
       )}
     </EditorPanel>
   );

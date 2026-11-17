@@ -1,4 +1,4 @@
-// The fields under a chosen light in the RGB Lighting tab: a colour and its
+// The fields under a chosen light in the Key Lighting tab: a colour and its
 // effect, at a named speed or (Custom) with its timing in numbers; for a
 // status light what it shows (a lock, the battery, a Bluetooth profile, USB)
 // and that one's own fields. Every colour is the same ColorChoice.

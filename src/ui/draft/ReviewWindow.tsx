@@ -8,9 +8,21 @@ import { useWorkbench } from "../state";
 import { Button } from "../kit";
 import { CloseIcon, SpinnerIcon } from "../icons";
 import type { DraftGroup } from "../../workbench/draft/changes";
+import type { LayerStructure } from "../../model/layer-structure";
 import { useDraft } from "./useDraft";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const quoted = (names: readonly string[]) => names.map((name) => `“${name}”`).join(", ");
+
+/** A layer delete, add or move as one line: what happened to the layers, then how much it rewrites. */
+function structureText(structure: LayerStructure, count: number): { title: string; count: string } {
+  const parts = [
+    structure.deleted.length > 0 && `${quoted(structure.deleted)} deleted`,
+    structure.added.length > 0 && `${quoted(structure.added)} added`,
+    structure.moved > 0 && `${plural(structure.moved, "layer")} moved`,
+  ].filter(Boolean);
+  return { title: `Layers: ${parts.join(", ")}`, count: `${plural(count, "change")}, the moved layers' keys and lights with them` };
+}
 
 function groupText(group: DraftGroup, name: (layer: number) => string): { title: string; count: string } {
   const on = group.layer === undefined ? "" : ` on ${name(group.layer)}`;
@@ -32,7 +44,9 @@ function groupText(group: DraftGroup, name: (layer: number) => string): { title:
     case "macros":
       return { title: "Macros", count: "changed" };
     case "layers":
-      return { title: "Layer names and order", count: plural(group.count, "change") };
+      return group.structure
+        ? structureText(group.structure, group.count)
+        : { title: "Layer names and order", count: plural(group.count, "change") };
     case "profiles":
       return { title: "Tap-hold profiles", count: plural(group.count, "change") };
     case "pointing":

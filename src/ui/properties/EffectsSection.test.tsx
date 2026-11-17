@@ -38,6 +38,14 @@ function cards(html: string, label: string): Array<{ name: string; pressed: bool
 const pressed = (html: string, label: string) => cards(html, label).filter((card) => card.pressed).map((card) => card.name);
 
 describe("RGB Effects", () => {
+  it("has the keyboard's Lights switch before the effects, as RGB Lighting does", async () => {
+    await onBoard(glove80Board, (bundle) => {
+      const html = draw(bundle);
+      expect(html.indexOf(">Lights</span>")).toBeGreaterThan(-1);
+      expect(html.indexOf(">Lights</span>")).toBeLessThan(html.indexOf(">Effects</span>"));
+    });
+  });
+
   it("leads with the Effects switch, naming the effect that runs", async () => {
     await onBoard(glove80Board, (bundle) => {
       const html = draw(bundle);

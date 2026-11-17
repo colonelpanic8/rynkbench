@@ -69,8 +69,7 @@ export type Mode =
   | "profiles"
   | "transforms"
   | "device"
-  | "usage"
-  | "live";
+  | "usage";
 
 /** Which lights a preview shows: the keyboard as it is now (its active layers
  *  and the overlay), or one layer's scene table. */

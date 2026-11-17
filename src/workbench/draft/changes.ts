@@ -12,7 +12,8 @@ import type { Rules } from "../../model/lighting/rules";
 import { stagedBetween } from "../../model/lighting/compare";
 import { valueAt, type KeyboardImage, type PatchEntry, type SyncItem } from "../../sync";
 import { layerSceneCells, lightingBaseFor } from "../lighting-drafts";
-import { draftOf, draftWithBasis } from "./want";
+import { layerStructure, type LayerStructure } from "../../model/layer-structure";
+import { draftOf, draftWithBasis, wantOf } from "./want";
 
 export type DraftArea =
   | "keys"
@@ -35,6 +36,12 @@ export interface DraftGroup {
   layer?: number;
   /** How many keys (or encoders, slots, LEDs) it changes. */
   count: number;
+  /** On the layers group, when layers are deleted, added or moved: what changed. The keys,
+   *  encoders and lights of the layers that changed slot are counted in it, not on their
+   *  own, so the change is discarded whole. */
+  structure?: LayerStructure;
+  /** The groups counted in this one. */
+  folded?: Array<Omit<DraftGroup, "count" | "folded" | "structure">>;
 }
 
 /** LEDs whose lock or battery rules differ between two rule tables. */
@@ -114,14 +121,29 @@ export function draftGroups(state: WorkbenchState): DraftGroup[] {
     if (found) found.count += count;
     else groups.push({ ...group, count });
   }
-  return groups.sort((a, b) => AREA_ORDER.indexOf(a.area) - AREA_ORDER.indexOf(b.area) || (a.layer ?? 0) - (b.layer ?? 0));
+  const structure = layerStructure(state.base.metadata, wantOf(state).metadata);
+  const shown = structure ? foldIntoLayers(groups, structure) : groups;
+  return shown.sort((a, b) => AREA_ORDER.indexOf(a.area) - AREA_ORDER.indexOf(b.area) || (a.layer ?? 0) - (b.layer ?? 0));
 }
 
-/** The drafted items one group of the review window holds. */
+/** A layer delete, add or move as one group: the layers group, with the keys, encoders and
+ *  lights of every layer that changed slot counted in it. */
+function foldIntoLayers(groups: DraftGroup[], structure: LayerStructure): DraftGroup[] {
+  const moving = (group: DraftGroup) =>
+    group.layer !== undefined && structure.slots.includes(group.layer) && ["keys", "encoders", "lighting"].includes(group.area);
+  const folded = groups.filter(moving);
+  const rest = groups.filter((group) => !moving(group) && group.area !== "layers");
+  const own = groups.find((group) => group.area === "layers");
+  const count = (own?.count ?? 0) + folded.reduce((sum, group) => sum + group.count, 0);
+  return [...rest, { area: "layers", count, structure, folded: folded.map(({ area, layer }) => ({ area, layer })) }];
+}
+
+/** The drafted items one group of the review window holds, with those of the groups counted in it. */
 export function groupItems(state: WorkbenchState, group: DraftGroup): SyncItem[] {
+  const parts = [group, ...(group.folded ?? [])];
   return draftOf(state)
     .changes.map((change) => change.item)
-    .filter((item) => sameGroup(groupOf(item), group));
+    .filter((item) => parts.some((part) => sameGroup(groupOf(item), part)));
 }
 
 export const draftSize = (groups: readonly DraftGroup[]) => groups.reduce((sum, group) => sum + group.count, 0);

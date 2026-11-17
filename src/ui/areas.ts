@@ -8,7 +8,7 @@
 import type { Mode } from "../model/workbench-state";
 import type { TermId } from "./terms";
 
-export type AreaId = "layout" | "behaviors" | "device" | "insights";
+export type AreaId = "layout" | "behaviors" | "device";
 
 /** A section is one screen; the workbench state names the one on show. */
 export type SectionId = Mode;
@@ -24,7 +24,6 @@ export const ALL_SECTIONS: readonly SectionId[] = [
   "profiles",
   "transforms",
   "device",
-  "live",
 ];
 
 /** What decides which sections exist. Plain booleans, so this stays pure. */
@@ -73,11 +72,6 @@ export function areasFor(facts: AreaFacts): Area[] {
       ]),
     },
     { id: "device", term: "area.device", sections: pick([["device", facts.connected]]) },
-    {
-      id: "insights",
-      term: "area.insights",
-      sections: pick([["live", facts.connected]]),
-    },
   ];
   return areas.filter((area) => area.sections.length > 0);
 }

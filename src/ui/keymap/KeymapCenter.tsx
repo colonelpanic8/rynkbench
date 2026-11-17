@@ -82,7 +82,7 @@ export function KeymapCenter() {
   const runClipboard = useKeyClipboard(latestStateRef, moves.setMessage);
 
   // The layer's staged scene, previewed under the legends so bindings and
-  // lighting can be judged together; the RGB Lighting tab paints it.
+  // lighting can be judged together; the Key Lighting tab paints it.
   const light = useLightView();
   const pick = useKeyPick();
   const chosen = useKeySelection(pick ? pickTakes(pick) : light.selecting ? "many" : null);
@@ -163,7 +163,7 @@ export function KeymapCenter() {
     };
   };
 
-  /** Paint gives a key the RGB Lighting tab's light, on the layer shown; a stroke is one undo step. */
+  /** Paint gives a key the Key Lighting tab's light, on the layer shown; a stroke is one undo step. */
   const paintKey = (key: KeyView, brush: KeyLight) => {
     if (key.ledId !== undefined) lights.paint(brush, key.ledId);
   };

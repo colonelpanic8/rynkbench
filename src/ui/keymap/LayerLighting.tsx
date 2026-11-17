@@ -1,4 +1,4 @@
-// The key editor's RGB Lighting tab, as GLIDE's Key Lighting (ADR 0016): one
+// The key editor's Key Lighting tab, as GLIDE's (ADR 0016): one
 // choice for the key on the layer shown (Off, Color, Layer below, and with the
 // firmware's rule table Status light), the chosen one's fields under it, and
 // Paint, which makes the choice a brush for the canvas (one undo step per
@@ -9,9 +9,10 @@
 // Changes join the draft (sent with Review & send; in Live, once painting
 // pauses). With "Try out (not saved)" on, the choice, the selection and Paint
 // give try-out lights instead: a colour, or Off for none (TryOut.tsx).
-// The lights as a whole are in Layout properties (RGB settings…).
+// The lights as a whole are in Layout properties (RGB settings…); the key
+// editor puts the lighting keys that show their own state at the foot (children).
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { openProperties } from "../properties/store";
 import type { LightingEffect } from "../../model/lighting-types";
 import { useWorkbench } from "../state";
@@ -73,7 +74,7 @@ const toolClass = (on: boolean) =>
   );
 
 /** `ledId`: the LED of the key the editor shows; the other selected keys' are found here. */
-export function LayerLighting({ ledId }: { ledId: number | undefined }) {
+export function LayerLighting({ ledId, children }: { ledId: number | undefined; children?: ReactNode }) {
   const { bundle, state, dispatch } = useWorkbench();
   const view = useLightView();
   const lights = useKeyLights();
@@ -138,7 +139,7 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <h3 className="mr-auto text-small font-semibold tracking-widest text-mute uppercase">
-          RGB Lighting · {tryOut.on ? "Try out" : name}
+          Key Lighting · {tryOut.on ? "Try out" : name}
         </h3>
         <button
           type="button"
@@ -269,6 +270,7 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
           </Button>
         )}
       </div>
+      {children}
     </div>
   );
 }

@@ -15,8 +15,8 @@ import type { EditorTab } from "./editorTabs";
 const TABS: Record<EditorTab, { label: string; Icon: (props: { size?: number }) => ReactNode }> = {
   pick: { label: "Pick Key", Icon: KeymapIcon },
   layer: { label: "Switch Layer", Icon: MenuIcon },
-  lighting: { label: "RGB Lighting", Icon: LightingIcon },
-  all: { label: "Every action", Icon: SlidersIcon },
+  behaviors: { label: "Other Behaviors", Icon: SlidersIcon },
+  lighting: { label: "Key Lighting", Icon: LightingIcon },
 };
 
 /** The editor's parts stacked, as on a narrow screen and beside the keyboard. */
