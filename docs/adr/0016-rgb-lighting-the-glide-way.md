@@ -1,6 +1,6 @@
 # 0016. RGB lighting the GLIDE way
 
-**Status:** Accepted (decided with the project owner); built in four stages, all done.
+**Status:** Accepted (decided with the project owner); built in four stages, all done. Amended by 0024: several keys, picking keys, the effects gallery, exact timing and Try out come back on the keymap.
 
 ## Context
 Lighting is its own top-bar area with two tabs, both named for what they are only by context: Lighting (paint keys on an "Overlay" or a layer, status-light presets, condition rules, zones, a brush) and Effects (the firmware's effects and palettes). Beginners do not know what the Overlay is (lights that are never saved and vanish on reboot) or how it relates to the layers. GLIDE has no lighting screen: a key's light is a choice in the key editor's Key Lighting tab (Off, a colour, a status light), Paint turns that choice into a brush over the canvas (one undo step per stroke), and brightness and effects live in Layout properties.

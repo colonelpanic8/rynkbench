@@ -1,6 +1,6 @@
 # 0019. Operations: named changes from one image to another
 
-**Status:** Accepted. Step 4 of the architecture plan (`docs/architecture-review.md`, "The plan, validated"); the foundation for Flows and WebMCP, which are not built here. Builds on ADR 0018 (the draft is a wanted image) and refines ADR 0016 for the lighting controls.
+**Status:** Accepted. Step 4 of the architecture plan (`docs/architecture-review.md`, "The plan, validated"); the foundation for Flows and WebMCP, which are not built here; imports completed by 0023 as a direct commit, not an operation. Builds on ADR 0018 (the draft is a wanted image) and refines ADR 0016 for the lighting controls.
 
 ## Context
 

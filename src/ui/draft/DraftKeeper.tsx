@@ -2,8 +2,9 @@
 // - keeps it in this browser for the keyboard (by serial), so closing the tab
 //   or losing the connection loses nothing, and offers it back next time;
 // - asks before the page closes while changes are not on the keyboard;
-// - in Live mode, sends lighting once the painting pauses (a scene is written
-//   whole, so not on every stroke).
+// - in Live mode, sends what waits in the draft (lighting, rules, pointing)
+//   once edits pause, without asking and without overwriting anything the
+//   keyboard changed (ADR 0022).
 
 import { useEffect, useMemo, useRef } from "react";
 import { readSetting, SETTING_KEYS, writeSetting } from "../settings";

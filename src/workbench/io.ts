@@ -1,7 +1,10 @@
-// The io facade: how the workbench reaches the keyboard. Every method writes
-// through the session and narrates through `dispatch`; screens call it, never
-// the session. Its parts are by job (io-keys, io-layers, io-lighting,
-// io-settings); this file is the contract and puts them together.
+// The io facade: how the workbench reaches the keyboard. Screens call it, never
+// the session. An operation, an import, Undo and Send commit to what you want
+// and go through the one write path. Most others change what you want in Draft
+// and write through the session at once in Live, narrating through `dispatch`;
+// `applyScenes` and `applyConditionalScenes` write a whole table in either
+// mode, and try-out lights are never drafted. Its parts are by job (io-keys, io-layers, io-lighting,
+// io-settings, io-import, io-try-out); this file is the contract and puts them together.
 
 import type {
   BehaviorConfig,

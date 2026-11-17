@@ -1,6 +1,6 @@
 # 0010. Draft and Live: when changes reach the keyboard
 
-**Status:** Accepted
+**Status:** Accepted; what Live sends on its own amended by 0022.
 
 ## Context
 

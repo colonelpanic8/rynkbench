@@ -92,7 +92,7 @@ export function guardIo(io: WorkbenchIo, bundle: ConnectedBundle, getState: () =
   return {
     ...io,
     async setKey(layer, row, col, action) {
-      // RMK stores every key it is sent; one it already holds costs flash for nothing (ADR 0012).
+      // RMK stores the row segment of every key it is sent, unchanged or not (ADR 0012, 0021).
       if (same(getState().layers[layer]?.[row * cols + col], action)) return { ok: true };
       const pass = await judged([{ layer, row, col, action }]);
       return pass.ok ? io.setKey(layer, row, col, action) : pass;
