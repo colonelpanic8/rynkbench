@@ -104,8 +104,11 @@ describe.each(BOARDS)("%s", (_board, spec) => {
       const shown = area ? section : "keymap";
       const html = drawWorkbench(bundle, section);
       const wording = getWording();
-      expect(html).toContain(`aria-current="page" title="${termFor(shownArea.term, wording)}"`);
-      expect(selectedSection(html)).toBe(shownArea.sections.length > 1 ? termFor(sectionTerm(shown), wording) : null);
+      // The top bar has no Keymap or Behaviors button: the keymap is home, the Behavior Library opens Behaviors.
+      const inTopBar = shownArea.id !== "layout" && shownArea.id !== "behaviors";
+      expect(html.includes(`aria-current="page" title="${termFor(shownArea.term, wording)}"`)).toBe(inTopBar);
+      expect(html.includes(`title="${termFor("area.layout", wording)}"`)).toBe(false);
+      expect(selectedSection(html)).toBe(shown !== "keymap" && shownArea.sections.length > 1 ? termFor(sectionTerm(shown), wording) : null);
     });
 
     it("offers the lights on the keymap only where the board has them", () => {

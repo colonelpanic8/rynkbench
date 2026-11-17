@@ -13,7 +13,7 @@ import { askConfirm, showToast } from "../messages/store";
 import { deletionBlockedMessage, layerDeletionBlockers } from "../../workbench/layer-impact";
 import { useTerms } from "../terms";
 import { cx } from "../kit";
-import { GripIcon, MoreIcon, StarIcon } from "../icons";
+import { GripIcon, MoreIcon } from "../icons";
 import { RowMenu, useRowMenu, type MenuEntry } from "../RowMenu";
 import { ComboList } from "./ComboList";
 import { BehaviorLibrary, LibraryEntry } from "../behaviors/BehaviorLibrary";
@@ -119,13 +119,6 @@ function LayerList({ onPicked }: { onPicked?: () => void }) {
     const position = layers.indexOf(layer);
     return [
       { id: "rename", label: "Rename", disabled: !canRename, reason: "This keyboard does not store layer names" },
-      {
-        id: "default",
-        label: layer === state.defaultLayer ? "The default layer" : "Make default",
-        hint: "The layer the keyboard starts on",
-        disabled: layer === state.defaultLayer,
-        reason: "This is already the layer the keyboard starts on",
-      },
       "-",
       {
         id: "duplicate",
@@ -160,8 +153,7 @@ function LayerList({ onPicked }: { onPicked?: () => void }) {
     if (id === "rename") {
       setName(layerName(state.layerMetadata, layer));
       setRenaming(layer);
-    } else if (id === "default") io.setDefaultLayer(layer);
-    else if (id === "duplicate") void io.duplicateLayer(layer);
+    } else if (id === "duplicate") void io.duplicateLayer(layer);
     else if (id === "up") void io.moveLayer(layer, layer - 1);
     else if (id === "down") void io.moveLayer(layer, layer + 1);
     else if (id === "delete") remove(layer);
@@ -233,18 +225,12 @@ function LayerList({ onPicked }: { onPicked?: () => void }) {
                 dispatch({ type: "uiLayer", layer });
                 onPicked?.();
               }}
-              onDoubleClick={() => canRename && act(layer, "rename")}
               className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-2.5 pl-1.5 pr-1 text-left"
             >
               <span className="w-4 shrink-0 text-right font-mono text-caption text-faint">{layer}</span>
               <span className={cx("min-w-0 flex-1 truncate text-body font-semibold", active ? "text-accent" : "text-ink")}>
                 {label}
               </span>
-              {layer === state.defaultLayer && (
-                <span title="The layer the keyboard starts on" className="inline-flex shrink-0">
-                  <StarIcon size={11} filled className="text-warn" />
-                </span>
-              )}
               {layer === state.currentLayer && layer !== state.uiLayer && (
                 <span title="Active on the keyboard now" className="size-1.5 shrink-0 rounded-full bg-ok" />
               )}
