@@ -22,7 +22,7 @@ One short page per decision that shapes the code, so the reason survives the peo
 | [0016](0016-rgb-lighting-the-glide-way.md) | RGB lighting the GLIDE way (staged) | Accepted; amended by 0024 |
 | [0017](0017-a-core-for-the-workbench.md) | A core for the workbench: `workbench/` between the core and the screens | Accepted |
 | [0018](0018-the-draft-is-a-wanted-image.md) | The draft is a wanted image beside its base; one history in Draft and Live | Accepted; base and basis amended by 0022 |
-| [0019](0019-operations.md) | Operations: named changes from one image to another; realtime lighting | Accepted; imports completed by 0023 |
+| [0019](0019-operations.md) | Operations: named changes from one image to another; RGB Apply to the keyboard (amended: one switch in Settings, on) | Accepted; imports completed by 0023 |
 | [0020](0020-behavior-library.md) | The Behavior Library: names beside the slots, one editor, every edit an operation | Accepted |
 | [0021](0021-keys-by-whole-rows.md) | Keys are written by whole rows | Accepted |
 | [0022](0022-base-basis-and-lives-own-send.md) | The base is the last read; what a draft was based on; Live's own send | Accepted |

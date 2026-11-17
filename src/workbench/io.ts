@@ -40,6 +40,7 @@ import { layerIo } from "./io-layers";
 import { lightingIo } from "./io-lighting";
 import { tryOutIo } from "./io-try-out";
 import { settingsIo } from "./io-settings";
+import { realtimeWriter, type RealtimeWriter } from "./realtime";
 
 /** How the workbench narrates a change: React's dispatch has this type, and so
  *  can anything else that keeps a workbench. */
@@ -55,6 +56,8 @@ export interface WorkbenchIo {
   /** A layout file over what you want, committed as an operation's result is;
    *  `labels`: the file's names for its behaviors (ADR 0020). */
   importLayout(file: LayoutImport, labels?: BehaviorLabels): Promise<LayoutImported>;
+  /** Resolves once realtime lighting has nothing waiting or being written. */
+  realtimeSettled(): Promise<void>;
   setKey(layer: number, row: number, col: number, action: KeyAction): Promise<IoWriteResult>;
   /** Several keys as one change (a swap, a paste): the `set_keys` operation. */
   writeKeys(edits: readonly KeyWrite[]): Promise<IoWriteResult>;
@@ -178,6 +181,8 @@ export interface IoOptions {
   judge?: Judge;
   /** Which half of a split board each LED is on. */
   ledNodes?: Readonly<Record<number, number>>;
+  /** Whether lighting and effects reach the keyboard as they change (ADR 0019); off without one. */
+  realtimeLighting?: () => boolean;
 }
 
 /** What every io part works with. */
@@ -191,6 +196,8 @@ export interface IoContext {
   ledNodes: Readonly<Record<number, number>>;
   /** In Draft, puts these items in what you want and answers; in Live, answers null and the caller writes. */
   draft(values: Array<{ item: SyncItem; value: unknown }>): IoWriteResult | null;
+  /** Realtime lighting's writer (ADR 0019). */
+  realtime: RealtimeWriter;
 }
 
 /** Build the io facade. `session` writes; `dispatch` narrates. */
@@ -198,7 +205,7 @@ export function makeIo(
   session: RynkSession,
   getState: () => WorkbenchState,
   dispatch: WorkbenchDispatch,
-  { cols, onDisconnect, features = NO_IO_FEATURES, judge = passEverything, ledNodes = {} }: IoOptions,
+  { cols, onDisconnect, features = NO_IO_FEATURES, judge = passEverything, ledNodes = {}, realtimeLighting = () => false }: IoOptions,
 ): WorkbenchIo {
   const draft: IoContext["draft"] = (values) => {
     const state = getState();
@@ -207,10 +214,12 @@ export function makeIo(
     dispatch({ type: "wantSet", values });
     return { ok: true };
   };
-  const context: IoContext = { session, getState, dispatch, cols, features, judge, ledNodes, draft };
+  const realtime = realtimeWriter({ session, getState, dispatch, cols }, realtimeLighting);
+  const context: IoContext = { session, getState, dispatch, cols, features, judge, ledNodes, draft, realtime };
   return {
     apply: (name, input) => applyOperation(context, name, input),
     importLayout: (file, labels) => importLayout(context, file, labels),
+    realtimeSettled: () => realtime.settled(),
     ...keyIo(context),
     ...layerIo(context),
     ...lightingIo(context),

@@ -44,8 +44,8 @@ export function partsOf(image: KeyboardImage): Partial<ImageFeatures> {
   };
 }
 
-/** The optional parts, each read only when asked for. */
-async function readSettings(session: RynkSession, features: ImageFeatures): Promise<Partial<KeyboardImage>> {
+/** The optional parts, each read only when asked for (a realtime write's read-back reads only these). */
+export async function readSettings(session: RynkSession, features: ImageFeatures): Promise<Partial<KeyboardImage>> {
   const when = <T,>(wanted: boolean | undefined, read: () => Promise<T>) => (wanted ? read() : Promise.resolve(undefined));
   const [behavior, profiles, holdTriggers, sceneStatus, lighting, extension, layers, params] = await Promise.all([
     when(features.behavior, () => session.behavior.get()),

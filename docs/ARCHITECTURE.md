@@ -112,7 +112,8 @@ Where a new piece of code goes is one question: what does it need? Only data: `m
 2. **`io` decides when.** In Draft a change only changes what you want. In Live a commit is sent at once through the write path; a direct edit is written through the session at once and narrated by actions (`…Start`, then `…Ok` or `…Err`), and `base` takes only what it wrote (ADR 0022).
 3. **The reducer is the only place state changes** (`workbench/reducer.ts`). It is pure; reads and topic events from the keyboard arrive through it too.
 4. **A bulk change is an operation** (ADR 0019): a pure function from the image you want to the next, listed in the catalog (`operations/`). `io.apply(name, input)` runs it and commits the result. A file import is a commit too, without being in the catalog (ADR 0023).
-5. **One Undo** (ADR 0018): every edit is one step of the history; Undo commits the inverse, through Guard and the mode like any edit. Try-out lights are outside it.
+5. **RGB Apply to the keyboard** (ADR 0019): with Settings → RGB Apply on Keyboard (the default), the Apply of RGB Lighting or RGB Effects is still a commit and one Undo step, and `workbench/realtime.ts` writes it at once, in Draft too, and reads it back; nothing is written before Apply. Undo in Draft writes those items back at once as well.
+6. **One Undo** (ADR 0018): every edit is one step of the history; Undo commits the inverse, through Guard and the mode like any edit. Try-out lights are outside it.
 
 ### What goes through the write path, and what does not
 

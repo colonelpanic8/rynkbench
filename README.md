@@ -53,7 +53,10 @@ GLIDE.
   wake the lights, status setups, the condition rules and what the firmware
   lights on its own) and **RGB Effects** (the firmware's effects as a gallery
   of cards, an effect "Over it" where the firmware has one, palette, speed
-  and each effect's settings).
+  and each effect's settings). Their **Apply** writes straight to the
+  keyboard, in Draft too, so you see the result on the board; nothing is
+  written while you drag. Settings → **RGB Apply** → Draft holds it for Send
+  instead.
 - **Behaviors.** All your behaviors lists macros, tap patterns (morse), forks
   and tap-hold profiles with filters, where each is used, Copy and Paste, and
   deleting the unused ones. Each behavior opens in one editor with Apply and

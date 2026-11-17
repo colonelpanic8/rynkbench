@@ -222,6 +222,7 @@ export function Workbench({
           features: ioFeaturesFor(bundle),
           judge: guardJudge(bundle),
           ledNodes: ledNodesOf(bundle),
+          realtimeLighting: () => PREFERENCES.realtimeLighting.get(),
         }),
         bundle,
         () => stateRef.current,
