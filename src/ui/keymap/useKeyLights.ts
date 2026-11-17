@@ -23,7 +23,7 @@ import {
 import { statusLightLeds, statusLightOf } from "../../model/lighting/status-light";
 import { targetPreviewEffects } from "../../model/lighting/preview";
 import { tryOutLightOf, tryOutPlan, withTryOut } from "../../model/lighting/try-out";
-import { ledNodesOf, lightingDraftFor } from "../../workbench";
+import { ledNodesOf, lightingDraftFor, type IoWriteResult } from "../../workbench";
 import { useWorkbench } from "../state";
 import { useCapability } from "../use-capabilities";
 import { useTryOut } from "./useTryOut";
@@ -66,10 +66,11 @@ export function useKeyLights() {
 
     /** Gives keys a light: a try-out light while trying out, else a stored one on the
      *  layer shown, one change judged and undone as one. */
-    set(light: KeyLight, leds: readonly number[]) {
-      if (!trying) return void io.apply("set_key_light", { layer, leds, light });
+    async set(light: KeyLight, leds: readonly number[]): Promise<IoWriteResult> {
+      if (!trying) return io.apply("set_key_light", { layer, leds, light });
       const plan = tryOutPlan(light, leds, tryOut.lifetimeMs);
       if (plan) io.tryOut(plan.cells, plan.erase);
+      return { ok: true };
     },
     /** How many keys have a light of their own on the layer shown: a stored colour or a status light. */
     layerLights: new Set([...Object.keys(draft).map(Number), ...statusLightLeds(rules, layer)]).size,

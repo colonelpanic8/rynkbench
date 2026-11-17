@@ -1,8 +1,9 @@
 // The status setup that is choosing its keys on the board, if one is
 // (model/lighting/key-pick.ts). It starts in Layout properties (RGB Lighting,
 // Advanced), which steps aside while it lasts; the keymap's canvas collects
-// the keys with its selection, and its banner installs them or cancels. The
-// panel, the window and the canvas share this.
+// the keys with its selection, and its banner installs them or cancels. It
+// ends with the workbench (ui/workbench-end.ts). The panel, the window and the
+// canvas share this.
 
 import { useSyncExternalStore } from "react";
 import type { KeyPick } from "../../model/lighting/key-pick";

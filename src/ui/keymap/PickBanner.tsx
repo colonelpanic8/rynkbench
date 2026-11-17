@@ -2,6 +2,8 @@
 // (ui/lighting/keyPick.ts): what is being picked and on which layer, how many
 // keys are chosen, Cancel (Escape too) and Done. Done installs the setup as one
 // operation, so it joins the draft and is one Undo step, then ends the pick.
+// The pick is for the layer shown: it starts on the setup's layer and follows
+// another one shown meanwhile, keeping the keys chosen.
 
 import { useEffect } from "react";
 import { selectedKeys } from "../../model/key-selection";
@@ -22,8 +24,9 @@ function pickedKeys(board: readonly KeyView[], chosen: ReturnType<typeof selecte
   });
 }
 
-export function PickBanner({ pick }: { pick: KeyPick }) {
+export function PickBanner({ pick: started }: { pick: KeyPick }) {
   const { bundle, state, dispatch, io } = useWorkbench();
+  const pick = { ...started, layer: state.uiLayer };
   const keys = pickedKeys(bundle.model.keys, selectedKeys(state.selection));
   const plan = planPick(pick, keys);
   const layer = layerName(state.layerMetadata, pick.layer);

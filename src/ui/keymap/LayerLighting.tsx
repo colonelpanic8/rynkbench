@@ -104,10 +104,17 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
 
   const shown: KeyLight = view.brush ?? current;
   const differ = (light: KeyLight) => leds.some((led) => !sameLight(light, lights.lightOf(led)));
-  const choose = (light: KeyLight) => {
+  /** Gives the keys `light`, or makes it the brush; whether it was given. */
+  const choose = async (light: KeyLight): Promise<boolean> => {
     setKept((all) => ({ ...all, [choiceOf(light)]: light }));
-    if (view.brush) return lightView.setBrush(light);
-    if (differ(light)) lights.set(light, leds);
+    if (view.brush) {
+      lightView.setBrush(light);
+      return true;
+    }
+    if (!differ(light)) return true;
+    const result = await lights.set(light, leds);
+    if (!result.ok && !result.guarded) showToast(`The light was not changed: ${result.message}`, { tone: "danger" });
+    return result.ok;
   };
   const unusable = leds.length === 0 && !view.brush;
   const unlit = keys.length - leds.length;
@@ -169,7 +176,7 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
             className="shrink-0 cursor-pointer font-semibold text-accent hover:underline"
             onClick={() => state.selection?.type === "key" && dispatch({ type: "select", selection: { type: "key", row: state.selection.row, col: state.selection.col } })}
           >
-            Clear selection
+            Select only this key
           </button>
         </div>
       )}
@@ -211,7 +218,7 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
               aria-checked={chosen}
               disabled={unusable || notTried}
               title={notTried ? "Try-out lights are a color or none" : undefined}
-              onClick={() => choose(kept[choice.id] ?? choice.start)}
+              onClick={() => void choose(kept[choice.id] ?? choice.start)}
               className="flex w-full cursor-pointer items-start gap-3 px-4 py-2.5 text-left disabled:cursor-not-allowed"
             >
               <span
@@ -229,7 +236,13 @@ export function LayerLighting({ ledId }: { ledId: number | undefined }) {
             </button>
             {chosen && (choice.id === "color" || choice.id === "status") && (
               <div className="flex flex-col gap-3 px-4 pt-1 pb-4 pl-11">
-                <KeyLightFields light={shown} lights={lights} onChange={choose} />
+                <KeyLightFields
+                  key={`${layer}:${leds.join()}`}
+                  light={shown}
+                  lights={lights}
+                  onChange={choose}
+                  onTyping={view.brush ? lightView.setBrush : undefined}
+                />
               </div>
             )}
           </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TIMING, buildEffect, effectKind, effectRgb, effectTiming, timingBounds, typedWithin } from "./effect";
+import { DEFAULT_TIMING, blinkDuty, buildEffect, effectKind, effectRgb, effectTiming, timingBounds, typedWithin, withBlinkDuties } from "./effect";
 import type { EffectKind } from "./effect";
 
 const color = { r: 10, g: 20, b: 30 };
@@ -48,5 +48,29 @@ describe("timing the firmware takes", () => {
     expect(typedWithin("12.6", 0, 100)).toBe(13);
     expect(typedWithin("", 100, 5000)).toBeNull();
     expect(typedWithin("-", 100, 5000)).toBeNull();
+  });
+});
+
+describe("a blink's duty", () => {
+  const blink = (duty: number) => buildEffect("Blink", color, { ...timing, duty });
+
+  it("runs as stored up to 100 percent, and lit throughout from there", () => {
+    expect(blinkDuty(30)).toBe(30);
+    expect(blinkDuty(100)).toBe(100);
+    // An older Rynkbench stored a duty out of 255: its 128 already lit the key throughout.
+    expect(blinkDuty(128)).toBe(100);
+  });
+
+  it("goes into a file at the duty it runs at, everything else as it was", () => {
+    const steady = buildEffect("Solid", color, timing);
+    const lighting = {
+      scenes: [{ layer: 0, led_id: 1, effect: blink(128) }, { layer: 0, led_id: 2, effect: blink(30) }],
+      rules: [{ cell: { led_id: 3, effect: steady, conditions: { layer: 2 } } }],
+    };
+    const filed = withBlinkDuties(lighting);
+    expect(filed.scenes.map((cell) => effectTiming(cell.effect).duty)).toEqual([100, 30]);
+    expect(filed.scenes[1]).toBe(lighting.scenes[1]);
+    expect(filed.rules).toBe(lighting.rules);
+    expect(effectTiming(lighting.scenes[0].effect).duty).toBe(128);
   });
 });

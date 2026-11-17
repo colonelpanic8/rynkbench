@@ -54,19 +54,19 @@ describe("several keys selected", () => {
       state: { uiLayer: 0, layerMetadata: null, compiledScenes, scenes: [], layerDrafts: {}, selection },
     });
 
-  it("says how many, how many cannot be lit, that their lights differ, and offers to clear the selection", () => {
+  it("says how many, how many cannot be lit, that their lights differ, and offers to go back to the one key the editor shows", () => {
     const html = draw({ type: "key", row: 0, col: 0, more: [{ row: 0, col: 1 }, { row: 0, col: 2 }] });
     expect(html).toContain("3 keys selected");
     expect(html).toContain("1 without an LED");
     // LED 4 has the firmware's colour, LED 5 shows the layer below.
     expect(html).toContain("their lights differ");
-    expect(html).toContain("Clear selection");
+    expect(html).toContain("Select only this key");
   });
 
   it("says nothing of a selection for one key", () => {
     const html = draw({ type: "key", row: 0, col: 0 });
     expect(html).not.toContain("selected");
-    expect(html).not.toContain("Clear selection");
+    expect(html).not.toContain("Select only this key");
   });
 
   it("rings every selected key on the canvas, and names the selection on each", async () => {

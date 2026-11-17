@@ -664,6 +664,40 @@ describe("snapshotFromState", () => {
     );
   });
 
+  it("exports a blink stored at a duty above 100 at the 100 percent it runs at, which a file can hold", () => {
+    const parsed = parseDocument(MINIMAL, CATALOG);
+    const lighting = parsed.snapshot.lighting!;
+    const blink = (led_id: number, duty: number) => ({
+      layer: 0,
+      led_id,
+      effect: { Blink: { color: { r: 255, g: 0, b: 0 }, period_ms: 600, phase_ms: 0, duty } },
+    });
+    const state = {
+      defaultLayer: 0,
+      layers: parsed.snapshot.layers,
+      lightingState: { revision: 1, output_enabled: true, output_brightness: lighting.brightness, background: lighting.background, overlay_len: 0 },
+      lightingOutputMode: { mode: lighting.output_mode, powered: true, wake_active: false, effective_enabled: true },
+      lightingControls: { output_toggle_user_action: undefined, wake_layers: 0 },
+      scenePolicy: lighting.scene_policy,
+      scenes: [blink(7, 128), blink(8, 30)],
+      runtimeConditionalScenes: [],
+      lightingExtension: null,
+      lightingExtensionLayers: null,
+      morseProfiles: [],
+      morseHoldTriggerPositionCapacity: null,
+      morseHoldTriggerPositions: [],
+      autoMouseLayers: [],
+      morse: [],
+      combos: [],
+      forks: [],
+      macroOps: [],
+      layerMetadata: null,
+    } as unknown as WorkbenchState;
+
+    const again = parseDocument(exportDocument(state, CATALOG, "toml"), CATALOG);
+    expect(again.snapshot.lighting?.scenes).toEqual([blink(7, 100), blink(8, 30)]);
+  });
+
   it("refuses to export fallback values from a partial device read", () => {
     expect(() =>
       exportDocument(
