@@ -29,13 +29,13 @@ const GROUPS: Array<[string, string, Array<[HidKeyCode, string, string?]>]> = [
   ]],
   ["old-editing", "Keyboard editing keys", [
     ["Undo", "Undo key"], ["Cut", "Cut key"], ["Copy", "Copy key"], ["Paste", "Paste key"], ["Find", "Find key", "search"],
-    ["Again", "Again", "redo repeat"], ["Help", "Help"], ["Menu", "Menu key"], ["Select", "Select"],
+    ["Again", "Repeat last key", "again redo"], ["Help", "Help"], ["Menu", "Menu key"], ["Select", "Select"],
     ["Execute", "Execute"], ["Stop", "Stop"],
   ]],
   ["more-media", "More media & system", [
     ["MediaPlay", "Play"], ["MediaPause", "Pause media", "music"], ["MediaFastForward", "Fast Forward"], ["MediaRewind", "Rewind"],
     ["MediaRepeat", "Repeat"], ["MediaRandomPlay", "Shuffle", "random"], ["MediaStopEject", "Stop/Eject"],
-    ["MediaSelect", "Media Select"], ["MediaEject", "Eject"],
+    ["MediaSelect", "Record", "media select"], ["MediaEject", "Eject"],
     ["SnapShot", "Screenshot", "snapshot print screen"], ["ScreenLock", "Lock Screen", "lock"],
     ["NextKeyboardLayoutSelect", "Next Keyboard Layout", "language input switch"],
     ["BrightnessMinimum", "Brightness Min", "screen"], ["BrightnessMaximum", "Brightness Max", "screen"],

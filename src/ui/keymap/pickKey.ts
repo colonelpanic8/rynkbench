@@ -209,11 +209,11 @@ export function pickKeyGroups(
           keyTile("MouseWheelLeft", "Scroll ←", "mouse wheel"),
           keyTile("MouseWheelRight", "Scroll →", "mouse wheel"),
         ]),
-        // While held, the pointer and wheel move at a fixed speed: 1 the slowest.
+        // While held, RMK moves the pointer and wheel at this times their speed (mouse.rs).
         ...cluster("Speed while held", [
-          keyTile("MouseAccel0", "Speed 1", "mouse acceleration accel0 slow"),
-          keyTile("MouseAccel1", "Speed 2", "mouse acceleration accel1"),
-          keyTile("MouseAccel2", "Speed 3", "mouse acceleration accel2 fast"),
+          keyTile("MouseAccel0", "Speed ¼×", "mouse acceleration accel0 slow"),
+          keyTile("MouseAccel1", "Speed ½×", "mouse acceleration accel1 slow"),
+          keyTile("MouseAccel2", "Speed 2×", "mouse acceleration accel2 fast"),
         ]),
       ],
     },

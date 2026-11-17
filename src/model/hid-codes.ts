@@ -1,7 +1,8 @@
-// Every HID key RMK has (rmk-types keycode/hid.rs), in its order: what Pick
-// Key's All keys draws from, so no key is missing from the picker. The four
-// report codes before A (No, ErrorRollover, PostFail, ErrorUndefined) are not
-// keys anyone binds. Pure.
+// Every HID key RMK has (rmk-types keycode/hid.rs), by its code (0x00–0xF5):
+// what Pick Key's All keys draws from, so no key is missing from the picker.
+// RMK sends the media, app and system ones on the consumer and system pages,
+// the mouse ones as the mouse. The four report codes before A (No,
+// ErrorRollover, PostFail, ErrorUndefined) are not keys anyone binds. Pure.
 
 import type { HidKeyCode } from "./action-types";
 
@@ -38,14 +39,15 @@ export const HID_CODES = [
   "WwwFavorites", "MediaFastForward", "MediaRewind",
   "BrightnessUp", "BrightnessDown", "ControlPanel", "Assistant",
   "MissionControl", "Launchpad",
+  "AcRedo", "SnapShot", "MediaPlay", "MediaPause", "MediaRandomPlay", "MediaRepeat", "MediaStopEject",
+  "ScreenLock", "AcNew", "AcOpen",
   "MouseUp", "MouseDown", "MouseLeft", "MouseRight",
   "MouseBtn1", "MouseBtn2", "MouseBtn3", "MouseBtn4", "MouseBtn5",
   "MouseBtn6", "MouseBtn7", "MouseBtn8",
   "MouseWheelUp", "MouseWheelDown", "MouseWheelLeft", "MouseWheelRight",
   "MouseAccel0", "MouseAccel1", "MouseAccel2",
   "LCtrl", "LShift", "LAlt", "LGui", "RCtrl", "RShift", "RAlt", "RGui",
-  "AcRedo", "SnapShot", "MediaPlay", "MediaPause", "MediaRandomPlay", "MediaRepeat", "MediaStopEject",
-  "ScreenLock", "AcNew", "AcOpen", "AcClose", "AcExit", "AcSave", "AcPrint", "AcProperties",
+  "AcClose", "AcExit", "AcSave", "AcPrint", "AcProperties",
   "AcUndo", "AcCopy", "AcCut", "AcPaste", "AcFind", "NextKeyboardLayoutSelect",
   "BrightnessMinimum", "BrightnessMaximum", "BrightnessAuto",
 ] as const satisfies readonly HidKeyCode[];

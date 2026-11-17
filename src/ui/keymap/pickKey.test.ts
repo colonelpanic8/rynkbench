@@ -96,6 +96,11 @@ describe("pick key", () => {
     );
   });
 
+  it("never offers Clear EEPROM: one press wipes everything the keyboard stores", () => {
+    const all = [...groups.main, ...groups.more].flatMap((g) => g.tiles);
+    expect(all.some((t) => typeof t.action === "object" && "KeyboardControl" in t.action && t.action.KeyboardControl === "ClearEeprom")).toBe(false);
+  });
+
   it("names the modifiers as the computer does", () => {
     const names = (os: "mac" | "win" | "linux") => pickKeyGroups(us, { os }).main.find((g) => g.id === "modifiers")!.tiles.map((t) => t.label);
     expect(names("mac")).toEqual(expect.arrayContaining(["Left Control", "Left Option", "Left Command"]));

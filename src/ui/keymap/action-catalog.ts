@@ -18,12 +18,6 @@ export const SYSTEM_ACTIONS: Array<{
   { id: "CapsWordToggle", label: "Caps Word", hint: "Capitalize until the next word break" },
   { id: "Bootloader", label: "Bootloader", hint: "Reboot into flashing mode", danger: true },
   { id: "Reboot", label: "Reboot", hint: "Restart the keyboard", danger: true },
-  {
-    id: "ClearEeprom",
-    label: "Clear EEPROM",
-    hint: "Wipe stored settings back to firmware defaults",
-    danger: true,
-  },
 ];
 
 /** Every lighting action currently exposed by the generated RMK protocol. */
