@@ -1,6 +1,6 @@
 // The pill at the top of the keymap canvas, as in GLIDE: what is happening
 // (a move under way, what a move or paste did) or, until dismissed, how to use
-// the canvas. Dismissing the hint is remembered in this browser.
+// the canvas, in words for a mouse or a finger. Dismissing the hint is remembered in this browser.
 
 import { useSyncExternalStore } from "react";
 import { createSetting, SETTING_KEYS } from "../settings";
@@ -9,6 +9,13 @@ import { CloseIcon } from "../icons";
 const hintDismissed = createSetting(SETTING_KEYS.canvasHintDismissed, (raw) => raw === "1", (value) => (value ? "1" : "0"));
 
 const HINT = "Click a key to edit • Right-click for options • Drag to swap";
+/** The same hint for a touch screen, where a long press opens the key's menu. */
+const TOUCH_HINT = "Tap a key to edit • Long-press for options • Drag to swap";
+
+/** Whether the main pointer is a finger (no matchMedia, as in tests: a mouse). */
+function touchScreen(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches === true;
+}
 
 export function CanvasPill({ message }: { message: string | null }) {
   const dismissed = useSyncExternalStore(hintDismissed.subscribe, hintDismissed.get, hintDismissed.get);
@@ -18,7 +25,7 @@ export function CanvasPill({ message }: { message: string | null }) {
       aria-live="polite"
       className="flex items-center gap-2 rounded-full border border-line-strong bg-panel/90 py-1.5 pr-2 pl-4 text-small font-medium text-mute shadow-lg backdrop-blur"
     >
-      <span className="truncate">{message ?? HINT}</span>
+      <span className="truncate">{message ?? (touchScreen() ? TOUCH_HINT : HINT)}</span>
       {!message && (
         <button
           type="button"

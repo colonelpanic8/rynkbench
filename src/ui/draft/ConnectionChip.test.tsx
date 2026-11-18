@@ -24,7 +24,7 @@ describe("the connection chip", () => {
   it("counts the changes not on the keyboard and offers Review & send", () => {
     const html = renderInWorkbench(<ConnectionChip />, { bundle: keyboard, state: { batchMode: true, ...drafted } });
     expect(html).toContain("Review &amp; send");
-    expect(html).toMatch(/Review &amp; send<span[^>]*>1<\/span>/);
+    expect(html).toMatch(/Review &amp; send<\/span><span[^>]*>Send<\/span><span[^>]*>1<\/span>/);
     expect(html).toContain("Discard the changes not on the keyboard");
   });
 
@@ -36,7 +36,7 @@ describe("the connection chip", () => {
 
   it("in Live, offers Review & send for changes a send left behind", () => {
     const html = renderInWorkbench(<ConnectionChip />, { bundle: keyboard, state: { batchMode: false, batchError: "1 change waits", ...drafted } });
-    expect(html).toMatch(/Review &amp; send<span[^>]*>1<\/span>/);
+    expect(html).toMatch(/Review &amp; send<\/span><span[^>]*>Send<\/span><span[^>]*>1<\/span>/);
     expect(html).toContain("Discard the changes not on the keyboard");
   });
 

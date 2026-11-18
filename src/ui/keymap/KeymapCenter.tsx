@@ -197,7 +197,7 @@ export function KeymapCenter() {
   };
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col max-lg:min-h-[380px]">
+    <div className="relative flex min-h-0 flex-1 flex-col max-lg:min-h-[380px] max-sm:min-h-[290px]">
       <BoardWell
         model={bundle.model}
         flush

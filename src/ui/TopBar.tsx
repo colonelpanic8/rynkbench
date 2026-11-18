@@ -106,13 +106,13 @@ export function TopBar({
     .join(" | ");
 
   return (
-    <header className="relative z-40 flex h-14 shrink-0 items-center gap-3 border-b border-line bg-bg px-4 max-sm:gap-2 max-sm:overflow-x-auto max-sm:px-2">
+    <header className="relative z-40 flex h-14 shrink-0 items-center gap-3 border-b border-line bg-bg px-4 max-sm:gap-2 max-sm:px-2">
       <div className="flex min-w-0 shrink-0 items-center gap-3">
         <button
           type="button"
           onClick={() => onArea(areas[0])}
           title="Back to the keymap"
-          className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg px-1.5 -mx-1.5 py-1 transition-colors hover:bg-hover"
+          className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg px-1.5 -mx-1.5 py-1 transition-colors hover:bg-hover max-sm:hidden"
         >
           <Wordmark size={22} />
           <span className="text-title font-bold uppercase tracking-widest text-ink max-md:hidden">Rynkbench</span>
@@ -133,97 +133,111 @@ export function TopBar({
           {workspaceName}
         </span>
         {/* As in GLIDE: the sliders beside the layout's name open Layout properties. */}
-        <button
-          type="button"
-          onClick={() => openProperties()}
-          aria-label="Layout properties"
-          title="Layout properties: name, keyboard, firmware options and lighting"
-          className="-ml-1.5 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg text-ink hover:bg-hover"
-        >
-          <SlidersIcon size={16} />
-        </button>
+        <PropertiesButton className="max-sm:hidden" />
       </div>
       <LayoutProperties />
 
-      <FileMenus />
-      <div className="h-5 w-px shrink-0 bg-line max-sm:hidden" />
-      <ScreenNav areas={areas} current={current} onArea={onArea} />
+      {/* On a phone the tools scroll sideways between the layer and the
+          keyboard's status, which stay in view; on wider screens this wrapper
+          is not there (contents) and the tools sit in the bar as before. */}
+      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto scroll-fade-x sm:contents">
+        <PropertiesButton className="sm:hidden" />
+        <FileMenus />
+        <div className="h-5 w-px shrink-0 bg-line max-sm:hidden" />
+        <ScreenNav areas={areas} current={current} onArea={onArea} />
 
-      <div className="flex-1" />
+        <div className="flex-1" />
 
-      <div
-        className="flex items-center gap-0.5"
-        title="Undo covers every change, in Draft and Live."
-      >
-        <Button
-          variant="ghost"
-          className="px-2"
-          disabled={!history.canUndo}
-          reason={history.phase !== "idle" ? "Wait for the keyboard to finish saving" : "Nothing to undo"}
-          onClick={() => void history.undo()}
-          aria-label="Undo"
-          title={`Undo ${history.undoLabel ?? "the last edit"} · Ctrl/⌘ Z`}
+        <div
+          className="flex items-center gap-0.5"
+          title="Undo covers every change, in Draft and Live."
         >
-          <UndoIcon size={15} />
-        </Button>
-        <Button
-          variant="ghost"
-          className="px-2"
-          disabled={!history.canRedo}
-          reason={history.phase !== "idle" ? "Wait for the keyboard to finish saving" : "Nothing to redo"}
-          onClick={() => void history.redo()}
-          aria-label="Redo"
-          title={`Redo ${history.redoLabel ?? "the last edit"} · Ctrl/⌘ Shift Z or Ctrl Y`}
+          <Button
+            variant="ghost"
+            className="px-2"
+            disabled={!history.canUndo}
+            reason={history.phase !== "idle" ? "Wait for the keyboard to finish saving" : "Nothing to undo"}
+            onClick={() => void history.undo()}
+            aria-label="Undo"
+            title={`Undo ${history.undoLabel ?? "the last edit"} · Ctrl/⌘ Z`}
+          >
+            <UndoIcon size={15} />
+          </Button>
+          <Button
+            variant="ghost"
+            className="px-2"
+            disabled={!history.canRedo}
+            reason={history.phase !== "idle" ? "Wait for the keyboard to finish saving" : "Nothing to redo"}
+            onClick={() => void history.redo()}
+            aria-label="Redo"
+            title={`Redo ${history.redoLabel ?? "the last edit"} · Ctrl/⌘ Shift Z or Ctrl Y`}
+          >
+            <RedoIcon size={15} />
+          </Button>
+        </div>
+
+        <div
+          key={activeLabel}
+          className="animate-pop max-sm:hidden sm:order-1"
+          title={`Active layers: ${activeLabel}. Default layer: ${state.defaultLayer}.`}
         >
-          <RedoIcon size={15} />
-        </Button>
+          <Chip tone="accent" className="tnum">
+            <span className="size-1.5 rounded-full bg-accent" />
+            {activeLabel}
+          </Chip>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-3 max-sm:gap-2 sm:order-1">
+          {!offline && <BatteryReadout battery={state.battery} split={split} />}
+          <div className="h-6 w-px bg-line-soft" />
+          <SettingsPanel />
+          {offline && (
+            <Button variant="ghost" onClick={io.disconnect} title="Close file">
+              <PowerIcon size={15} />
+              Close
+            </Button>
+          )}
+        </div>
       </div>
 
-      <div className="h-6 w-px bg-line-soft max-sm:hidden" />
-      <ConnectionChip />
+      <div className="flex shrink-0 items-center gap-3 max-sm:gap-2">
+        <div className="h-6 w-px bg-line-soft max-sm:hidden" />
+        <ConnectionChip />
 
-      {history.phase !== "idle" && (
-        <span className="text-small text-accent" role="status">
-          {history.phase === "writing"
-            ? "Saving configuration…"
-            : history.phase === "undoing"
-              ? "Undoing key…"
-              : "Redoing key…"}
-        </span>
-      )}
-      {history.error && (
-        <span
-          className="max-w-48 truncate text-small text-danger"
-          role="alert"
-          title={history.error}
-        >
-          {history.error}
-        </span>
-      )}
-
-      <div
-        key={activeLabel}
-        className="animate-pop max-sm:hidden"
-        title={`Active layers: ${activeLabel}. Default layer: ${state.defaultLayer}.`}
-      >
-        <Chip tone="accent" className="tnum">
-          <span className="size-1.5 rounded-full bg-accent" />
-          {activeLabel}
-        </Chip>
+        {history.phase !== "idle" && (
+          <span className="text-small text-accent" role="status">
+            {history.phase === "writing"
+              ? "Saving configuration…"
+              : history.phase === "undoing"
+                ? "Undoing key…"
+                : "Redoing key…"}
+          </span>
+        )}
+        {history.error && (
+          <span
+            className="max-w-48 truncate text-small text-danger"
+            role="alert"
+            title={history.error}
+          >
+            {history.error}
+          </span>
+        )}
       </div>
-
-      {!offline && <BatteryReadout battery={state.battery} split={split} />}
-
-      <div className="h-6 w-px bg-line-soft" />
-
-      <SettingsPanel />
-
-      {offline && (
-        <Button variant="ghost" onClick={io.disconnect} title="Close file">
-          <PowerIcon size={15} />
-          Close
-        </Button>
-      )}
     </header>
+  );
+}
+
+/** The sliders that open Layout properties. */
+function PropertiesButton({ className }: { className: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => openProperties()}
+      aria-label="Layout properties"
+      title="Layout properties: name, keyboard, firmware options and lighting"
+      className={cx("-ml-1.5 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg text-ink hover:bg-hover max-sm:ml-0", className)}
+    >
+      <SlidersIcon size={16} />
+    </button>
   );
 }

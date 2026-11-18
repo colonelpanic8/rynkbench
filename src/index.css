@@ -173,6 +173,15 @@ body {
 }
 
 /* Numeric readouts should never jitter. */
+/* A row of tools that scrolls sideways on a phone, its far end fading out to
+   say there is more, as in GLIDE's top bar. */
+@utility scroll-fade-x {
+  @media (width < 40rem) {
+    padding-right: 28px;
+    mask-image: linear-gradient(to right, black calc(100% - 32px), transparent);
+  }
+}
+
 .tnum {
   font-variant-numeric: tabular-nums;
 }

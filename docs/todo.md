@@ -44,6 +44,8 @@ In this order; decisions in ADR 0017 and an update of ADR 0002.
 
 ## Done recently
 
+- From a side-by-side check with GLIDE: the key editor keeps its shape with no key selected (its picker greyed out); on a phone the layer and the keyboard's status stay in the top bar while the tools scroll beside them, the canvas hint speaks of taps and long presses, and the board takes less height; a combo that matches actions finds its keys through keys that are the same as the layer below (combo cards and Focus Mode).
+
 - One key picker everywhere: Pick Key, compact, fills tap-hold slots, tap patterns' actions, macro steps and pointing keys; every key RMK has (`model/hid-codes.ts`) is in it, All keys counted; modifiers named for the computer; search finds your macros and tap patterns.
 - Keys written by whole rows (ADR 0021); the base is the last read, what a draft was based on, Live's own send (ADR 0022); a file import is a commit (ADR 0023); lighting tools on the keymap, including several keys selected (ADR 0024).
 - ADR 0016, RGB lighting the GLIDE way, stages 1–4 (`0cfd81e` … `ab6296d`).

@@ -160,7 +160,7 @@ export function ConnectionChip() {
             onClick={() => void draft.discard()}
             aria-label="Discard the changes not on the keyboard"
             title="Discard the changes not on the keyboard"
-            className="flex size-8 cursor-pointer items-center justify-center rounded-full border border-line-strong text-mute hover:text-ink"
+            className="flex size-8 cursor-pointer items-center justify-center rounded-full border border-line-strong text-mute hover:text-ink max-sm:hidden"
           >
             <UndoIcon size={13} />
           </button>
@@ -170,7 +170,8 @@ export function ConnectionChip() {
             title="See what changes, then send it to the keyboard"
             className="flex h-8 cursor-pointer items-center gap-1.5 rounded-full bg-accent-fill px-3 text-body font-semibold text-on-accent hover:brightness-110"
           >
-            Review & send
+            <span className="max-sm:hidden">Review & send</span>
+            <span className="sm:hidden">Send</span>
             <span className="rounded-full bg-on-accent/20 px-1.5 text-small tnum">{draft.size}</span>
           </button>
         </>
