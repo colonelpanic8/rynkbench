@@ -28,6 +28,8 @@ export interface KeyDecor {
   highlight?: boolean;
   /** The key being carried away by a drag or a keyboard move: drawn faded. */
   lifted?: boolean;
+  /** Uses the behavior whose row is hovered in the library: GLIDE's pulsing usage ring. */
+  usedBy?: boolean;
   /** Member of the current bulk selection. */
   inSelection?: boolean;
   /** Not paintable / not interactive right now. */

@@ -255,13 +255,13 @@ function KeyShapeImpl({
 }
 
 /**
- * Selection / zone-highlight rings extend outside the cap, so — like labels —
+ * Selection / zone-highlight / usage rings extend outside the cap, so — like labels —
  * they get their own pass above every cap; drawn per-key they'd be painted
  * over by neighbouring caps (thumb fans abut and even overlap).
  */
 function KeyRingImpl({ view, decor }: { view: KeyView; decor: KeyDecor }) {
   const { shape } = view;
-  if (!decor.selected && !decor.highlight && !decor.inSelection) return null;
+  if (!decor.selected && !decor.highlight && !decor.inSelection && !decor.usedBy) return null;
 
   return (
     <g
@@ -285,6 +285,17 @@ function KeyRingImpl({ view, decor }: { view: KeyView; decor: KeyDecor }) {
             stroke="var(--color-select)"
             strokeOpacity={decor.inSelection ? 0.9 : 0.5}
             strokeWidth={0.04}
+          />
+        )}
+        {/* uses the hovered behavior */}
+        {decor.usedBy && (
+          <KeyRects
+            shape={shape}
+            inset={CAP_INSET - 0.07}
+            rx={0.15}
+            fill="none"
+            stroke="var(--color-warn)"
+            className="animate-usage-pulse"
           />
         )}
         {/* selection ring + soft glow */}

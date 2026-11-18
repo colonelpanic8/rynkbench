@@ -48,6 +48,7 @@ import {
 
 import { useCapabilities } from "../use-capabilities";
 import { useKeyText } from "../useKeyText";
+import { keysOnLayer, useHoveredBehavior } from "../behaviors/hoveredBehavior";
 
 export function KeymapCenter() {
   const keyText = useKeyText();
@@ -106,6 +107,9 @@ export function KeymapCenter() {
     [lit, state.layerDrafts, state.scenes, state.uiLayer],
   );
 
+  const hoveredRow = useHoveredBehavior();
+  const usedKeys = useMemo(() => (hoveredRow ? keysOnLayer(hoveredRow.places, state.uiLayer) : null), [hoveredRow, state.uiLayer]);
+
   const decorFor = (key: KeyView): KeyDecor => {
     const action = layer?.[key.row * cols + key.col];
     const pending =
@@ -148,6 +152,7 @@ export function KeymapCenter() {
       inSelection: among && !selected,
       disabled: pick !== null && key.ledId === undefined,
       highlight: dropTarget,
+      usedBy: usedKeys?.has(`${key.row},${key.col}`) ?? false,
       lifted,
       special: highlightSpecial && action !== undefined ? specialKind(action, face) : undefined,
       pending: pending?.status === "pending",

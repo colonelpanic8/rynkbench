@@ -91,6 +91,7 @@
 
   --animate-fade-up: fade-up 260ms var(--ease-out-soft) both;
   --animate-pop: pop 160ms var(--ease-out-soft) both;
+  --animate-usage-pulse: usage-pulse 1.4s ease-in-out infinite;
 }
 
 @keyframes fade-up {
@@ -112,6 +113,19 @@
   100% {
     transform: scale(1);
     opacity: 1;
+  }
+}
+
+/* The keys a hovered behavior row uses (canvas/keys.tsx), as GLIDE pulses them. */
+@keyframes usage-pulse {
+  0%,
+  100% {
+    stroke-opacity: 0.55;
+    stroke-width: 0.06;
+  }
+  50% {
+    stroke-opacity: 0.25;
+    stroke-width: 0.1;
   }
 }
 
