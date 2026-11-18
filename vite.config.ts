@@ -22,6 +22,9 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   test: {
     exclude: [...configDefaults.exclude, "**/.worktrees/**"],
+    // Both wasm modules loaded once per test file, as openBundle loads them
+    // before any workbench opens in the app.
+    setupFiles: ["src/test/wasm.ts"],
   },
   server: {
     fs: {

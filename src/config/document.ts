@@ -33,8 +33,10 @@ export type { ConfigFormat, ExtensionCatalog, ImportNote, ParsedConfig, RuntimeS
 
 let wasmReady: Promise<unknown> | null = null;
 
-/** One-shot loader for the vendored document module, mirroring the session's
- *  own wasm loader: a failed init is retryable on the next attempt. */
+/** One-shot loader for both wasm modules (this document module and the
+ *  session's rynk-wasm): pure model code calls into both synchronously, so
+ *  nothing may run before this resolves. `openBundle` awaits it before any
+ *  workbench opens. A failed init is retryable on the next attempt. */
 export function initConfigWasm(): Promise<unknown> {
   wasmReady ??= Promise.all([wasmInit(), initRynkWasm()]).catch((error: unknown) => {
     wasmReady = null;

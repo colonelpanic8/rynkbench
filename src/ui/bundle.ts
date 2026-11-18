@@ -2,7 +2,9 @@
 // opened session, in one pass, before it mounts. Reads that the firmware may
 // legitimately not support fall back to "absent"; reads that fail for any
 // other reason are recorded in `incompleteReads` so export can refuse to turn
-// a fallback into a lossy file.
+// a fallback into a lossy file. Both wasm modules are loaded first: every
+// board (live, simulated or a file) opens through here, and screens call into
+// them synchronously (a macro's size, a lighting rule's encoding).
 
 import type {
   LightingCapabilities,
@@ -29,6 +31,7 @@ import type { LayerMetadata, LightingTopology, RuntimeLightingRule, RynkSession 
 import { isUnsupportedError } from "../session/unsupported";
 import type { ConnectedBundle } from "../workbench";
 import { errorMessage } from "../session/errors";
+import { initConfigWasm } from "../config/document";
 
 const EMPTY_TOPOLOGY: LightingTopology = {
   revision: 0,
@@ -41,6 +44,7 @@ const EMPTY_TOPOLOGY: LightingTopology = {
 };
 
 export async function openBundle(session: RynkSession): Promise<ConnectedBundle> {
+  await initConfigWasm();
   const incompleteReads: string[] = [];
   /** A read whose failure is always a fault worth reporting. */
   const requiredRead = async <T,>(label: string, read: Promise<T>, fallback: T): Promise<T> => {
