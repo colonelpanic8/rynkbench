@@ -11,7 +11,7 @@ import { keymapSegments } from "../session/flash-writes";
 import { RULES } from "../session/lighting-features";
 import { ruleFromWire, ruleToWire } from "../session/lighting-rules";
 import type { RuntimeLightingRule, RynkSession } from "../session/types";
-import { encodeMacros } from "../model/macros";
+import { encodeMacros, hidStep } from "../model/macros";
 import { emptyMorse } from "../model/slots";
 import { addPointingDevice, normalizePointingConfig, pointingConfigsEqual } from "../model/pointing";
 import { openBundle } from "../ui/bundle";
@@ -148,7 +148,7 @@ describe("importing a layout file", () => {
     await onBoard(await simulated(), true, async ({ session, io, state, file, importText }) => {
       const timing = { ...state().behavior!, combo_timeout_ms: state().behavior!.combo_timeout_ms + 7 };
       expect(await io.setBehavior(timing)).toEqual({ ok: true });
-      const macros = encodeMacros([{ steps: [{ kind: "tap", code: "A" }] }]);
+      const macros = encodeMacros([{ steps: [hidStep("tap", "A")] }]);
       const text = file((snapshot) => {
         snapshot.behaviors!.config = undefined;
         snapshot.behaviors!.macros = macros;
@@ -175,7 +175,7 @@ describe("importing a layout file", () => {
         profile: { ...emptyMorse().profile, mode: "Normal", hold_timeout_ms: 200 },
         actions: [[0b10, { Key: { Hid: "Tab" } }]],
       };
-      const macros = encodeMacros([{ steps: [{ kind: "tap", code: "B" }] }]);
+      const macros = encodeMacros([{ steps: [hidStep("tap", "B")] }]);
       const order: string[] = [];
       const record = <T extends object, K extends keyof T>(target: T, method: K, name: string) => {
         const original = (target[method] as (...args: unknown[]) => Promise<unknown>).bind(target);

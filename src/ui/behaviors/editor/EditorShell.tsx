@@ -31,6 +31,9 @@ export interface EditorShellProps {
   selected: string;
   onSelect: (id: string) => void;
   add?: { label: string; onClick: () => void; disabled?: boolean; reason?: string };
+  /** Rows of its own under the cards (a macro's steps); `open` selects one and,
+   *  on a phone, opens its editor. */
+  list?: (open: (id: string) => void) => ReactNode;
   /** Something changed since the window opened. */
   dirty: boolean;
   /** Why Apply cannot go ahead, or null. */
@@ -67,7 +70,7 @@ function Card({ card, selected, onSelect }: { card: EditorCard; selected: boolea
 }
 
 export function EditorShell(props: EditorShellProps) {
-  const { subtitle, name, onName, namePlaceholder, cards, selected, onSelect, add, dirty, problem, onApply, onClose, children } = props;
+  const { subtitle, name, onName, namePlaceholder, cards, selected, onSelect, add, list, dirty, problem, onApply, onClose, children } = props;
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const leave = async () => {
@@ -110,6 +113,7 @@ export function EditorShell(props: EditorShellProps) {
             {cards.map((card) => (
               <Card key={card.id} card={card} selected={card.id === selected} onSelect={() => pick(card.id)} />
             ))}
+            {list?.(pick)}
             {add && (
               <Button onClick={add.onClick} disabled={add.disabled} reason={add.reason} className="border-dashed border-line-strong text-mute hover:text-ink">
                 <PlusIcon size={12} /> {add.label}

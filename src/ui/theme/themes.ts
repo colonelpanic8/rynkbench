@@ -51,10 +51,11 @@ interface ThemeDef {
   pins?: Pins;
 }
 
-// Colours with a meaning, the same in every theme of a scheme: status text.
-const STATUS: Record<Scheme, { ok: string; warn: string; danger: string }> = {
-  dark: { ok: "#34d399", warn: "#fbbf24", danger: "#f87171" },
-  light: { ok: "#065f46", warn: "#92400e", danger: "#b91c1c" },
+// Colours with a meaning, the same in every theme of a scheme: status text,
+// and GLIDE's violet for a macro step that lets a key go (taps use warn's amber).
+const STATUS: Record<Scheme, { ok: string; warn: string; danger: string; release: string }> = {
+  dark: { ok: "#34d399", warn: "#fbbf24", danger: "#f87171", release: "#a78bfa" },
+  light: { ok: "#065f46", warn: "#92400e", danger: "#b91c1c", release: "#6d28d9" },
 };
 
 /** The order here is the order in Preferences: dark themes first, then light, each with its Default first. */
@@ -239,6 +240,7 @@ export function themeTokens(id: ThemeId): ThemeTokens {
     select: main.select,
     ok: status.ok,
     warn: status.warn,
+    "macro-release": status.release,
     danger: status.danger,
     "danger-dim": mix(surface, status.danger, dark ? 0.15 : 0.08),
     cap: key,

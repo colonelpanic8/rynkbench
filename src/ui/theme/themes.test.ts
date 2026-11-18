@@ -47,6 +47,7 @@ const pairs: { fg: string; on: string[]; min: number }[] = [
   { fg: "danger", on: ["bg", "panel", "raised"], min: 4.5 },
   { fg: "ok", on: ["bg", "panel", "raised"], min: 4.5 },
   { fg: "warn", on: ["bg", "panel", "raised"], min: 4.5 },
+  { fg: "macro-release", on: ["bg", "panel", "raised"], min: 4.5 },
   { fg: "cap-ink", on: ["cap"], min: 4.5 },
   { fg: "cap-ink-dim", on: ["cap"], min: 3 },
   // Primary buttons: on-accent text on the accent fill.

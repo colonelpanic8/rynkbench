@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { KeyAction, Morse } from "../vendor/rynk-wasm/rynk_wasm";
-import { encodeMacros } from "../model/macros";
+import { encodeMacros, hidStep } from "../model/macros";
 import { noStateBits } from "../model/slots";
 import { analyzeUsage, keyActionRefs, type UsageInput } from "./usage";
 
@@ -90,8 +90,8 @@ describe("analyzeUsage", () => {
       baseInput({
         layers: [[{ Single: { TriggerMacro: 0 } }, key("A")]],
         macroOps: encodeMacros([
-          { steps: [{ kind: "tap", code: "Home" }] },
-          { steps: [{ kind: "tap", code: "End" }] },
+          { steps: [hidStep("tap", "Home")] },
+          { steps: [hidStep("tap", "End")] },
         ]),
         morseProfiles: [
           { index: 0, name: "hrm", profile: {} as never },

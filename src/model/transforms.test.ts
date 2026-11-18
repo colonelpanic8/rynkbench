@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { KeyAction, ModifierCombination } from "../vendor/rynk-wasm/rynk_wasm";
-import { decodeMacros, encodeMacros } from "./macros";
+import { decodeMacros, encodeMacros, hidStep } from "./macros";
 import { emptyFork, noStateBits } from "./slots";
 import {
   CTRL_GUI_SWAP,
@@ -88,7 +88,7 @@ describe("CTRL_GUI_SWAP", () => {
           },
         ],
         macroOps: encodeMacros([
-          { steps: [{ kind: "press", code: "LCtrl" }, { kind: "tap", code: "C" }] },
+          { steps: [hidStep("press", "LCtrl"), hidStep("tap", "C")] },
         ]),
       }),
     );
@@ -98,7 +98,7 @@ describe("CTRL_GUI_SWAP", () => {
     expect(plan.forks).toHaveLength(1); // kept_modifiers changed
     expect(plan.macroOps).not.toBeNull();
     const macros = decodeMacros(plan.macroOps!);
-    expect(macros[0].steps[0]).toEqual({ kind: "press", code: "LGui" });
+    expect(macros[0].steps[0]).toEqual(hidStep("press", "LGui"));
   });
 
   it("plans nothing on an already-neutral keymap", () => {
@@ -248,7 +248,7 @@ describe("plan sizing", () => {
     baseInput({
       layers: [[key("LCtrl"), key("A")]],
       combos: [{ Actions: { actions: [key("LGui")], output: key("C"), layer: undefined } }],
-      macroOps: encodeMacros([{ steps: [{ kind: "press", code: "LCtrl" }] }]),
+      macroOps: encodeMacros([{ steps: [hidStep("press", "LCtrl")] }]),
     }),
   );
 

@@ -9,11 +9,17 @@ import { ProfileEditor, profileNameProblem } from "./ProfileEditor";
 const key = (code: string) => ({ Single: { Key: { Hid: code } } }) as KeyAction;
 
 describe("the behavior editors", () => {
-  it("a macro: the macro first with its space, then a card per step", () => {
-    const parts = { bundle: { caps: { max_macros: 4, macro_space_size: 32 } }, state: { macroOps: [[{ Char: 104 }, { Char: 105 }, { Delay: 50 }]] as MacroOp[][] } };
+  it("a macro: its details with its space, then a row per step, as in GLIDE", () => {
+    const parts = { bundle: { caps: { max_macros: 4, macro_space_size: 32 } }, state: { macroOps: [[{ Char: 104 }, { Char: 105 }, { Delay: 50 }, { Press: { LayerOn: 1 } }, "PauseForRelease"]] as MacroOp[][] } };
     const html = renderInWorkbench(<MacroEditor focus={0} onClose={() => {}} />, parts);
-    for (const text of ["Macro 0", "10 / 32 bytes", "“hi”", "50 ms", "Add step"]) expect(html).toContain(text);
-    expect(renderInWorkbench(<MacroEditor focus="new" onClose={() => {}} />, parts)).toContain("A text step is empty");
+    for (const text of ["Macro details", "/ 32 bytes", "“hi”", "50 ms", "Hold", "On release", "+ Add", "Clear steps"]) expect(html).toContain(text);
+    expect(html.match(/data-testid="macro-row-/g)).toHaveLength(4);
+  });
+
+  it("a new macro opens on Add, whose picker lists layers and your macros above the keys", () => {
+    const parts = { bundle: { caps: { max_macros: 4, macro_space_size: 64 } }, state: { macroOps: [[{ Char: 104 }]] as MacroOp[][] } };
+    const html = renderInWorkbench(<MacroEditor focus="new" onClose={() => {}} />, parts);
+    for (const text of ["Add to this macro", "Type text", "Add a step first"]) expect(html).toContain(text);
   });
 
   it("a fork: the fork first, then its key and what it becomes, in the app's voice", () => {

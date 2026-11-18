@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { analyzeUsage, type UsageInput, type UsageReport } from "./usage";
+import { hidStep, type SendKind } from "../model/macros";
+import type { HidKeyCode } from "../model/action-types";
 
 interface GoldenCase {
   name: string;
@@ -21,11 +23,12 @@ const golden = JSON.parse(
 // gave. Do not regenerate these to make a change pass: a difference is a
 // change in what the report says.
 //
-// The macro decoder is replaced by one that treats a macro as its own steps,
-// so the cases do not depend on the wasm decoder, and macro previews are
-// compared as empty.
+// The cases hold each macro as its decoded steps, in the shape steps had then
+// (a key step as `{ kind, code }`); the decoder is replaced by one that reads
+// them in today's shape. Macro previews are compared as empty.
 
-const fakeDecode = ((ops: unknown[][]) => ops.map((steps) => ({ steps }))) as never;
+type OldStep = { kind: SendKind; code: HidKeyCode };
+const fakeDecode = ((macros: OldStep[][]) => macros.map((steps) => ({ steps: steps.map((step) => hidStep(step.kind, step.code)) }))) as never;
 
 /** The report as the earlier implementation gave it: without macro previews and
  *  without the structured sites added since (checked separately below). */

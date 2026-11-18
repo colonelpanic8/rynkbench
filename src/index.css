@@ -38,6 +38,7 @@
   --color-danger-dim: oklch(27.0% 0.049 21);
   --color-ok: oklch(77.3% 0.153 163);
   --color-warn: oklch(83.7% 0.164 84);
+  --color-macro-release: oklch(70.9% 0.159 293.5);
   --color-cap: oklch(32.1% 0 0);
   --color-cap-side: oklch(25.2% 0 0);
   --color-cap-edge: oklch(36.4% 0 0);

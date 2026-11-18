@@ -5,18 +5,35 @@ import type { Action, HidKeyCode, MacroOp } from "../vendor/rynk-wasm/rynk_wasm"
 /* Steps                                                               */
 /* ------------------------------------------------------------------ */
 
+/** How a step sends its action: pressed and released, held down, or let go. */
+export type SendKind = "tap" | "press" | "release";
+
+/** One step of a macro, as the editor shows it. Every firmware op has its own
+ *  kind, so a macro decodes and encodes back unchanged. */
 export type MacroStep =
   | { kind: "text"; text: string }
-  | { kind: "tap"; code: HidKeyCode }
-  | { kind: "press"; code: HidKeyCode }
-  | { kind: "release"; code: HidKeyCode }
+  | { kind: SendKind; action: Action }
   | { kind: "delay"; ms: number }
-  | { kind: "native"; op: MacroOp };
+  /** The steps after it run when the key is let go (PauseForRelease). */
+  | { kind: "letGo" };
 
 export interface DecodedMacro {
   steps: MacroStep[];
 }
 
+/** A step that sends a plain key. */
+export function hidStep(kind: SendKind, code: HidKeyCode): MacroStep {
+  return { kind, action: { Key: { Hid: code } } };
+}
+
+export function isSendStep(step: MacroStep): step is { kind: SendKind; action: Action } {
+  return step.kind === "tap" || step.kind === "press" || step.kind === "release";
+}
+
+/** The plain key an action presses, if that is all it does. */
+export function plainHid(action: Action): HidKeyCode | null {
+  return typeof action === "object" && "Key" in action && typeof action.Key === "object" && "Hid" in action.Key ? action.Key.Hid : null;
+}
 /** Characters the firmware's from_ascii understands (en-US). */
 const TEXT_OK = /^[0-9a-zA-Z!@#$%^&*()\-_=+[\]{};:'"`~\\|,<.>/? \n\t]*$/;
 
@@ -33,11 +50,11 @@ export function clampDelay(ms: number): number {
 function stepOps(step: MacroStep): MacroOp[] {
   switch (step.kind) {
     case "text": return [...step.text].map((ch) => ({ Char: ch.charCodeAt(0) }));
-    case "tap": return [{ Tap: { Key: { Hid: step.code } } }];
-    case "press": return [{ Press: { Key: { Hid: step.code } } }];
-    case "release": return [{ Release: { Key: { Hid: step.code } } }];
+    case "tap": return [{ Tap: structuredClone(step.action) }];
+    case "press": return [{ Press: structuredClone(step.action) }];
+    case "release": return [{ Release: structuredClone(step.action) }];
     case "delay": return [{ Delay: clampDelay(step.ms) }];
-    case "native": return [structuredClone(step.op)];
+    case "letGo": return ["PauseForRelease"];
   }
 }
 
@@ -53,19 +70,12 @@ export function encodeMacros(macros: DecodedMacro[]): MacroOp[][] {
   return macros.map((macro) => macro.steps.flatMap(stepOps));
 }
 
-function actionStep(kind: "tap" | "press" | "release", action: Action, op: MacroOp): MacroStep {
-  if (typeof action === "object" && "Key" in action && typeof action.Key === "object" && "Hid" in action.Key) {
-    return { kind, code: action.Key.Hid };
-  }
-  return { kind: "native", op: structuredClone(op) };
-}
-
 export function decodeMacros(macros: MacroOp[][]): DecodedMacro[] {
   return macros.map((ops) => {
     const steps: MacroStep[] = [];
     for (const op of ops) {
       if (typeof op === "string") {
-        steps.push({ kind: "native", op });
+        steps.push({ kind: "letGo" });
       } else if ("Char" in op) {
         const last = steps.at(-1);
         const text = String.fromCharCode(op.Char);
@@ -74,11 +84,11 @@ export function decodeMacros(macros: MacroOp[][]): DecodedMacro[] {
       } else if ("Delay" in op) {
         steps.push({ kind: "delay", ms: op.Delay });
       } else if ("Tap" in op) {
-        steps.push(actionStep("tap", op.Tap, op));
+        steps.push({ kind: "tap", action: structuredClone(op.Tap) });
       } else if ("Press" in op) {
-        steps.push(actionStep("press", op.Press, op));
+        steps.push({ kind: "press", action: structuredClone(op.Press) });
       } else {
-        steps.push(actionStep("release", op.Release, op));
+        steps.push({ kind: "release", action: structuredClone(op.Release) });
       }
     }
     return { steps };
@@ -93,7 +103,9 @@ export function macroPreview(macro: DecodedMacro): string {
     return t.length > 18 ? `${t.slice(0, 17)}…` : t || "(spaces)";
   }
   if (!first) return "empty";
-  if (first.kind === "native") return first.op === "PauseForRelease" ? "wait for release" : "native action";
+  if (first.kind === "letGo") return "wait for release";
   if (first.kind === "delay") return `delay ${first.ms}ms…`;
-  return `${first.kind} ${first.code}…`;
+  const action = first.action;
+  const what = plainHid(action) ?? (typeof action === "string" ? action : Object.keys(action)[0]);
+  return `${first.kind} ${what}…`;
 }

@@ -13,7 +13,7 @@ import type {
   ModifierCombination,
   Morse,
 } from "../vendor/rynk-wasm/rynk_wasm";
-import { decodeMacros, encodeMacros } from "./macros";
+import { decodeMacros, encodeMacros, isSendStep } from "./macros";
 import { same } from "./deep-equal";
 
 /** Identifier-level HID keycode substitution. */
@@ -262,9 +262,7 @@ export function planOsSwap(input: TransformInput): TransformPlan {
   const macros = decodeMacros(input.macroOps);
   const mappedMacros = macros.map((macro) => ({
     steps: macro.steps.map((step) =>
-      step.kind === "tap" || step.kind === "press" || step.kind === "release"
-        ? { ...step, code: mapHid(spec, step.code) }
-        : step,
+      isSendStep(step) ? { ...step, action: mapAction(spec, step.action) } : step,
     ),
   }));
   const macroOps = same(macros, mappedMacros) ? null : encodeMacros(mappedMacros);
