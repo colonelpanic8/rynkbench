@@ -8,21 +8,13 @@ import { useWorkbench } from "../state";
 import { layerName } from "../layer-names";
 
 import { cx } from "../kit";
+import { LAYER_KINDS, type LayerKind } from "./layer-kinds";
+
+export type { LayerKind } from "./layer-kinds";
 
 /* ------------------------------------------------------------------ */
 /* Switch Layer                                                        */
 /* ------------------------------------------------------------------ */
-
-export type LayerKind = "LayerOn" | "HoldTap" | "OneShotLayer" | "LayerToggle" | "LayerToggleOnly" | "DefaultLayer";
-
-const LAYER_KINDS: Array<{ id: LayerKind; label: string; hint: string }> = [
-  { id: "LayerOn", label: "While held", hint: "The layer is on while the key is held" },
-  { id: "HoldTap", label: "Hold layer, tap key", hint: "Held: the layer. Tapped: a key you pick next" },
-  { id: "OneShotLayer", label: "Next key only", hint: "The layer is on for the next key press" },
-  { id: "LayerToggle", label: "Toggle", hint: "Each press turns the layer on or off" },
-  { id: "LayerToggleOnly", label: "Switch to", hint: "Turns the layer on and every other off" },
-  { id: "DefaultLayer", label: "Make default", hint: "The keyboard starts on this layer from now on" },
-];
 
 export function SwitchLayer({ onPick, disabled }: { onPick: (kind: LayerKind, layer: number) => void; disabled: boolean }) {
   const { state } = useWorkbench();

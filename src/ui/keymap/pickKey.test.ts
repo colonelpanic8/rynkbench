@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LOCALES } from "../locale";
 import { HID_CODES, NOT_KEYS } from "../../model/hid-codes";
-import { behaviorEntries, behaviorTiles, layerTiles, narrowTo, pickKeyGroups, plainKey, searchTiles, type TileGroup } from "./pickKey";
+import { allBehaviorTiles, behaviorEntries, behaviorTiles, layerTiles, narrowTo, listsGroup, pickKeyGroups, plainKey, searchesGroup, searchTiles, type TileGroup } from "./pickKey";
 
 const us = LOCALES[0];
 const groups = pickKeyGroups(us, { userActions: [{ id: 3, label: "Board light toggle", hint: "" }] });
@@ -113,16 +113,18 @@ describe("pick key", () => {
       macros: [null, "“hello”"],
       morse: [{ profile: 0, actions: [[1, "No"]] } as never, { profile: 0, actions: [] } as never],
       title: (kind, index) => (kind === "macros" ? `Greeting ${index}` : `Tap pattern ${index}`),
+      kindName: (kind) => (kind === "macros" ? "Macro" : "Tap pattern"),
       describe: () => "",
     });
     expect(entries.map((e) => `${e.kind}:${e.index}`)).toEqual(["macros:1", "morse:0"]);
     expect(behaviorTiles(entries, "hello")?.tiles).toMatchObject([{ label: "Greeting 1", action: { TriggerMacro: 1 } }]);
     expect(behaviorTiles(entries, "tap")?.tiles).toMatchObject([{ label: "Tap pattern 0", action: { Morse: 0 } }]);
     expect(behaviorTiles(entries, "")).toBeNull();
+    expect(allBehaviorTiles(entries)?.tiles.map((t) => [t.caption, t.label])).toEqual([["Macro", "Greeting 1"], ["Tap pattern", "Tap pattern 0"]]);
   });
 
   it("offers a behavior's slot no tap patterns or Transparent, and a plain key only keys", () => {
-    const found = [behaviorTiles(behaviorEntries({ macros: ["x"], morse: [{ profile: 0, actions: [[1, "No"]] } as never], title: () => "pattern", describe: () => "" }), "pattern")!];
+    const found = [behaviorTiles(behaviorEntries({ macros: ["x"], morse: [{ profile: 0, actions: [[1, "No"]] } as never], title: () => "pattern", kindName: () => "", describe: () => "" }), "pattern")!];
     expect(narrowTo(found, "slot").flatMap((g) => g.tiles.map((t) => t.id))).toEqual(["macro:0"]);
     expect(narrowTo(groups.main, "slot").flatMap((g) => g.tiles).some((t) => t.action === "Transparent")).toBe(false);
     const keys = narrowTo(groups.main, "keycode").flatMap((g) => g.tiles);
@@ -135,4 +137,12 @@ describe("pick key", () => {
     expect(searchTiles(german, "@")[0].tiles[0].action).toMatchObject({ KeyWithModifier: ["Q", { right_alt: true }] });
     expect(searchTiles(german, "ö")[0].tiles[0].label).toBe("Ö");
   });
+
+  it("offers what a caller turns on; layers and behaviors are found by search unless asked otherwise", () => {
+    expect([listsGroup({}, "keys"), listsGroup({}, "layers"), searchesGroup({}, "layers"), searchesGroup({}, "behaviors")]).toEqual([true, false, true, true]);
+    const macroStep = { layers: true, behaviors: true };
+    expect([listsGroup(macroStep, "layers"), listsGroup(macroStep, "behaviors")]).toEqual([true, true]);
+    expect([listsGroup({ keys: false }, "keys"), searchesGroup({ layers: false }, "layers")]).toEqual([false, false]);
+  });
 });
+

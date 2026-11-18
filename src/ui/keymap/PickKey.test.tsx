@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { MacroOp } from "../../model/action-types";
 import { renderInWorkbench } from "../../test/workbench";
 import { PickKey, PickKeycode } from "./PickKey";
 
@@ -24,5 +25,19 @@ describe("Pick Key", () => {
     expect(chips(html)).toBe(0);
     expect(html).not.toContain(">$<");
     expect(html).toContain(">A<");
+  });
+
+  it("lists layers and your behaviors above the keys when the caller turns them on, without what it does not take", () => {
+    const state = {
+      layerMetadata: [{ occupied: true, name: "Base" }, { occupied: true, name: "Lower" }],
+      macroOps: [[{ Char: 104 }], [{ Char: 105 }]] as MacroOp[][],
+    };
+    const allow = (pick: unknown) => !(typeof pick === "object" && pick !== null && "TriggerMacro" in pick && pick.TriggerMacro === 1);
+    const html = renderInWorkbench(<PickKey compact scope="slot" offer={{ layers: true, behaviors: true }} allow={allow} onPick={() => {}} />, { state });
+    for (const text of ["Layers", "While held", "Lower", "Your behaviors", "Macro 0", ">A<"]) expect(html).toContain(text);
+    expect(html).not.toContain("Macro 1");
+    const plain = renderInWorkbench(<PickKey compact scope="slot" onPick={() => {}} />, { state });
+    expect(plain).not.toContain("Your behaviors");
+    expect(plain).not.toContain("While held");
   });
 });

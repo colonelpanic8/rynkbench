@@ -17,24 +17,31 @@ import { LOCALES, activeLocale, getLocaleId, subscribeLocale } from "../locale";
 import { useOs } from "../preferences";
 import { useWording } from "../terms";
 import { MODIFIER_ORDER, chordText, modifierLook, type Modifier } from "../keyface/modifiers";
-import { behaviorTitle } from "../behaviors/library";
+import { LIBRARY_KINDS, behaviorTitle } from "../behaviors/library";
 import { cx } from "../kit";
 import { SearchIcon } from "../icons";
 
 import { anyModifier } from "../labels";
 import { mergeModifiers } from "./actions";
 import {
+  allBehaviorTiles,
   behaviorEntries,
   behaviorTiles,
   layerTiles,
+  listsGroup,
   narrowTo,
+  offeredIn,
   pickKeyGroups,
   searchTiles,
+  searchesGroup,
   type Pick,
+  type PickOffer,
   type PickScope,
   type Tile,
   type TileGroup,
 } from "./pickKey";
+import { GroupTiles } from "./TileButtons";
+import { ListedBehaviors, ListedLayers } from "./PickListed";
 
 function armedModifiers(side: "left" | "right", armed: ReadonlySet<Modifier>): ModifierCombination {
   const mods = noModifiers();
@@ -53,47 +60,6 @@ function withArmed(action: Pick, mods: ModifierCombination): Pick {
     return { KeyWithModifier: [code, mergeModifiers(mods, own)] } as Action;
   }
   return action;
-}
-
-function TileButton({ tile, compact, onPick }: { tile: Tile; compact: boolean; onPick: (tile: Tile) => void }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onPick(tile)}
-      title={tile.lilac ? `${tile.label} (needs Shift or AltGr)` : tile.label}
-      className={cx(
-        "flex cursor-pointer items-center justify-center rounded-lg border font-semibold transition-all duration-150 hover:-translate-y-px hover:border-line-strong hover:bg-hover hover:shadow-md",
-        compact ? "h-8 min-w-8 px-2 text-body" : "h-12 min-w-12 px-3 text-body",
-        tile.lilac ? "border-accent-deep/40 bg-accent-dim/30 text-ink" : "border-line bg-raised text-ink",
-      )}
-    >
-      {tile.label}
-    </button>
-  );
-}
-
-function GroupTiles({ group, compact, onPick }: { group: TileGroup; compact: boolean; onPick: (tile: Tile) => void }) {
-  // Tiles under their small captions, in the order the captions first appear.
-  const clusters: Array<[string | undefined, Tile[]]> = [];
-  for (const tile of group.tiles) {
-    const last = clusters.at(-1);
-    if (last && last[0] === tile.cluster) last[1].push(tile);
-    else clusters.push([tile.cluster, [tile]]);
-  }
-  return (
-    <div className="flex flex-col gap-2">
-      {clusters.map(([cluster, tiles], index) => (
-        <div key={index} className="flex flex-col gap-1.5">
-          {cluster && <span className="text-caption text-faint">{cluster}</span>}
-          <div className={cx("flex flex-wrap", compact ? "gap-1.5" : "gap-2")}>
-            {tiles.map((tile) => (
-              <TileButton key={tile.id} tile={tile} compact={compact} onPick={onPick} />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 /** The modifier chips: which side, then one chip per modifier as this computer names it. */
@@ -169,6 +135,7 @@ function useBehaviorEntries() {
       macros: macroOps.map((ops, index) => (ops.length > 0 ? macroPreview(decoded[index]) : null)),
       morse,
       title: (kind, index) => behaviorTitle(kind, index, { labels, profiles: morseProfiles, wording }),
+      kindName: (kind) => LIBRARY_KINDS[kind].one[wording],
       describe: (kind, index) => labelAt(labels, kind, index)?.description ?? "",
     });
   }, [macroOps, morse, labels, morseProfiles, wording]);
@@ -179,6 +146,8 @@ export function PickKey({
   disabled = false,
   scope = "key",
   compact = false,
+  offer = {},
+  allow,
 }: {
   onPick: (pick: Pick) => void;
   disabled?: boolean;
@@ -186,6 +155,10 @@ export function PickKey({
   scope?: PickScope;
   /** The small picker inside a behavior's editor. */
   compact?: boolean;
+  /** Which groups it offers (pickKey.ts PickOffer); the default is the key editor's. */
+  offer?: PickOffer;
+  /** Whether the caller takes this pick (a macro step never runs its own macro). */
+  allow?: (pick: Pick) => boolean;
 }) {
   const { bundle, state } = useWorkbench();
   const os = useOs();
@@ -195,8 +168,9 @@ export function PickKey({
       userActions: bundle.boardProfile?.userActions,
       os,
     });
+    if (offer.keys === false) return { main: [], more: [] };
     return { main: narrowTo(all.main, scope), more: narrowTo(all.more, scope) };
-  }, [localeId, bundle.boardProfile, os, scope]);
+  }, [localeId, bundle.boardProfile, os, scope, offer.keys]);
   const behaviors = useBehaviorEntries();
   const [query, setQuery] = useState("");
   const [side, setSide] = useState<"left" | "right">("left");
@@ -218,14 +192,22 @@ export function PickKey({
     .map((metadata, index) => ({ index, occupied: metadata.occupied, name: layerName(state.layerMetadata, index) }))
     .filter((layer) => layer.occupied);
   const searching = query.trim() !== "";
+  // What the scope and the caller take: a tile neither takes is not shown.
+  const scoped = offeredIn(scope);
+  const offered = (tile: Tile) => scoped(tile) && (allow?.(tile.action) ?? true);
+  const only = (list: Array<TileGroup | null>) =>
+    list
+      .filter((group): group is TileGroup => group !== null)
+      .map((group) => ({ ...group, tiles: group.tiles.filter(offered) }))
+      .filter((group) => group.tiles.length > 0);
   const found = searching
-    ? narrowTo(
-        [layerTiles(layers, query), behaviorTiles(behaviors, query), ...searchTiles(groups, query)].filter(
-          (group): group is TileGroup => group !== null,
-        ),
-        scope,
-      )
-    : [...groups.main, ...(showMore ? groups.more.map((group) => ({ ...group, name: `All keys · ${group.name}` })) : [])];
+    ? only([
+        searchesGroup(offer, "layers") ? layerTiles(layers, query) : null,
+        searchesGroup(offer, "behaviors") ? behaviorTiles(behaviors, query) : null,
+        ...searchTiles(groups, query),
+      ])
+    : only([...groups.main, ...(showMore ? groups.more.map((group) => ({ ...group, name: `All keys · ${group.name}` })) : [])]);
+  const listedBehaviors = listsGroup(offer, "behaviors") ? (only([allBehaviorTiles(behaviors)])[0] ?? null) : null;
   const moreCount = groups.more.reduce((count, group) => count + group.tiles.length, 0);
   const first = found[0]?.tiles[0];
   const withModifiers = scope !== "keycode";
@@ -286,7 +268,7 @@ export function PickKey({
             : "For combinations like Shift+A: click a modifier first, then the key."}
         </p>
       )}
-      {!searching && (
+      {!searching && groups.main.some((group) => group.chip) && (
         <div className={cx("flex gap-1.5 overflow-x-auto border-b border-line", compact ? "pb-2" : "pb-4")}>
           {groups.main
             .filter((group) => group.chip)
@@ -309,8 +291,10 @@ export function PickKey({
         </div>
       )}
       <div ref={scroller} onScroll={followScroll} className="relative min-h-0 flex-1 overflow-y-auto pr-1">
-        {found.length === 0 && <p className="py-6 text-center text-body text-faint">Nothing matches “{query}”.</p>}
+        {searching && found.length === 0 && <p className="py-6 text-center text-body text-faint">Nothing matches “{query}”.</p>}
         <div className={cx("flex flex-col", compact ? "gap-3" : "gap-4")}>
+          {!searching && listsGroup(offer, "layers") && <ListedLayers layers={layers} offered={offered} onPick={pick} />}
+          {!searching && <ListedBehaviors group={listedBehaviors} onPick={pick} />}
           {found.map((group) => (
             <section key={group.id + group.name} data-group={group.id} className="flex flex-col gap-2">
               <h3

@@ -12,6 +12,8 @@ export interface BehaviorEntry {
   kind: "macros" | "morse";
   index: number;
   name: string;
+  /** What kind it is, in the app's voice: "Macro", "Tap pattern". */
+  kindName: string;
   /** Its description and what it does, to find it by. */
   detail: string;
 }
@@ -22,12 +24,14 @@ export function behaviorEntries(input: {
   macros: readonly (string | null)[];
   morse: readonly Morse[];
   title: (kind: "macros" | "morse", index: number) => string;
+  kindName: (kind: "macros" | "morse") => string;
   describe: (kind: "macros" | "morse", index: number) => string;
 }): BehaviorEntry[] {
   const entry = (kind: "macros" | "morse", index: number, does: string): BehaviorEntry => ({
     kind,
     index,
     name: input.title(kind, index),
+    kindName: input.kindName(kind),
     detail: `${input.describe(kind, index)} ${does}`,
   });
   return [
@@ -36,19 +40,28 @@ export function behaviorEntries(input: {
   ];
 }
 
+function behaviorTile(entry: BehaviorEntry): Tile {
+  const tile =
+    entry.kind === "macros"
+      ? actionTile(`macro:${entry.index}`, entry.name, { TriggerMacro: entry.index } as Action, entry.detail)
+      : actionTile(`morse:${entry.index}`, entry.name, { Morse: entry.index }, entry.detail);
+  return { ...tile, caption: entry.kindName };
+}
+
+const behaviorGroup = (entries: readonly BehaviorEntry[]): TileGroup | null =>
+  entries.length > 0 ? { id: "behaviors", name: "Your behaviors", tiles: entries.map(behaviorTile) } : null;
+
+/** Every macro and tap pattern, for a picker that lists them. */
+export function allBehaviorTiles(entries: readonly BehaviorEntry[]): TileGroup | null {
+  return behaviorGroup(entries);
+}
+
 /** Behavior tiles for a search: each macro and tap pattern whose name or detail
  *  holds every word (a tap pattern is a whole key; narrowTo drops it for a slot). */
 export function behaviorTiles(entries: readonly BehaviorEntry[], query: string): TileGroup | null {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return null;
-  const tiles = entries
-    .filter((entry) => terms.every((term) => `${entry.name} ${entry.detail}`.toLowerCase().includes(term)))
-    .map((entry) =>
-      entry.kind === "macros"
-        ? actionTile(`macro:${entry.index}`, entry.name, { TriggerMacro: entry.index } as Action)
-        : actionTile(`morse:${entry.index}`, entry.name, { Morse: entry.index }),
-    );
-  return tiles.length > 0 ? { id: "behaviors", name: "Your behaviors", tiles } : null;
+  return behaviorGroup(entries.filter((entry) => terms.every((term) => `${entry.name} ${entry.detail}`.toLowerCase().includes(term))));
 }
 
 /** Layer tiles for a search: hold, toggle or switch to each layer whose name matches. */

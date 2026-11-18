@@ -17,6 +17,8 @@ export interface Tile {
   search: string;
   /** It needs Shift or AltGr to type its character. */
   lilac?: boolean;
+  /** A small word above its label: what kind of thing it is ("Macro"). */
+  caption?: string;
   /** The small caption it sits under inside its group. */
   cluster?: string;
 }

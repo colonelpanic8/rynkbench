@@ -28,7 +28,7 @@ import { LIGHT_ACTIONS, SYSTEM_ACTIONS } from "./action-catalog";
 import { moreGroups } from "./pickKeyMore";
 
 export { isTapPattern, type Pick, type Tile, type TileGroup } from "./pickTiles";
-export { behaviorEntries, behaviorTiles, layerTiles, searchTiles, type BehaviorEntry } from "./pickSearch";
+export { allBehaviorTiles, behaviorEntries, behaviorTiles, layerTiles, searchTiles, type BehaviorEntry } from "./pickSearch";
 
 // Symbols in small clusters, so the eye finds one without first deciding
 // whether it is "punctuation" or "math".
@@ -304,4 +304,25 @@ export function offeredIn(scope: PickScope): (tile: Tile) => boolean {
 export function narrowTo(groups: readonly TileGroup[], scope: PickScope): TileGroup[] {
   const offered = offeredIn(scope);
   return groups.map((group) => ({ ...group, tiles: group.tiles.filter(offered) })).filter((group) => group.tiles.length > 0);
+}
+
+/** Which groups a picker offers, so each caller turns on only what it needs.
+ *  `keys`: the key groups, listed (the default) or left out. `layers` and
+ *  `behaviors`: left out of the object, they are found by searching only (as
+ *  the key editor has them); true lists them above the keys as well (GLIDE's
+ *  small picker); false offers none. */
+export interface PickOffer {
+  keys?: boolean;
+  layers?: boolean;
+  behaviors?: boolean;
+}
+
+/** Whether the picker shows a group without searching. */
+export function listsGroup(offer: PickOffer, group: keyof PickOffer): boolean {
+  return group === "keys" ? offer.keys !== false : offer[group] === true;
+}
+
+/** Whether a search finds a group's tiles. */
+export function searchesGroup(offer: PickOffer, group: keyof PickOffer): boolean {
+  return offer[group] !== false;
 }
