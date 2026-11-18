@@ -33,7 +33,7 @@ import {
 } from "../../model/key-slots";
 
 import { ActionEditor } from "./ActionEditor";
-import { EditorHeading, EditorPanel, EditorPlaceholder } from "./EditorPanel";
+import { EditorHeading, EditorPanel, EditorPlaceholder, EditorPrompt } from "./EditorPanel";
 import { useEditorTabs, type EditorTab } from "./editorTabs";
 import { LayerLighting } from "./LayerLighting";
 
@@ -62,9 +62,7 @@ export function KeyEditor({ size = 310 }: { size?: number }) {
   if (pick) {
     return <EditorPlaceholder size={size}>↑ {pickPrompt(pick, layerName(state.layerMetadata, state.uiLayer))}</EditorPlaceholder>;
   }
-  if (!selection) {
-    return <EditorPlaceholder size={size}>↑ Click a key on the keyboard to change what it does</EditorPlaceholder>;
-  }
+  if (!selection) return <IdleKeyEditor size={size} tabs={tabs} tab={tab} onTab={setTab} />;
 
   const { row, col } = selection;
   const cols = bundle.caps.num_cols;
@@ -147,7 +145,7 @@ export function KeyEditor({ size = 310 }: { size?: number }) {
       )}
 
       {pending?.status === "pending" && <p className="text-small text-accent">Writing to the keyboard…</p>}
-      {staged && <p className="text-small text-accent">Staged: written when the batch is applied</p>}
+      {staged && <p className="text-small text-accent">In the draft: goes to the keyboard when you send</p>}
       {pending?.status === "error" && (
         <div className="flex items-start gap-2 rounded-lg border border-danger/40 bg-danger-dim/25 px-3 py-2 text-body text-danger">
           <WarningIcon size={14} className="mt-0.5 shrink-0" />
@@ -190,6 +188,35 @@ export function KeyEditor({ size = 310 }: { size?: number }) {
           lightingKey={key && { layer, key }}
         />
       )}
+    </EditorPanel>
+  );
+}
+
+/** No key selected: the editor keeps its shape, as in GLIDE, with its tabs
+ *  open and their content greyed out until a key is clicked. */
+function IdleKeyEditor({
+  size,
+  tabs,
+  tab,
+  onTab,
+}: {
+  size: number;
+  tabs: readonly EditorTab[];
+  tab: EditorTab;
+  onTab: (tab: EditorTab) => void;
+}) {
+  const none = () => {};
+  const side = (
+    <>
+      <h2 className="text-title font-bold text-ink">No key selected</h2>
+      <EditorPrompt>↑ Click a key on the keyboard to change what it does</EditorPrompt>
+    </>
+  );
+  return (
+    <EditorPanel size={size} side={side} tabs={tabs} tab={tab} onTab={onTab}>
+      <p className="pb-3 text-center text-ui font-semibold text-ink">↑ Click a key on the keyboard first</p>
+      {tab === "pick" && <PickKey onPick={none} disabled />}
+      {tab === "layer" && <SwitchLayer onPick={none} disabled />}
     </EditorPanel>
   );
 }

@@ -245,6 +245,7 @@ export function PickKey({
 
   return (
     <div
+      inert={disabled}
       className={cx(
         "flex min-h-0 flex-col",
         compact ? "max-h-80 gap-2" : "flex-1 gap-2.5",

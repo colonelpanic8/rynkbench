@@ -57,6 +57,11 @@ export function EditorPlaceholder({ size, children }: { size: number; children: 
   );
 }
 
+/** A line pointing at the keyboard, centred in what is left of its column. */
+export function EditorPrompt({ children }: { children: ReactNode }) {
+  return <p className="flex flex-1 items-center justify-center py-6 text-center text-ui font-semibold text-mute">{children}</p>;
+}
+
 export function EditorPanel({
   size,
   side,

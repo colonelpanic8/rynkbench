@@ -47,8 +47,12 @@ function editor(binding: KeyAction | null, { morse = [] as Morse[], morseSlots =
 }
 
 describe("key editor", () => {
-  it("points at the keyboard when no key is selected", () => {
-    expect(editor(null)).toContain("Click a key on the keyboard to change what it does");
+  it("keeps its shape when no key is selected, its picker greyed out", () => {
+    const html = editor(null);
+    expect(html).toContain("No key selected");
+    expect(html).toContain("Click a key on the keyboard to change what it does");
+    expect(html).toContain("Pick Key");
+    expect(html).toMatch(/inert=""[^>]*opacity-40/);
   });
 
   it("shows a plain key's On Tap and offers an On Hold", () => {

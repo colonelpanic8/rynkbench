@@ -93,7 +93,7 @@ function EncoderInspector({ id }: { id: number }) {
         )}
         {staged && (
           <div className="mt-1 text-small text-accent">
-            Staged — written when the batch is applied
+            In the draft: goes to the keyboard when you send
           </div>
         )}
         {pending?.status === "error" && (

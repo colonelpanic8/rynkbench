@@ -31,7 +31,7 @@ export function SwitchLayer({ onPick, disabled }: { onPick: (kind: LayerKind, la
     .map((metadata, index) => ({ index, occupied: metadata.occupied }))
     .filter((layer) => layer.occupied);
   return (
-    <div className={cx("flex flex-col gap-3", disabled && "pointer-events-none opacity-40")}>
+    <div inert={disabled} className={cx("flex flex-col gap-3", disabled && "pointer-events-none opacity-40")}>
       <div className="flex flex-wrap gap-1.5">
         {LAYER_KINDS.map((option) => (
           <button
