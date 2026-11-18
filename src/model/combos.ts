@@ -70,6 +70,16 @@ export function comboHasKey(definition: ComboDefinition, key: MatrixPosition, ac
     : definition.Positions.positions.some((position) => samePosition(position, key));
 }
 
+/** What a key does on a layer, looking through keys that are the same as the
+ *  layer below to the first layer that gives it an action of its own. */
+export function actionThrough(layers: readonly (readonly KeyAction[])[], layer: number, offset: number): KeyAction {
+  for (let index = Math.min(layer, layers.length - 1); index >= 0; index--) {
+    const action = layers[index]?.[offset] ?? "No";
+    if (action !== "Transparent") return action;
+  }
+  return "No";
+}
+
 export type ComboToggle =
   | { ok: true; combo: ComboDefinition }
   | { ok: false; reason: "full" | "no-action" };

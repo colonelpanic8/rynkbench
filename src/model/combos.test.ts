@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ComboDefinition, KeyAction } from "../vendor/rynk-wasm/rynk_wasm";
-import { comboHasKey, comboNeeds, comboTwins, newPositionCombo, toggleComboKey } from "./combos";
+import { actionThrough, comboHasKey, comboNeeds, comboTwins, newPositionCombo, toggleComboKey } from "./combos";
 import { emptyCombo } from "./slots";
 
 const A = { Single: { Key: { Hid: "A" } } } as unknown as KeyAction;
@@ -51,5 +51,26 @@ describe("combos on the canvas", () => {
     expect(comboTwins(combos, 0)).toEqual([1, 2]);
     expect(comboTwins(combos, 1)).toEqual([0]);
     expect(comboTwins(combos, 3)).toEqual([]);
+  });
+});
+
+describe("what a key does for a combo", () => {
+  const J = { Single: { Key: { Hid: "J" } } } as unknown as KeyAction;
+  const layers: KeyAction[][] = [[J, "No"], ["Transparent", "Transparent"], ["Transparent", J]];
+
+  it("looks through keys that are the same as the layer below", () => {
+    expect(actionThrough(layers, 1, 0)).toEqual(J);
+    expect(actionThrough(layers, 2, 0)).toEqual(J);
+  });
+
+  it("keeps a key's own action, and is No when no layer gives one", () => {
+    expect(actionThrough(layers, 2, 1)).toEqual(J);
+    expect(actionThrough(layers, 1, 1)).toBe("No");
+    expect(actionThrough([["Transparent"]], 0, 0)).toBe("No");
+  });
+
+  it("marks an action combo's keys on a layer that only passes them through", () => {
+    const combo: ComboDefinition = { Actions: { actions: [J], output: "No", layer: undefined } } as ComboDefinition;
+    expect(comboHasKey(combo, { row: 0, col: 0 }, actionThrough(layers, 1, 0))).toBe(true);
   });
 });

@@ -4,7 +4,7 @@
 
 import { useEffect } from "react";
 import type { KeyView } from "../../model/keyboard";
-import { comboHasKey } from "../../model/combos";
+import { actionThrough, comboHasKey } from "../../model/combos";
 import { BoardWell, KeyboardCanvas, type KeyDecor } from "../KeyboardCanvas";
 import { Button } from "../kit";
 import { WarningIcon } from "../icons";
@@ -58,8 +58,8 @@ export function ComboFocusCanvas({ focus }: { focus: ComboFocus }) {
   const keyText = useKeyText();
   const { bundle, state } = useWorkbench();
   const cols = bundle.caps.num_cols;
-  const actions = state.layers[focus.layer];
-  const actionAt = (key: KeyView) => actions?.[key.row * cols + key.col] ?? "No";
+  // A key that is the same as the layer below takes part with what it does there.
+  const actionAt = (key: KeyView) => actionThrough(state.layers, focus.layer, key.row * cols + key.col);
 
   const { done } = focus;
   useEffect(() => {
@@ -85,7 +85,7 @@ export function ComboFocusCanvas({ focus }: { focus: ComboFocus }) {
   };
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col max-lg:min-h-[380px]">
+    <div className="relative flex min-h-0 flex-1 flex-col max-lg:min-h-[380px] max-sm:min-h-[290px]">
       <BoardWell model={bundle.model} flush top={<FocusPill focus={focus} />}>
         <KeyboardCanvas
           model={bundle.model}

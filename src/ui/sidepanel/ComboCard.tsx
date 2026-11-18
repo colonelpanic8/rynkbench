@@ -4,7 +4,7 @@
 
 import type { ReactNode } from "react";
 import type { ComboDefinition, KeyAction } from "../../model/action-types";
-import { comboHasKey, comboLayer, comboNeeds, comboOutput, comboTriggerCount } from "../../model/combos";
+import { actionThrough, comboHasKey, comboLayer, comboNeeds, comboOutput, comboTriggerCount } from "../../model/combos";
 import { MiniBoard } from "../canvas/MiniBoard";
 
 import { layerName } from "../layer-names";
@@ -51,8 +51,8 @@ export function ComboCard({
   const warning = warningOf(combo, twins);
   const action = keyText.glyph(comboOutput(combo)).text || "No action";
   // A combo of actions is matched on its own layer, else the default one.
-  const actions = state.layers[layer ?? state.defaultLayer] ?? [];
-  const actionAt = (row: number, col: number): KeyAction => actions[row * bundle.caps.num_cols + col] ?? "No";
+  const actionAt = (row: number, col: number): KeyAction =>
+    actionThrough(state.layers, layer ?? state.defaultLayer, row * bundle.caps.num_cols + col);
 
   return (
     <div
