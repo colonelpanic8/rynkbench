@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LightingEffect } from "../../vendor/rynk-wasm/rynk_wasm";
 import { DEFAULT_TIMING } from "./effect";
-import { colorsInUse, keyLightOf, planLight, recolorCells, recolorRules, SPEEDS, speedOf, speedTiming, type KeyLight } from "./key-light";
+import { colorsInUse, keyLightOf, planLight, recolorCells, recolorRules, SPEEDS, speedOf, speedTiming, withColor, type KeyLight } from "./key-light";
 import { statusLightOf, withStatusLight } from "./status-light";
 import { bleStatusRules } from "./status-presets";
 import { BLACK_EFFECT } from "./preview";
@@ -162,5 +162,17 @@ describe("colours", () => {
     const out = recolorCells(cells, RED, BLUE);
     expect(out.map((cell) => cell.led_id)).toEqual([1, 2]);
     expect(out[1].effect).toEqual({ Breathe: { color: BLUE, period_ms: 900, phase_ms: 0, step_ms: 16 } });
+  });
+});
+
+describe("withColor", () => {
+  const blue = { r: 0, g: 0, b: 255 };
+  it("keeps a coloured light's effect and timing", () => {
+    const blinking: KeyLight = { kind: "color", color: { r: 255, g: 0, b: 0 }, effect: "Blink", timing: speedTiming(SPEEDS.fast) };
+    expect(withColor(blinking, blue)).toEqual({ ...blinking, color: blue });
+  });
+  it("makes any other light a steady colour, and no colour Off", () => {
+    expect(withColor({ kind: "below" }, blue)).toEqual({ kind: "color", color: blue, effect: "Solid", timing: DEFAULT_TIMING });
+    expect(withColor({ kind: "color", color: blue, effect: "Solid", timing: DEFAULT_TIMING }, null)).toEqual({ kind: "off" });
   });
 });

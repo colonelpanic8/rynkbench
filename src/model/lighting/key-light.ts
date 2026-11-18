@@ -41,6 +41,13 @@ export function shownColor(light: KeyLight): LightingRgb8 | null {
   return isStatus(light) ? statusShownColor(light) : null;
 }
 
+/** A key's light given a colour from a swatch: a coloured light keeps its effect,
+ *  any other becomes a steady one; no colour is Off. */
+export function withColor(light: KeyLight, color: LightingRgb8 | null): KeyLight {
+  if (!color) return { kind: "off" };
+  return light.kind === "color" ? { ...light, color } : { kind: "color", color, effect: "Solid", timing: DEFAULT_TIMING };
+}
+
 export function sameLight(a: KeyLight, b: KeyLight): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }

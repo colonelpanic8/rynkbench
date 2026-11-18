@@ -25,6 +25,7 @@ import { effectAnim, effectColor } from "../lighting/decor";
 import { isDark } from "../../model/lighting/effect";
 import { RowMenu, type MenuEntry } from "../RowMenu";
 import { KeyHoverCard } from "./KeyHoverCard";
+import { KeyMenuLight } from "./KeyMenuLight";
 import { CanvasPill } from "./CanvasPill";
 import { CarriedKey } from "./CarriedKey";
 import { useKeyMoves } from "./useKeyMoves";
@@ -183,11 +184,18 @@ export function KeymapCenter() {
     return { led: color ? cssEmissiveRgb(color) : undefined, anim: shown.kind === "color" && effect ? effectAnim(effect) : undefined };
   }
 
-  // The key's quick menu, as in GLIDE: what it is, then copy, paste and clear.
+  // The key's quick menu, as in GLIDE: what it is, its light's colour on a
+  // board that stores lights, then copy, paste and clear.
   const keyMenuItems = (key: KeyView): MenuEntry[] => {
     const bound = layer?.[key.row * cols + key.col] ?? "No";
+    const led = lights.writable ? key.ledId : undefined;
+    const light: MenuEntry[] =
+      led === undefined
+        ? []
+        : [{ heading: "Color" }, { key: "light", content: <KeyMenuLight led={led} lights={lights} onPicked={() => setKeyMenu(null)} /> }, "-"];
     return [
       { heading: `${keyAddressLabel(key)} · ${keyText.describe(bound)}` },
+      ...light,
       { id: "copy", label: "Copy key", hint: "Ctrl/⌘ C" },
       { id: "paste", label: "Paste", hint: "Ctrl/⌘ V" },
       "-",
@@ -297,6 +305,7 @@ export function KeymapCenter() {
           x={keyMenu.x}
           y={keyMenu.y}
           label={`Key ${keyAddressLabel(keyMenu.key)}`}
+          width={250}
           items={keyMenuItems(keyMenu.key)}
           onClose={() => setKeyMenu(null)}
           onAction={(id) => {

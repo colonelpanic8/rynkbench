@@ -15,12 +15,14 @@ const RING = "ring-2 ring-accent ring-offset-2 ring-offset-panel";
 /** What the browser's picker opens on when there is no colour yet. */
 const PICKER_START = rgbToHex(LED_PRESETS[LED_PRESETS.length - 1]);
 
-function Swatch({ color, chosen, title, onPick, onDoubleClick }: {
+export function Swatch({ color, chosen, title, onPick, onDoubleClick, small }: {
   color: LightingRgb8;
   chosen: boolean;
   title: string;
   onPick: () => void;
   onDoubleClick?: () => void;
+  /** GLIDE's menu size, so a row of presets fits a menu. */
+  small?: boolean;
 }) {
   return (
     <button
@@ -31,8 +33,25 @@ function Swatch({ color, chosen, title, onPick, onDoubleClick }: {
       onClick={onPick}
       onDoubleClick={onDoubleClick}
       style={{ background: cssRgb(color) }}
-      className={cx("size-5 shrink-0 cursor-pointer rounded-full border border-line-strong transition-transform hover:scale-125", chosen && RING)}
+      className={cx("shrink-0 cursor-pointer rounded-full border border-line-strong transition-transform hover:scale-125", small ? "size-4" : "size-5", chosen && RING)}
     />
+  );
+}
+
+/** No colour: a struck-through ring. */
+export function DarkSwatch({ title, chosen, onPick, small }: { title: string; chosen: boolean; onPick: () => void; small?: boolean }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      aria-pressed={chosen}
+      onClick={onPick}
+      className={cx("group relative flex shrink-0 cursor-pointer items-center justify-center rounded-full", small ? "size-4" : "size-5", chosen && RING)}
+    >
+      <span className="absolute inset-0 rounded-full border-2 border-mute group-hover:border-ink" />
+      <span className="absolute h-[120%] w-0.5 rotate-45 bg-mute group-hover:bg-ink" />
+    </button>
   );
 }
 
@@ -128,19 +147,7 @@ export function ColorChoice({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2.5">
-        {darkTitle && (
-          <button
-            type="button"
-            title={darkTitle}
-            aria-label={darkTitle}
-            aria-pressed={value === null}
-            onClick={() => onPick(null)}
-            className={cx("group relative flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full", !value && RING)}
-          >
-            <span className="absolute inset-0 rounded-full border-2 border-mute group-hover:border-ink" />
-            <span className="absolute h-[120%] w-0.5 rotate-45 bg-mute group-hover:bg-ink" />
-          </button>
-        )}
+        {darkTitle && <DarkSwatch title={darkTitle} chosen={value === null} onPick={() => onPick(null)} />}
         {LED_PRESETS.map((color) => (
           <Swatch key={rgbToHex(color)} color={color} title={rgbToHex(color).toUpperCase()} chosen={same(value, color)} onPick={() => onPick(color)} />
         ))}

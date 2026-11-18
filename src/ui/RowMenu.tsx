@@ -22,7 +22,12 @@ export interface MenuItem {
 export interface MenuHeading {
   heading: string;
 }
-export type MenuEntry = MenuItem | MenuHeading | "-";
+/** Something of the caller's own between the items, such as a row of colours. */
+export interface MenuContent {
+  key: string;
+  content: ReactNode;
+}
+export type MenuEntry = MenuItem | MenuHeading | MenuContent | "-";
 
 const LONG_PRESS_MS = 500;
 
@@ -86,6 +91,7 @@ export function RowMenu({
       >
         {items.map((item, index) => {
           if (item === "-") return <div key={index} className="my-1.5 border-t border-line" />;
+          if ("content" in item) return <div key={item.key}>{item.content}</div>;
           if ("heading" in item) {
             return (
               <div
