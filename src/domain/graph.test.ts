@@ -98,7 +98,7 @@ describe("the graph", () => {
     const g = buildGraph(
       source({
         layers: [[key("A")], [mo(2)], [key("C")], [key("D")]],
-        combos: [{ Actions: { actions: [key("A"), key("B")], output: mo(3), layer: undefined } } as ComboDefinition],
+        combos: [{ Actions: { actions: [key("A"), key("B")], output: mo(3), layers: 0xffffffff } } as ComboDefinition],
       }),
     );
     // layer 1 holds the only edge into 2, but nothing reaches layer 1; the
@@ -139,8 +139,8 @@ describe("combos and forks", () => {
         macroCount: 2,
         forks: [fork, unprogrammedFork],
         combos: [
-          { Actions: { actions: [key("A"), key("B")], output: mo(2), layer: 1 } },
-          { Actions: { actions: [], output: "No", layer: undefined } },
+          { Actions: { actions: [key("A"), key("B")], output: mo(2), layers: 1 << 1 } },
+          { Actions: { actions: [], output: "No", layers: 0xffffffff } },
         ] as ComboDefinition[],
       }),
     );

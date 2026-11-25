@@ -6,6 +6,7 @@ import type {
   PositionCombo,
 } from "../vendor/rynk-wasm/rynk_wasm";
 import { same } from "./deep-equal";
+import { EVERY_LAYER } from "./slots";
 
 export function comboIsActions(definition: ComboDefinition): definition is { Actions: Combo } {
   return "Actions" in definition;
@@ -21,8 +22,22 @@ export function comboOutput(definition: ComboDefinition): KeyAction {
   return comboIsActions(definition) ? definition.Actions.output : definition.Positions.output;
 }
 
+/** The combo's layer mask, unsigned. */
+export function comboLayers(definition: ComboDefinition): number {
+  return (comboIsActions(definition) ? definition.Actions.layers : definition.Positions.layers) >>> 0;
+}
+
+/** The layers a combo works on, lowest first, or undefined when it works on every layer. */
+export function comboLayerList(definition: ComboDefinition): number[] | undefined {
+  const mask = comboLayers(definition);
+  if (mask === EVERY_LAYER) return undefined;
+  return Array.from({ length: 32 }, (_, layer) => layer).filter((layer) => ((mask >>> layer) & 1) === 1);
+}
+
+/** The layer a combo is limited to (the lowest, when it names several), or
+ *  undefined when it works on every layer. */
 export function comboLayer(definition: ComboDefinition): number | undefined {
-  return comboIsActions(definition) ? definition.Actions.layer : definition.Positions.layer;
+  return comboLayerList(definition)?.[0];
 }
 
 export function comboTriggerCount(definition: ComboDefinition): number {
@@ -44,13 +59,15 @@ export function comboWithOutput(
     : { Positions: { ...definition.Positions, output } };
 }
 
+/** The combo limited to one layer, or to none when `layer` is undefined. */
 export function comboWithLayer(
   definition: ComboDefinition,
   layer: number | undefined,
 ): ComboDefinition {
+  const layers = layer === undefined ? EVERY_LAYER : (1 << layer) >>> 0;
   return comboIsActions(definition)
-    ? { Actions: { ...definition.Actions, layer } }
-    : { Positions: { ...definition.Positions, layer } };
+    ? { Actions: { ...definition.Actions, layers } }
+    : { Positions: { ...definition.Positions, layers } };
 }
 
 export function samePosition(a: MatrixPosition, b: MatrixPosition): boolean {
@@ -59,7 +76,7 @@ export function samePosition(a: MatrixPosition, b: MatrixPosition): boolean {
 
 /** A new combo made on the canvas: it matches keys by their place. */
 export function newPositionCombo(): ComboDefinition {
-  return { Positions: { positions: [], output: "No", layer: undefined } };
+  return { Positions: { positions: [], output: "No", layers: EVERY_LAYER } };
 }
 
 /** Whether the key is one of the combo's keys: by its place, or, for a combo
@@ -111,7 +128,7 @@ export function comboNeeds(definition: ComboDefinition): "keys" | "action" | nul
   return null;
 }
 
-/** Combos that use the same keys as the one at `index` (same layer or every layer). */
+/** Combos that use the same keys as the one at `index` on a layer they share. */
 export function comboTwins(combos: readonly ComboDefinition[], index: number): number[] {
   const own = combos[index];
   if (!own || comboTriggerCount(own) === 0) return [];
@@ -119,12 +136,12 @@ export function comboTwins(combos: readonly ComboDefinition[], index: number): n
     comboIsActions(definition)
       ? definition.Actions.actions.map((action) => JSON.stringify(action)).sort().join("|")
       : definition.Positions.positions.map((p) => `${p.row}:${p.col}`).sort().join("|");
-  const overlaps = (a: number | undefined, b: number | undefined) => a === undefined || b === undefined || a === b;
+  const overlaps = (a: number, b: number) => (a & b) !== 0;
   return combos.flatMap((other, i) =>
     i !== index &&
     comboIsActions(other) === comboIsActions(own) &&
     keyOf(other) === keyOf(own) &&
-    overlaps(comboLayer(other), comboLayer(own))
+    overlaps(comboLayers(other), comboLayers(own))
       ? [i]
       : [],
   );

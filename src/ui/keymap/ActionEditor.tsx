@@ -437,10 +437,10 @@ export function ActionEditor({
   const tabs = useMemo(() => {
     const out = [...BASE_TABS];
     if (bundle.caps.macro_space_size > 0) out.push({ id: "macros", label: "Macros" });
-    if (bundle.caps.max_morse > 0) out.push({ id: "morse", label: "Morse" });
+    if (bundle.caps.max_morses > 0) out.push({ id: "morse", label: "Morse" });
     out.push({ id: "system", label: "System" }, { id: "lighting", label: "Lighting" });
     return out;
-  }, [bundle.caps.macro_space_size, bundle.caps.max_morse]);
+  }, [bundle.caps.macro_space_size, bundle.caps.max_morses]);
 
   const boardLightingActions = useMemo(() => {
     const actions: Array<{ action: number; label: string; hint: string }> = [];

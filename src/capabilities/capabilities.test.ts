@@ -10,7 +10,7 @@ const none: FactSource = {
   lightingState: null,
   lightingOutputMode: null,
   overlayReadSupported: false,
-  caps: { max_morse: 0, max_patterns_per_key: 0, max_macros: 0, macro_space_size: 0, macros_writable: false, max_forks: 0 },
+  caps: { max_morses: 0, max_patterns_per_key: 0, max_macros: 0, macro_space_size: 0, macros_writable: false, max_forks: 0 },
   morseProfileCapacity: 0,
 };
 
@@ -103,7 +103,7 @@ describe("resolveCapabilities", () => {
   });
 
   it("offers a double tap only when a morse entry fits tap, hold and tap-tap", () => {
-    const facts = firmwareFactsOf({ ...none, caps: { ...none.caps, max_morse: 8, max_patterns_per_key: 3 } });
+    const facts = firmwareFactsOf({ ...none, caps: { ...none.caps, max_morses: 8, max_patterns_per_key: 3 } });
     expect(resolveCapabilities(facts).get("keys.doubleTap")?.slots).toBe(8);
     expect(resolveCapabilities({ ...facts, morsePatterns: 2 }).has("keys.doubleTap")).toBe(false);
     expect(resolveCapabilities({ ...facts, morseSlots: 0 }).has("keys.doubleTap")).toBe(false);

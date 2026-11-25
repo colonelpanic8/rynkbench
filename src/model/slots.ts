@@ -14,6 +14,9 @@ import type {
   StateBits,
 } from "../vendor/rynk-wasm/rynk_wasm";
 
+/** A layer mask with every layer on: a combo or fork that works everywhere. */
+export const EVERY_LAYER = 0xffffffff;
+
 export function noModifiers(): ModifierCombination {
   return {
     left_ctrl: false,
@@ -50,7 +53,7 @@ export function noStateBits(): StateBits {
 }
 
 export function emptyCombo(): ComboDefinition {
-  return { Actions: { actions: [], output: "No", layer: undefined } };
+  return { Actions: { actions: [], output: "No", layers: EVERY_LAYER } };
 }
 
 export function emptyMorseProfile(): MorseProfile {
@@ -81,7 +84,7 @@ export function emptyFork(): Fork {
     match_none: noStateBits(),
     kept_modifiers: noModifiers(),
     bindable: true,
-    layers: 0xffffffff,
+    layers: EVERY_LAYER,
   };
 }
 

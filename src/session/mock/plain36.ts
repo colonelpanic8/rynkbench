@@ -68,7 +68,7 @@ const capabilities: DeviceCapabilities = {
   max_combos: 8,
   max_combo_keys: 4,
   macro_space_size: 256,
-  max_morse: 8,
+  max_morses: 8,
   max_patterns_per_key: 8,
   max_forks: 8,
   storage_enabled: true,
@@ -77,6 +77,8 @@ const capabilities: DeviceCapabilities = {
   num_split_peripherals: 0,
   ble_enabled: false,
   num_ble_profiles: 0,
+  max_connections: 0,
+  dongle_profile: undefined,
   max_payload_size: 64,
   max_bulk_keys: 16,
   max_bulk_items: 4,
@@ -103,7 +105,8 @@ export const plain36Board: BoardSpec = {
   build: { label: "plain36-rmk v0.1.0 (plainbui) / RMK rmk-v0.8.2-992-gplainbui" },
   connection: {
     usb: "Configured",
-    ble: { profile: 0, state: "Inactive", bonded: false },
+    ble: [],
+    selected: 0,
     preferred: "Usb",
   },
   layout: {

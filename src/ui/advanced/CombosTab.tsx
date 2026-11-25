@@ -27,6 +27,7 @@ import { useSlotEditor } from "./use-slot-editor";
 import {
   comboIsActions,
   comboLayer,
+  comboLayers,
   comboOutput,
   comboTriggerCount,
   comboWithLayer,
@@ -252,10 +253,10 @@ export function CombosTab({
                   value={comboIsActions(draft) ? "actions" : "positions"}
                   onChange={(event) => {
                     const output = comboOutput(draft);
-                    const layer = comboLayer(draft);
+                    const layers = comboLayers(draft);
                     setDraft(event.target.value === "actions"
-                      ? { Actions: { actions: [], output, layer } }
-                      : { Positions: { positions: [], output, layer } });
+                      ? { Actions: { actions: [], output, layers } }
+                      : { Positions: { positions: [], output, layers } });
                     setPickerOpen(false);
                   }}
                   className="rounded-lg border border-line bg-well px-2 py-1 text-body text-ink"

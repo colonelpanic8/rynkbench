@@ -6,6 +6,7 @@ import type {
   LightingAdvancedConditionalSceneCell,
   LightingSceneCell,
 } from "../../vendor/rynk-wasm/rynk_wasm";
+import { bleProfiles } from "../connection";
 import {
   conditionalRuleMatches,
   describeRuleConditions,
@@ -97,7 +98,8 @@ describe("runtime rule predicates", () => {
   };
   const connected: ConnectionStatus = {
     usb: "Configured",
-    ble: { profile: 2, state: "Connected", bonded: true, },
+    ble: bleProfiles(4, 2, { state: "Connected", bonded: true }),
+    selected: 2,
     preferred: "Ble",
   };
   const preview = {

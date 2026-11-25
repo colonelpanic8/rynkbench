@@ -7,7 +7,7 @@ import { MorseEditor } from "./MorseEditor";
 
 const tapHold: Morse = { ...emptyMorse(), actions: [[2, { Key: { Hid: "A" } }], [3, { LayerOn: 1 }]] } as Morse;
 const parts = {
-  bundle: { caps: { num_cols: 2, num_layers: 2, max_morse: 2, max_patterns_per_key: 2 } },
+  bundle: { caps: { num_cols: 2, num_layers: 2, max_morses: 2, max_patterns_per_key: 2 } },
   state: { morse: [tapHold, emptyMorse()], labels: withLabel(noLabels(), "morse", 0, { name: "Home", description: "" }) },
 };
 

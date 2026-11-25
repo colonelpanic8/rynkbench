@@ -763,7 +763,6 @@ export class LinkSession implements RynkSession {
       // The firmware reboots itself once the erase finishes; a host-sent
       // reboot would race the erase and win, leaving the store intact.
       resetStorage: () => this.run(() => client.storage_reset("Full")),
-      bleStatus: () => this.run(() => client.get_ble_status()),
       clearBleProfile: (slot) => this.run(() => client.clear_ble_profile(slot)),
       clearAllBleProfiles: () => this.run(() => client.clear_all_ble_profiles()),
       switchBleProfile: (slot) => this.run(() => client.switch_ble_profile(slot)),
@@ -1109,7 +1108,7 @@ export class LinkSession implements RynkSession {
     const caps = await this.capabilities();
     return this.readSlotTable(
       caps,
-      caps.max_morse,
+      caps.max_morses,
       async (start) => (await this.client.get_morse_bulk(start)).configs,
       (index) => this.client.get_morse(index),
     );

@@ -12,7 +12,6 @@ import type {
   BatteryStatus,
   BehaviorConfig,
   BehaviorOptions,
-  BleStatus,
   BuildInfo,
   ComboDefinition,
   ConnectionStatus,
@@ -340,7 +339,7 @@ class MockSession implements RynkSession {
   private autoMouseLayers: AutoMouseLayerConfig[];
   private pointingConfig: PointingConfig | null;
   private readonly indicator: LedIndicator;
-  private ble: BleStatus;
+  private connection: ConnectionStatus;
   private readonly matrixBitmap: Uint8Array;
   private readonly modifiers = noModifiers();
   private splitLatency: SplitCentralLatencyState | null;
@@ -392,7 +391,7 @@ class MockSession implements RynkSession {
     }
     const caps = spec.capabilities;
     this.comboTable = buildSlots(caps.max_combos, emptyCombo, cloneCombo, spec.seedCombos);
-    this.morseTable = buildSlots(caps.max_morse, emptyMorse, cloneMorse, spec.seedMorse);
+    this.morseTable = buildSlots(caps.max_morses, emptyMorse, cloneMorse, spec.seedMorse);
     this.forkTable = buildSlots(caps.max_forks, emptyFork, cloneFork, spec.seedForks);
     this.macroOps = structuredClone(spec.seedMacros ?? []);
     this.layerPolicy = spec.initialLayerPolicy ?? "EffectiveOnly";
@@ -404,7 +403,7 @@ class MockSession implements RynkSession {
     this.autoMouseLayers = structuredClone(spec.seedAutoMouseLayers ?? []);
     this.pointingConfig = spec.pointingConfig ? structuredClone(spec.pointingConfig) : null;
     this.indicator = { ...spec.ledIndicator };
-    this.ble = { ...spec.connection.ble };
+    this.connection = structuredClone(spec.connection);
     this.matrixBitmap = new Uint8Array(caps.num_rows * Math.ceil(caps.num_cols / 8));
     this.splitLatency = splitLatencyDefaults(spec);
     this.batteryTimer = setInterval(() => this.pushBattery(), BATTERY_PUSH_MS);
@@ -432,7 +431,6 @@ class MockSession implements RynkSession {
         this.restoreSpecDefaults();
         this.endForReboot();
       }),
-    bleStatus: () => latency(() => ({ ...this.ble })),
     clearBleProfile: (slot) =>
       latency(() => {
         this.checkBleProfile(slot);
@@ -445,7 +443,10 @@ class MockSession implements RynkSession {
       latency(() => {
         this.checkBleProfile(slot);
         // Selecting a slot drops any live link and re-advertises on it.
-        this.ble = { profile: slot, state: "Advertising", bonded: false, };
+        const { ble, selected } = this.connection;
+        if (ble[selected]) ble[selected].state = "Inactive";
+        if (ble[slot]) ble[slot].state = "Advertising";
+        this.connection.selected = slot;
         this.emit({ ConnectionChange: this.connectionStatus() });
       }),
     peripheralStatus: (slot) =>
@@ -914,36 +915,12 @@ class MockSession implements RynkSession {
     this.runtimeConditional = structuredClone(this.spec.seedRuntimeConditionalScenes ?? []);
     this.layerPolicy = this.spec.initialLayerPolicy ?? "EffectiveOnly";
 
-    this.comboTable.splice(
-      0,
-      this.comboTable.length,
-      ...buildSlots(
-        this.spec.capabilities.max_combos,
-        emptyCombo,
-        cloneCombo,
-        this.spec.seedCombos,
-      ),
-    );
-    this.morseTable.splice(
-      0,
-      this.morseTable.length,
-      ...buildSlots(
-        this.spec.capabilities.max_morse,
-        emptyMorse,
-        cloneMorse,
-        this.spec.seedMorse,
-      ),
-    );
-    this.forkTable.splice(
-      0,
-      this.forkTable.length,
-      ...buildSlots(
-        this.spec.capabilities.max_forks,
-        emptyFork,
-        cloneFork,
-        this.spec.seedForks,
-      ),
-    );
+    const combos = buildSlots(this.spec.capabilities.max_combos, emptyCombo, cloneCombo, this.spec.seedCombos);
+    this.comboTable.splice(0, this.comboTable.length, ...combos);
+    const morses = buildSlots(this.spec.capabilities.max_morses, emptyMorse, cloneMorse, this.spec.seedMorse);
+    this.morseTable.splice(0, this.morseTable.length, ...morses);
+    const forks = buildSlots(this.spec.capabilities.max_forks, emptyFork, cloneFork, this.spec.seedForks);
+    this.forkTable.splice(0, this.forkTable.length, ...forks);
     this.macroOps = structuredClone(this.spec.seedMacros ?? []);
     this.behaviorConfig = { ...this.spec.behavior };
     this.behaviorOptions = behaviorOptionsDefaults(this.spec);
@@ -953,13 +930,13 @@ class MockSession implements RynkSession {
     this.pointingConfig = this.spec.pointingConfig
       ? structuredClone(this.spec.pointingConfig)
       : null;
-    this.ble = { ...this.spec.connection.ble };
+    this.connection = structuredClone(this.spec.connection);
     this.splitLatency = splitLatencyDefaults(this.spec);
     this.matrixBitmap.fill(0);
   }
 
   private connectionStatus(): ConnectionStatus {
-    return { ...this.spec.connection, ble: { ...this.ble } };
+    return structuredClone(this.connection);
   }
 
   private emit(event: TopicEvent): void {

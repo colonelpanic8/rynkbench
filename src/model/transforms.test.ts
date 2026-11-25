@@ -66,8 +66,8 @@ describe("CTRL_GUI_SWAP", () => {
           [key("B"), key("LGui")],
         ],
         combos: [
-          { Actions: { actions: [key("LCtrl"), key("Q")], output: key("C"), layer: 0 } },
-          { Actions: { actions: [key("A"), key("B")], output: key("C"), layer: undefined } },
+          { Actions: { actions: [key("LCtrl"), key("Q")], output: key("C"), layers: 1 } },
+          { Actions: { actions: [key("A"), key("B")], output: key("C"), layers: 0xffffffff } },
         ],
         morse: [
           {
@@ -247,7 +247,7 @@ describe("plan sizing", () => {
   const plan = planOsSwap(
     baseInput({
       layers: [[key("LCtrl"), key("A")]],
-      combos: [{ Actions: { actions: [key("LGui")], output: key("C"), layer: undefined } }],
+      combos: [{ Actions: { actions: [key("LGui")], output: key("C"), layers: 0xffffffff } }],
       macroOps: encodeMacros([{ steps: [{ kind: "press", code: "LCtrl" }] }]),
     }),
   );

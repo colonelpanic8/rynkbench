@@ -798,11 +798,11 @@ describe("combo slots", () => {
         Actions: {
           actions: [{ Single: { Key: { Hid: "J" } } }, { Single: { Key: { Hid: "K" } } }],
           output: { Single: { Key: { Hid: "Escape" } } },
-          layer: undefined,
+          layers: 0xffffffff,
         },
       });
       for (const combo of combos.slice(1)) {
-        expect(combo).toEqual({ Actions: { actions: [], output: "No", layer: undefined } });
+        expect(combo).toEqual({ Actions: { actions: [], output: "No", layers: 0xffffffff } });
       }
     });
   });
@@ -819,7 +819,7 @@ describe("combo slots", () => {
         Actions: {
           actions: [{ Single: { Key: { Hid: "D" } } }, { Single: { Key: { Hid: "F" } } }],
           output: { Single: { Key: { Hid: "Tab" } } },
-          layer: 0,
+          layers: 1,
         },
       };
       await session.combos.set(1, combo);
@@ -842,7 +842,7 @@ describe("morse slots", () => {
     await withSession(glove80Board, async (session) => {
       const caps = await session.device.capabilities();
       const morse = await session.morse.readAll();
-      expect(morse).toHaveLength(caps.max_morse);
+      expect(morse).toHaveLength(caps.max_morses);
       expect(morse[0].actions).toEqual([
         [0b10, { Key: { Hid: "Escape" } }],
         [0b11, { LayerOn: 1 }],
@@ -873,7 +873,7 @@ describe("morse slots", () => {
       };
       await session.morse.set(2, morse);
       expect((await session.morse.readAll())[2]).toEqual(morse);
-      await expect(session.morse.set(caps.max_morse, morse)).rejects.toThrow(/out of range/);
+      await expect(session.morse.set(caps.max_morses, morse)).rejects.toThrow(/out of range/);
       const tooMany = {
         ...morse,
         actions: Array.from(
@@ -1086,7 +1086,10 @@ describe("BLE and peripherals", () => {
     await withSession(glove80Board, async (session) => {
       const caps = await session.device.capabilities();
       expect(caps.ble_enabled).toBe(true);
-      expect(await session.device.bleStatus()).toEqual({ profile: 0, state: "Connected", bonded: true, });
+      const status = await session.device.connectionStatus();
+      expect(status.selected).toBe(0);
+      expect(status.ble).toHaveLength(caps.num_ble_profiles);
+      expect(status.ble[0]).toEqual({ state: "Connected", bonded: true });
       await session.device.clearBleProfile(caps.num_ble_profiles - 1);
       await session.device.clearAllBleProfiles();
       await expect(session.device.clearBleProfile(caps.num_ble_profiles)).rejects.toThrow(/out of range/);
@@ -1316,12 +1319,12 @@ describe("providers", () => {
         Actions: {
           actions: [],
           output: { Single: { Key: { Hid: "A" } } },
-          layer: undefined,
+          layers: 0xffffffff,
         },
       });
       await first.macros.write([[{ Char: 9 }]]);
       expect((await second.combos.readAll())[0]).toEqual({
-        Actions: { actions: [], output: "No", layer: undefined },
+        Actions: { actions: [], output: "No", layers: 0xffffffff },
       });
       expect(await second.macros.read()).toEqual([]);
     } finally {
@@ -1339,11 +1342,17 @@ describe("mock BLE connection state", () => {
       session.onTopic((event) => topics.push(event));
       await session.device.switchBleProfile(1);
       const connection = await session.device.connectionStatus();
-      expect(connection.ble).toEqual({ profile: 1, state: "Advertising", bonded: false, });
-      expect(await session.device.bleStatus()).toEqual(connection.ble);
+      expect(connection.selected).toBe(1);
+      expect(connection.ble.slice(0, 2)).toEqual([
+        { state: "Inactive", bonded: true },
+        { state: "Advertising", bonded: false },
+      ]);
       expect(topics).toContainEqual({ ConnectionChange: connection });
-      connection.ble.profile = 2;
-      expect((await session.device.connectionStatus()).ble.profile).toBe(1);
+      connection.selected = 2;
+      connection.ble[1].state = "Connected";
+      const again = await session.device.connectionStatus();
+      expect(again.selected).toBe(1);
+      expect(again.ble[1].state).toBe("Advertising");
     });
     expect(glove80Board.connection).toEqual(initial);
   });
@@ -1372,7 +1381,7 @@ describe("storage reset", () => {
       profiles: await session.behavior.profiles(),
       holdTriggerPositions: await session.behavior.holdTriggerPositions(),
       pointing: await session.pointing.get(),
-      ble: await session.device.bleStatus(),
+      connection: await session.device.connectionStatus(),
       splitLatency: await session.device.splitCentralLatency(),
     });
     const defaults = await readState();
@@ -1401,7 +1410,7 @@ describe("storage reset", () => {
     await session.lighting.setExtensionLayers(undefined);
     await session.lighting.setExtensionParam(5, 0, 7);
     await session.combos.set(0, {
-      Actions: { actions: [], output: { Single: { Key: { Hid: "Z" } } }, layer: undefined },
+      Actions: { actions: [], output: { Single: { Key: { Hid: "Z" } } }, layers: 0xffffffff },
     });
     await session.macros.write([[{ Char: 9 }]]);
     await session.behavior.set({ ...defaults.behavior, combo_timeout_ms: 99 });

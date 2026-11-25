@@ -276,7 +276,7 @@ export async function openBundle(session: RynkSession): Promise<ConnectedBundle>
     modifierState,
   ] = await Promise.all([
     caps.max_combos > 0 ? requiredRead("combos", session.combos.readAll(), []) : [],
-    caps.max_morse > 0 ? requiredRead("morse table", session.morse.readAll(), []) : [],
+    caps.max_morses > 0 ? requiredRead("morse table", session.morse.readAll(), []) : [],
     caps.max_forks > 0 ? requiredRead("fork table", session.forks.readAll(), []) : [],
     caps.macro_space_size > 0
       ? requiredRead("macros", session.macros.read(), [])

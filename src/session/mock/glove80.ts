@@ -19,17 +19,11 @@ import type {
   LightingZone,
   Morse,
 } from "../../vendor/rynk-wasm/rynk_wasm";
-import {
-  GLOVE80_BOARD_KEYS,
-  GLOVE80_COLS,
-  GLOVE80_GRID,
-  GLOVE80_ROWS,
-  glove80Enrichment,
-  type Glove80Key,
-} from "../../model/boards/glove80";
-import { emptyFork, emptyMorse, emptyMorseProfile, noModifiers, noStateBits } from "../../model/slots";
+import { GLOVE80_BOARD_KEYS, GLOVE80_COLS, GLOVE80_GRID, GLOVE80_ROWS, glove80Enrichment, type Glove80Key } from "../../model/boards/glove80";
+import { EVERY_LAYER, emptyFork, emptyMorse, emptyMorseProfile, noModifiers, noStateBits } from "../../model/slots";
 import { hid, layerOn, type BoardSpec } from "./board";
 import { buildTopology, type SimLed } from "./topology";
+import { bleProfiles } from "../../model/connection";
 
 // Placement + LED-chain data is the shared board table in model/boards —
 // the same real geometry current firmware serves through GetLayout.
@@ -165,7 +159,7 @@ const capabilities: DeviceCapabilities = {
   max_combos: 32,
   max_combo_keys: 4,
   macro_space_size: 512,
-  max_morse: 16,
+  max_morses: 16,
   max_patterns_per_key: 8,
   max_forks: 16,
   storage_enabled: true,
@@ -174,6 +168,8 @@ const capabilities: DeviceCapabilities = {
   num_split_peripherals: 1,
   ble_enabled: true,
   num_ble_profiles: 4,
+  max_connections: 1,
+  dongle_profile: undefined,
   max_payload_size: 256,
   max_bulk_keys: 28,
   max_bulk_items: 4,
@@ -187,7 +183,7 @@ const capabilities: DeviceCapabilities = {
 
 // J+K chorded together produce Escape (the classic vim combo).
 const seedCombos: ComboDefinition[] = [
-  { Actions: { actions: [hid("J"), hid("K")], output: hid("Escape"), layer: undefined } },
+  { Actions: { actions: [hid("J"), hid("K")], output: hid("Escape"), layers: EVERY_LAYER } },
 ];
 
 // Morse slot 0: tap (pattern 0b1·0) types Escape, hold (0b1·1) enables layer 1.
@@ -497,7 +493,8 @@ export const glove80Board: BoardSpec = {
   build: { label: "config 0e70aaf9 / glove80-rmk v0.1.0 (mockbuil) / RMK rmk-v0.8.2-992-gmockbuil" },
   connection: {
     usb: "Suspended",
-    ble: { profile: 0, state: "Connected", bonded: true, },
+    ble: bleProfiles(4, 0, { state: "Connected", bonded: true }),
+    selected: 0,
     preferred: "Ble",
   },
   layout: {

@@ -1,6 +1,7 @@
 // Device mode: identity, capabilities, status, BLE, matrix tester — and the
 // danger zone. Each card is its own file; this one is the page.
 
+import { selectedBle } from "../../model/connection";
 import { KeyboardCanvas } from "../KeyboardCanvas";
 import { useWorkbench } from "../state";
 import { Chip, Panel, Row, SectionLabel } from "../kit";
@@ -132,7 +133,7 @@ export function DeviceMode() {
                 <>
                   <Row label="USB">{conn.usb}</Row>
                   <Row label="BLE">
-                    {conn.ble.state} · profile {conn.ble.profile}
+                    {selectedBle(conn).state} · profile {conn.selected}
                   </Row>
                   <Row label="Preferred">{CONNECTION_LABEL[conn.preferred] ?? conn.preferred}</Row>
                 </>

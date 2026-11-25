@@ -38,4 +38,6 @@ export type {
   CursorConfig,
   PointingConfig,
   PointingMode,
+  /** How one scroll axis turns motion into scrolling. */
+  ScrollAxis,
 } from "../vendor/rynk-wasm/rynk_wasm";

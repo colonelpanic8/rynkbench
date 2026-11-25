@@ -42,14 +42,14 @@ describe("standalone board migration", () => {
       hold_trigger_positions: undefined, auto_mouse_layers: undefined,
       morses: undefined, forks: undefined, macros: undefined,
       combos: [
-        { Positions: { positions: [{ row: 3, col: 1 }, { row: 3, col: 2 }], output: { Single: { User: 1 } }, layer: 0 } },
-        { Positions: { positions: [{ row: 0, col: 0 }, { row: 3, col: 2 }], output: { Single: { User: 2 } }, layer: 0 } },
+        { Positions: { positions: [{ row: 3, col: 1 }, { row: 3, col: 2 }], output: { Single: { User: 1 } }, layers: 1 } },
+        { Positions: { positions: [{ row: 0, col: 0 }, { row: 3, col: 2 }], output: { Single: { User: 2 } }, layers: 1 } },
       ],
     };
     const draft = migrationDraft(snapshot, catalog);
     const parsed = parseDocument(draft.text, catalog).snapshot;
     expect(parsed.behaviors?.combos?.[0]).toEqual({
-      Positions: { positions: [{ row: 2, col: 1 }, { row: 2, col: 2 }], output: { Single: { User: 1 } }, layer: 0 },
+      Positions: { positions: [{ row: 2, col: 1 }, { row: 2, col: 2 }], output: { Single: { User: 1 } }, layers: 1 },
     });
     expect(draft.notes.some(note => note.message.includes("Disabled"))).toBe(true);
   });

@@ -100,7 +100,7 @@ export async function readImage(session: RynkSession, features: ImageFeatures): 
       session.keymap.readAll(),
       session.keymap.layerState(),
       caps.max_combos > 0 ? session.combos.readAll() : none<never>(),
-      caps.max_morse > 0 ? session.morse.readAll() : none<never>(),
+      caps.max_morses > 0 ? session.morse.readAll() : none<never>(),
       caps.max_forks > 0 ? session.forks.readAll() : none<never>(),
       session.behavior.options(),
       session.behavior.autoMouseLayers(),

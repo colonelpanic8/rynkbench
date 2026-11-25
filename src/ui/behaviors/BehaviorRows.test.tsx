@@ -10,7 +10,7 @@ const runs = (macro: number): Morse => ({ ...emptyMorse(), actions: [[2, { Trigg
 describe("the Behavior Library's rows", () => {
   it("show names, how each is used, and that only unused ones use a behavior", () => {
     const html = renderInWorkbench(<BehaviorLibrary kinds={["macros", "morse"]} />, {
-      bundle: { caps: { num_cols: 2, max_morse: 2, max_patterns_per_key: 4, max_macros: 2, macro_space_size: 64, macros_writable: true } },
+      bundle: { caps: { num_cols: 2, max_morses: 2, max_patterns_per_key: 4, max_macros: 2, macro_space_size: 64, macros_writable: true } },
       state: {
         layers: [[{ Morse: 1 } as KeyAction, "No" as KeyAction]],
         morse: [runs(0), runs(1)],

@@ -9,7 +9,7 @@
 // that way. When the domain gets types of its own, this file is what changes.
 
 import type { Action, ComboDefinition, Fork, KeyAction, Morse } from "../vendor/rynk-wasm/rynk_wasm";
-import { comboIsEmpty } from "../model/combos";
+import { comboIsEmpty, comboLayerList } from "../model/combos";
 import { DEFAULT_TAP_HOLD_PROFILE } from "../model/morse";
 import { forkIsEmpty } from "../model/slots";
 import { cellRef, layerRef, slotRef } from "./refs";
@@ -160,13 +160,16 @@ export interface EdgeSource {
   owners(source: GraphSource): Owner[];
 }
 
-/** A combo limited to a layer refers to that layer, so the layer cannot go away under it. */
-function scopeReference(scope: number | null): Reference[] {
-  return scope === null ? [] : [{ kind: "scopes", to: layerRef(scope) }];
+/** A combo limited to layers refers to each, so none can go away under it. */
+function scopeReferences(layers: readonly number[] | undefined): Reference[] {
+  return (layers ?? []).map((layer) => ({ kind: "scopes", to: layerRef(layer) }));
 }
 
+/** The one layer a combo is limited to. One on several layers, like one on
+ *  every layer, counts as applying everywhere. */
 function comboScope(combo: ComboDefinition): number | null {
-  return ("Actions" in combo ? combo.Actions.layer : combo.Positions.layer) ?? null;
+  const layers = comboLayerList(combo);
+  return layers?.length === 1 ? layers[0] : null;
 }
 
 function comboKeyActions(combo: ComboDefinition): KeyAction[] {
@@ -199,7 +202,7 @@ export const EDGE_SOURCES: EdgeSource[] = [
                 scope: comboScope(combo),
                 references: [
                   ...comboKeyActions(combo).flatMap(keyActionReferences),
-                  ...scopeReference(comboScope(combo)),
+                  ...scopeReferences(comboLayerList(combo)),
                 ],
               },
             ],

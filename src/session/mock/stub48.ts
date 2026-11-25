@@ -16,6 +16,7 @@ import type {
 import { emptyMorseProfile } from "../../model/slots";
 import { hid, layerOn, type BoardSpec } from "./board";
 import { buildTopology, type SimLed } from "./topology";
+import { bleProfiles } from "../../model/connection";
 
 const ROWS = 4;
 const COLS = 12;
@@ -133,7 +134,7 @@ const capabilities: DeviceCapabilities = {
   max_combos: 16,
   max_combo_keys: 4,
   macro_space_size: 1024,
-  max_morse: 8,
+  max_morses: 8,
   max_patterns_per_key: 8,
   max_forks: 8,
   storage_enabled: true,
@@ -142,6 +143,8 @@ const capabilities: DeviceCapabilities = {
   num_split_peripherals: 0,
   ble_enabled: true,
   num_ble_profiles: 3,
+  max_connections: 1,
+  dongle_profile: undefined,
   max_payload_size: 64,
   max_bulk_keys: 16,
   max_bulk_items: 4,
@@ -168,7 +171,8 @@ export const stub48Board: BoardSpec = {
   build: { label: "stub-rmk v0.0.0 (stubbuil) / RMK rmk-v0.8.2-992-gstubbuil" },
   connection: {
     usb: "Configured",
-    ble: { profile: 0, state: "Inactive", bonded: false, },
+    ble: bleProfiles(3, 0),
+    selected: 0,
     preferred: "Usb",
   },
   layout: {

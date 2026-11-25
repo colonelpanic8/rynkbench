@@ -3,6 +3,7 @@ import type { LightingTopology, RynkSession } from "../types";
 import { memorySession, type BoardSpec } from "../mock/board";
 import { glove80Board } from "../mock/glove80";
 import { ruleFromWire } from "../lighting-rules";
+import { bleProfiles } from "../../model/connection";
 
 const NEW_CONFIG_LAYERS = 6;
 
@@ -64,7 +65,8 @@ export function offlineGlove80Board(snapshot?: RuntimeSnapshot): BoardSpec {
     },
     connection: {
       usb: "Disabled",
-      ble: { profile: 0, state: "Inactive", bonded: false, },
+      ble: bleProfiles(4, 0),
+      selected: 0,
       preferred: "Usb",
     },
     defaultLayers: layers,

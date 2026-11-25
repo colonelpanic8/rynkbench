@@ -283,7 +283,7 @@ export function transferSnapshot(
           location: `combo ${index}`,
           message: `Disabled because a required position has no corresponding key on ${target.name}.`,
         });
-        return { Actions: { actions: [], output: "No", layer: combo.Positions.layer } };
+        return { Actions: { actions: [], output: "No", layers: combo.Positions.layers } };
       }
       return { Positions: { ...combo.Positions, positions: positions.filter((entry) => entry !== undefined) } };
     });

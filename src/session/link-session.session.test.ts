@@ -20,7 +20,7 @@ const caps = {
   num_layers: 1,
   bulk_transfer_supported: false,
   max_combos: 0,
-  max_morse: 0,
+  max_morses: 0,
   max_forks: 0,
   macro_space_size: 0,
 } as DeviceCapabilities;
