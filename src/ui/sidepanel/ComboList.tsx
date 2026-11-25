@@ -4,7 +4,7 @@
 // edits or deletes it.
 
 import { useState, useSyncExternalStore } from "react";
-import { comboIsEmpty, comboLayer, comboOutput, comboTriggerCount, comboTwins } from "../../model/combos";
+import { comboIsEmpty, comboLayerList, comboOutput, comboTriggerCount, comboTwins } from "../../model/combos";
 import { emptyCombo } from "../../model/slots";
 
 import { layerName } from "../layer-names";
@@ -59,8 +59,8 @@ export function ComboList() {
     .map((combo, index) => ({ combo, index }))
     .filter(({ combo, index }) => comboTriggerCount(combo) > 0 || index === editing)
     .filter(({ combo }) => {
-      const layer = comboLayer(combo);
-      return layerFilter === null || layer === undefined || layer === layerFilter;
+      const layers = comboLayerList(combo);
+      return layerFilter === null || layers === undefined || layers.includes(layerFilter);
     })
     .filter(
       ({ combo, index }) =>
