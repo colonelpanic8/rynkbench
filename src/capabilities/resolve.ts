@@ -48,7 +48,7 @@ export interface FactSource {
   /** Whether the firmware answered the overlay read. */
   overlayReadSupported: boolean;
   caps: {
-    max_morse: number;
+    max_morses: number;
     max_patterns_per_key: number;
     max_macros: number;
     macro_space_size: number;
@@ -69,7 +69,7 @@ export function firmwareFactsOf(source: FactSource): FirmwareFacts {
     pointing: source.pointingConfig !== null,
     outputMode: source.lightingState !== null && source.lightingOutputMode !== null,
     overlay: source.lightingState !== null && source.overlayReadSupported,
-    morseSlots: source.caps.max_morse,
+    morseSlots: source.caps.max_morses,
     morsePatterns: source.caps.max_patterns_per_key,
     macroSlots: source.caps.macro_space_size > 0 ? source.caps.max_macros : 0,
     macroBytes: source.caps.macro_space_size,

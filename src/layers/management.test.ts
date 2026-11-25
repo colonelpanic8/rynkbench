@@ -48,7 +48,7 @@ function snapshot(): LayerRewriteSnapshot {
         Actions: {
           actions: [{ Single: { LayerOn: 2 } }],
           output: { Single: { LayerToggle: 1 } },
-          layer: 2,
+          layers: 1 << 2,
         },
       },
     ],
@@ -118,7 +118,7 @@ describe("layer rewrite planning", () => {
       TapHold: [{ LayerOn: 2 }, { DefaultLayer: 1 }, 200],
     });
     expect(plan.encoders[1][0].clockwise).toEqual({ Single: { OneShotLayer: 2 } });
-    expect(plan.combos[0]).toMatchObject({ Actions: { layer: 1 } });
+    expect(plan.combos[0]).toMatchObject({ Actions: { layers: 1 << 1 } });
     expect(plan.morse[0].actions[0][1]).toEqual({ LayerOn: 1 });
     expect(plan.forks[0].positive_output).toEqual({ Single: { PersistentDefaultLayer: 1 } });
     expect(plan.behaviorOptions?.tri_layer).toEqual([0, 2, 1]);

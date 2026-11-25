@@ -66,7 +66,7 @@ function areasOf(bundle: ConnectedBundle) {
   return areasFor({
     connected: bundle.session.kind !== "offline",
     combos: bundle.caps.max_combos > 0,
-    morse: bundle.caps.max_morse > 0,
+    morse: bundle.caps.max_morses > 0,
     macros: bundle.caps.macro_space_size > 0,
     forks: bundle.caps.max_forks > 0,
     tapProfiles: bundle.morseProfileCapacity > 0,

@@ -50,12 +50,8 @@ export function defaultPointingMode(kind: PointingModeKind): PointingMode {
     case "Scroll":
       return {
         Scroll: {
-          multiplier_x: 1,
-          divisor_x: 8,
-          multiplier_y: 1,
-          divisor_y: 8,
-          invert_x: false,
-          invert_y: false,
+          wheel: { multiplier: 1, divisor: 8, invert: false },
+          pan: { multiplier: 1, divisor: 8, invert: false },
         },
       };
     case "Sniper":

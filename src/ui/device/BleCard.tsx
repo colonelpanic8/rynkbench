@@ -1,7 +1,8 @@
 // BLE profile slots and split-peripheral status.
 
 import { useEffect, useState } from "react";
-import type { BleStatus, PeripheralStatus } from "../../vendor/rynk-wasm/rynk_wasm";
+import type { PeripheralStatus } from "../../vendor/rynk-wasm/rynk_wasm";
+import { selectedBle } from "../../model/connection";
 import { errorMessage } from "../../session/errors";
 import { useWorkbench } from "../state";
 import { Button, Chip, Panel, SectionLabel, cx } from "../kit";
@@ -24,21 +25,17 @@ export function BleCard() {
   const [clearingAll, setClearingAll] = useState(false);
   const [switching, setSwitching] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [fallback, setFallback] = useState<BleStatus | null>(null);
 
   // The connection topic carries BLE state, so the card reads what the rest of
   // the workbench already has instead of keeping a second, staler copy.
-  const status = state.connection?.ble ?? fallback;
+  const connection = state.connection;
+  const status = connection ? selectedBle(connection) : null;
 
   useEffect(() => {
     if (state.connection !== null) return;
     let cancelled = false;
     readBleStatus(session).then(
-      (result) => {
-        if (cancelled) return;
-        if (result.connection) dispatch({ type: "topicConnection", connection: result.connection });
-        else setFallback(result.ble);
-      },
+      (result) => { if (!cancelled) dispatch({ type: "topicConnection", connection: result }); },
       (error) => { if (!cancelled) setError(errorMessage(error)); },
     );
     return () => { cancelled = true; };
@@ -64,9 +61,7 @@ export function BleCard() {
   }, [session, caps.is_split, caps.num_split_peripherals]);
 
   const refreshConnection = async (expectedProfile?: number) => {
-    const result = await readBleStatus(session, expectedProfile);
-    if (result.connection) dispatch({ type: "topicConnection", connection: result.connection });
-    else setFallback(result.ble);
+    dispatch({ type: "topicConnection", connection: await readBleStatus(session, expectedProfile) });
   };
 
   const busy = switching !== null || clearing !== null || clearingAll;
@@ -165,7 +160,7 @@ export function BleCard() {
         </div>
         <div className="mt-1.5 flex flex-col gap-1">
           {Array.from({ length: caps.num_ble_profiles }, (_, slot) => {
-            const active = status?.profile === slot;
+            const active = connection?.selected === slot;
             return (
               <div
                 key={slot}

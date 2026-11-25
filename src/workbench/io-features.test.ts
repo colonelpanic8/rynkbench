@@ -37,7 +37,7 @@ describe("ioFeaturesFor", () => {
                   pointingConfig,
                   lightingState,
                   lightingOutputMode,
-                  caps: { max_morse: 0, max_patterns_per_key: 0, max_macros: 0, macro_space_size: 0, macros_writable: false, max_forks: 0 },
+                  caps: { max_morses: 0, max_patterns_per_key: 0, max_macros: 0, macro_space_size: 0, macros_writable: false, max_forks: 0 },
                   morseProfileCapacity: 0,
                 } as unknown as ConnectedBundle;
                 expect(ioFeaturesFor(bundle)).toEqual(legacy(bundle));
@@ -55,7 +55,7 @@ describe("ioFeaturesFor", () => {
       pointingConfig: null,
       lightingState: null,
       lightingOutputMode: null,
-      caps: { max_morse: 0, max_patterns_per_key: 0, max_macros: 16, macro_space_size: 512, macros_writable: true, max_forks: 0 },
+      caps: { max_morses: 0, max_patterns_per_key: 0, max_macros: 16, macro_space_size: 512, macros_writable: true, max_forks: 0 },
       morseProfileCapacity: 0,
     } as unknown as ConnectedBundle;
     expect(ioFeaturesFor(bundle).macroSpace).toEqual({ slots: 16, bytes: 512 });

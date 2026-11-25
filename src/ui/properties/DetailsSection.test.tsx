@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderInWorkbench } from "../../test/workbench";
 import { DetailsSection } from "./DetailsSection";
 
-const caps = { num_layers: 12, max_combos: 32, max_morse: 16, max_macros: 0, max_forks: 8, ble_enabled: true, num_ble_profiles: 4, is_split: true, num_split_peripherals: 1 };
+const caps = { num_layers: 12, max_combos: 32, max_morses: 16, max_macros: 0, max_forks: 8, ble_enabled: true, num_ble_profiles: 4, is_split: true, num_split_peripherals: 1 };
 
 describe("Layout properties → Details", () => {
   it("shows the name, the keyboard with its conversion, and what it holds", () => {

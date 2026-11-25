@@ -27,11 +27,32 @@ const golden = JSON.parse(
 
 const fakeDecode = ((ops: unknown[][]) => ops.map((steps) => ({ steps }))) as never;
 
+/** The input in today's wire shape: the cases were written when a combo named
+ *  one layer or none, which is a mask of that layer or of every layer. */
+function withLayerMasks(input: unknown): UsageInput {
+  const { combos, ...rest } = input as { combos?: { Actions?: object; Positions?: object }[] };
+  const masked = (combo: object) => {
+    const { layer, ...fields } = combo as { layer?: number | null };
+    return { ...fields, layers: layer === undefined || layer === null ? 0xffffffff : (1 << layer) >>> 0 };
+  };
+  return {
+    ...rest,
+    combos: (combos ?? []).map((combo) =>
+      combo.Actions ? { Actions: masked(combo.Actions) } : { Positions: masked(combo.Positions ?? {}) },
+    ),
+  } as UsageInput;
+}
+
 /** The report as the earlier implementation gave it: without macro previews and
- *  without the structured sites added since (checked separately below). */
+ *  without the structured sites added since (checked separately below), and a
+ *  combo's one layer, or null, rather than its list. */
 function asBefore(report: UsageReport): unknown {
   return {
     ...report,
+    combos: report.combos.map(({ layers, ...combo }) => ({
+      ...combo,
+      layer: layers === null ? null : layers.length === 1 ? layers[0] : layers,
+    })),
     layers: report.layers.map(({ activatorSites: _sites, ...layer }) => layer),
     morse: report.morse.map(({ refSites: _sites, ...slot }) => slot),
     macros: report.macros.map(({ refSites: _sites, ...macro }) => ({ ...macro, preview: "" })),
@@ -45,7 +66,7 @@ describe("usage analysis: golden cases", () => {
 
   for (const testCase of golden) {
     it(testCase.name, () => {
-      const report = analyzeUsage(testCase.input as UsageInput, fakeDecode);
+      const report = analyzeUsage(withLayerMasks(testCase.input), fakeDecode);
       expect(asBefore(report)).toEqual(testCase.expected);
 
       // The structured sites say the same as the plain ones.

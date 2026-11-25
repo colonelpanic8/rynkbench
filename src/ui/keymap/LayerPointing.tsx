@@ -5,6 +5,7 @@ import type {
   HidKeyCode,
   PointingConfig,
   PointingMode,
+  ScrollAxis,
 } from "../../model/action-types";
 import { Button, SectionLabel, Segmented, TextInput, cx } from "../kit";
 import { NumberField } from "../lighting/EffectEditor";
@@ -58,6 +59,17 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
         className="size-3.5 accent-[var(--color-accent)]"
       />
     </label>
+  );
+}
+
+/** One scroll axis: the wheel (from vertical motion) or the pan (from horizontal). */
+function ScrollAxisFields({ name, value, onChange }: { name: string; value: ScrollAxis; onChange: (value: ScrollAxis) => void }) {
+  return (
+    <>
+      <NumberField label={`${name} multiplier`} min={0} max={255} value={value.multiplier} onChange={(multiplier) => onChange({ ...value, multiplier: bounded(multiplier, 0, 255) })} />
+      <NumberField label={`${name} divisor`} min={0} max={255} value={value.divisor} onChange={(divisor) => onChange({ ...value, divisor: bounded(divisor, 0, 255) })} />
+      <Toggle label={`Invert ${name.toLowerCase()}`} value={value.invert} onChange={(invert) => onChange({ ...value, invert })} />
+    </>
   );
 }
 
@@ -199,12 +211,8 @@ function PointingModeEditor({ value, allowKeypad, allowCursorRemap, onChange }: 
       {"Cursor" in value && <CursorFields value={value.Cursor} onChange={(Cursor) => onChange({ Cursor })} />}
       {"Scroll" in value && (
         <div className="flex flex-col gap-1.5">
-          <NumberField label="X multiplier" min={0} max={255} value={value.Scroll.multiplier_x} onChange={(multiplier_x) => onChange({ Scroll: { ...value.Scroll, multiplier_x: bounded(multiplier_x, 0, 255) } })} />
-          <NumberField label="X divisor" min={0} max={255} value={value.Scroll.divisor_x} onChange={(divisor_x) => onChange({ Scroll: { ...value.Scroll, divisor_x: bounded(divisor_x, 0, 255) } })} />
-          <NumberField label="Y multiplier" min={0} max={255} value={value.Scroll.multiplier_y} onChange={(multiplier_y) => onChange({ Scroll: { ...value.Scroll, multiplier_y: bounded(multiplier_y, 0, 255) } })} />
-          <NumberField label="Y divisor" min={0} max={255} value={value.Scroll.divisor_y} onChange={(divisor_y) => onChange({ Scroll: { ...value.Scroll, divisor_y: bounded(divisor_y, 0, 255) } })} />
-          <Toggle label="Invert X" value={value.Scroll.invert_x} onChange={(invert_x) => onChange({ Scroll: { ...value.Scroll, invert_x } })} />
-          <Toggle label="Invert Y" value={value.Scroll.invert_y} onChange={(invert_y) => onChange({ Scroll: { ...value.Scroll, invert_y } })} />
+          <ScrollAxisFields name="Wheel" value={value.Scroll.wheel} onChange={(wheel) => onChange({ Scroll: { ...value.Scroll, wheel } })} />
+          <ScrollAxisFields name="Pan" value={value.Scroll.pan} onChange={(pan) => onChange({ Scroll: { ...value.Scroll, pan } })} />
         </div>
       )}
       {"Sniper" in value && (

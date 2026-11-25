@@ -27,7 +27,6 @@ import type {
   BatteryStatus,
   BehaviorConfig,
   BehaviorOptions,
-  BleStatus,
   BuildInfo,
   ComboDefinition,
   ConnectionStatus,
@@ -300,7 +299,6 @@ export interface DeviceOps {
    *  reboots on its compiled defaults once the erase finishes, which ends the
    *  session; a rejected wipe leaves the keyboard running as it was. */
   resetStorage(): Promise<void>;
-  bleStatus(): Promise<BleStatus>;
   clearBleProfile(slot: number): Promise<void>;
   /** Forget every BLE host profile while preserving split-half and dongle bonds. */
   clearAllBleProfiles(): Promise<void>;

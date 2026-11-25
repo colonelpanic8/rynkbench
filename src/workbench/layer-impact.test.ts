@@ -27,8 +27,8 @@ describe("what blocks deleting a layer", () => {
   });
 
   it("counts a combo that turns the layer on and a combo limited to it", () => {
-    const turnsOn = { Actions: { actions: [key("A"), key("B")], output: mo(1), layer: undefined } } as ComboDefinition;
-    const limited = { Actions: { actions: [key("A"), key("B")], output: key("C"), layer: 1 } } as ComboDefinition;
+    const turnsOn = { Actions: { actions: [key("A"), key("B")], output: mo(1), layers: 0xffffffff } } as ComboDefinition;
+    const limited = { Actions: { actions: [key("A"), key("B")], output: key("C"), layers: 1 << 1 } } as ComboDefinition;
     const blockers = layerDeletionBlockers(source({ layers: [[key("A")], [key("B")]], combos: [turnsOn, limited] }), 1);
     expect(blockers.map((b) => b.label)).toEqual(["Combo 0", "Combo 1"]);
   });
@@ -83,8 +83,8 @@ describe("agreement with the layer rewrite", () => {
       const layers = Array.from({ length: count }, () => Array.from({ length: 4 }, cell));
       const combos = Array.from({ length: int(3) }, () =>
         int(2) === 0
-          ? ({ Actions: { actions: [key("A"), key("B")], output: cell(), layer: int(2) === 0 ? int(count) : undefined } } as ComboDefinition)
-          : ({ Actions: { actions: [], output: "No", layer: undefined } } as ComboDefinition),
+          ? ({ Actions: { actions: [key("A"), key("B")], output: cell(), layers: int(2) === 0 ? (1 << int(count)) >>> 0 : 0xffffffff } } as ComboDefinition)
+          : ({ Actions: { actions: [], output: "No", layers: 0xffffffff } } as ComboDefinition),
       );
       const target = 1 + int(count - 1);
       const snapshot: LayerRewriteSnapshot = {

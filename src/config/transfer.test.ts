@@ -92,7 +92,7 @@ function harness(rows: number, product: string, layerMetadata: LayerMetadata[] |
       num_layers: CAPACITY,
       macro_space_size: 512,
       max_macros: 32,
-      max_morse: 32,
+      max_morses: 32,
       max_combos: 32,
       max_forks: 32,
     },

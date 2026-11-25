@@ -16,7 +16,7 @@ const DOUBLE_TAP: Morse = { ...emptyMorse(), actions: [[TAP_PATTERN, { Key: { Hi
 function editor(binding: KeyAction | null, { morse = [] as Morse[], morseSlots = 0 } = {}) {
   const workbench = testWorkbench({
     bundle: {
-      caps: { num_cols: 2, num_layers: 2, max_morse: morseSlots, max_patterns_per_key: 8 },
+      caps: { num_cols: 2, num_layers: 2, max_morses: morseSlots, max_patterns_per_key: 8 },
       model: { keys: [{ row: 0, col: 0, address: "LH-C1R1" }] },
       session: { kind: "offline" },
       lightingState: null,

@@ -16,7 +16,7 @@ import type { LayerMetadata } from "../session/types";
 import { layerName as nameOfLayer } from "../model/layer-names";
 import { activators, attributedEdges, buildGraph, keyActionIsBound, keyActionReferences, layerRef, reachableLayers, referencedBy } from "../domain";
 import type { Attributed, Ref } from "../domain";
-import { comboIsEmpty } from "../model/combos";
+import { comboIsEmpty, comboLayerList } from "../model/combos";
 import { forkIsEmpty, morseIsEmpty } from "../model/slots";
 import { decodeMacros, macroPreview } from "../model/macros";
 
@@ -85,7 +85,8 @@ export interface ForkUsage {
 
 export interface ComboUsage {
   index: number;
-  layer: number | null;
+  /** The layers the combo is limited to; null when it works on every layer. */
+  layers: number[] | null;
   /** For action-triggered combos: trigger actions missing from the keymap. */
   unboundTriggers: number;
 }
@@ -130,16 +131,13 @@ export function keyActionRefs(keyAction: KeyAction): Refs {
 function comboParts(combo: ComboDefinition): {
   triggers: KeyAction[];
   output: KeyAction;
-  layer: number | null;
+  layers: number[] | null;
 } {
+  const layers = comboLayerList(combo) ?? null;
   if ("Actions" in combo) {
-    return {
-      triggers: combo.Actions.actions,
-      output: combo.Actions.output,
-      layer: combo.Actions.layer ?? null,
-    };
+    return { triggers: combo.Actions.actions, output: combo.Actions.output, layers };
   }
-  return { triggers: [], output: combo.Positions.output, layer: combo.Positions.layer ?? null };
+  return { triggers: [], output: combo.Positions.output, layers };
 }
 
 /** Names places in the report's words and says where they are. A place is a key
@@ -329,8 +327,8 @@ export function analyzeUsage(input: UsageInput, decode: typeof decodeMacros = de
 
   // Action-triggered combos need every trigger action bound somewhere.
   const combos: ComboUsage[] = input.combos.map((combo, index) => {
-    const { triggers, layer } = comboParts(combo);
-    if (comboIsEmpty(combo)) return { index, layer, unboundTriggers: 0 };
+    const { triggers, layers } = comboParts(combo);
+    if (comboIsEmpty(combo)) return { index, layers, unboundTriggers: 0 };
     const unboundTriggers = triggers.filter(
       (trigger) => trigger !== "Transparent" && !boundKeys.has(JSON.stringify(trigger)),
     ).length;
@@ -339,10 +337,11 @@ export function analyzeUsage(input: UsageInput, decode: typeof decodeMacros = de
         `Combo ${index} has ${unboundTriggers} trigger action(s) not bound on any layer.`,
       );
     }
-    if (layer !== null && layer < input.layers.length && !reachable.has(layer)) {
-      warnings.push(`Combo ${index} is scoped to unreachable ${layerName(layer)}.`);
+    const present = layers?.filter((layer) => layer < input.layers.length) ?? [];
+    if (present.length > 0 && !present.some((layer) => reachable.has(layer))) {
+      warnings.push(`Combo ${index} is scoped to unreachable ${present.map(layerName).join(", ")}.`);
     }
-    return { index, layer, unboundTriggers };
+    return { index, layers, unboundTriggers };
   });
 
   return { layers, morse, macros, profiles, forks, combos, warnings };

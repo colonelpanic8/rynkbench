@@ -17,7 +17,7 @@ import { useComboFocus } from "./useComboFocus";
 
 const ESC = { Single: { Key: { Hid: "Escape" } } } as unknown as KeyAction;
 const combo = (keys: number, output: KeyAction = ESC): ComboDefinition => ({
-  Positions: { positions: Array.from({ length: keys }, (_, col) => ({ row: 1, col })), output, layer: undefined },
+  Positions: { positions: Array.from({ length: keys }, (_, col) => ({ row: 1, col })), output, layers: 0xffffffff },
 });
 
 let session: RynkSession;

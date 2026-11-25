@@ -76,7 +76,7 @@ export function DetailsSection() {
       <div className="rounded-xl border border-line bg-raised px-3 py-1">
         <Fact label="Layers">{caps.num_layers}</Fact>
         <Fact label="Combos">{caps.max_combos}</Fact>
-        {caps.max_morse > 0 && <Fact label="Tap patterns (morse)">{caps.max_morse}</Fact>}
+        {caps.max_morses > 0 && <Fact label="Tap patterns (morse)">{caps.max_morses}</Fact>}
         {caps.max_macros > 0 && <Fact label="Macros">{caps.max_macros}</Fact>}
         {caps.max_forks > 0 && <Fact label="Forks">{caps.max_forks}</Fact>}
         {caps.ble_enabled && <Fact label="Bluetooth profiles">{caps.num_ble_profiles}</Fact>}

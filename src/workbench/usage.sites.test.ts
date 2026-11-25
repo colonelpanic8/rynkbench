@@ -45,7 +45,7 @@ describe("usage sites point at where they are", () => {
   });
 
   it("names combos by their slot", () => {
-    const combo = { Actions: { actions: [key("A"), key("B")], output: mo(1), layer: undefined } } as ComboDefinition;
+    const combo = { Actions: { actions: [key("A"), key("B")], output: mo(1), layers: 0xffffffff } } as ComboDefinition;
     const report = analyzeUsage(input({ layers: [[key("A")], [key("C")]], combos: [combo] }), fakeDecode);
     expect(report.layers[1].activatorSites).toEqual([{ label: "Combo 0", target: { kind: "combo", index: 0 } }]);
   });

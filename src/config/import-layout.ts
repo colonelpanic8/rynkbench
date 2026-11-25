@@ -27,7 +27,7 @@ export interface ImportedLayout {
 
 /** The keyboard's facts an import is checked against. */
 export interface LayoutLimits {
-  caps: Pick<DeviceCapabilities, "max_macros" | "macro_space_size" | "max_morse" | "max_combos" | "max_forks">;
+  caps: Pick<DeviceCapabilities, "max_macros" | "macro_space_size" | "max_morses" | "max_combos" | "max_forks">;
   state: Pick<
     WorkbenchState,
     "morseProfileCapacity" | "morseHoldTriggerPositionCapacity" | "autoMouseLayerCapacity" | "lightingOutputMode" | "lightingControls"
@@ -145,7 +145,7 @@ function behaviorsOnto(build: Build, snapshot: RuntimeSnapshot, { caps, state }:
     build.image = { ...build.image, [kind]: next };
     applied.push(`${changed} ${noun} slot${changed === 1 ? "" : "s"}`);
   };
-  table("morse", morses, caps.max_morse, "morse");
+  table("morse", morses, caps.max_morses, "morse");
   table("combos", combos, caps.max_combos, "combo");
   table("forks", forks, caps.max_forks, "fork");
 }

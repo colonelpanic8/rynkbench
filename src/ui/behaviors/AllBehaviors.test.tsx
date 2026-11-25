@@ -9,7 +9,7 @@ const tap = (code: string): Morse => ({ ...emptyMorse(), actions: [[2, { Key: { 
 
 /** Two tap patterns: the first on a key, the second nowhere and named. */
 const parts = {
-  bundle: { caps: { num_cols: 2, max_morse: 3, max_patterns_per_key: 4 } },
+  bundle: { caps: { num_cols: 2, max_morses: 3, max_patterns_per_key: 4 } },
   state: {
     layers: [[{ Morse: 0 } as KeyAction, "No" as KeyAction]],
     morse: [tap("A"), tap("B"), emptyMorse()],

@@ -131,7 +131,7 @@ describe("analyzeUsage", () => {
         layers: [[key("A"), key("B")]],
         combos: [
           {
-            Actions: { actions: [key("A"), key("Q")], output: key("C"), layer: undefined },
+            Actions: { actions: [key("A"), key("Q")], output: key("C"), layers: 0xffffffff },
           },
         ],
       }),
